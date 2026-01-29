@@ -28,9 +28,12 @@
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
     <string name="app_name">CloudStream</string>
+    <string name="brand_logo_text">CloudStream</string>
+    <string name="top_10_movies_title">Top 10</string>
     <string name="play_with_app_name">Play with CloudStream</string>
     <string name="title_home">Home</string>
     <string name="title_search">Search</string>
+    <string name="sources">Sources</string>
     <string name="title_downloads">Downloads</string>
     <string name="title_settings">Settings</string>
     <string name="search_hint">Search…</string>
@@ -46,6 +49,9 @@
     <string name="browser">Browser</string>
     <string name="skip_loading">Skip Loading</string>
     <string name="loading">Loading…</string>
+    <string name="tv_player_loading_sources">Loading sources…</string>
+    <string name="tv_player_loading_sources_progress" formatted="true">Sources found: %1$d</string>
+    <string name="tv_player_retry">Try Again</string>
     <string name="type_watching">Watching</string>
     <string name="type_on_hold">On-Hold</string>
     <string name="type_completed">Completed</string>
@@ -217,6 +223,7 @@
     <string name="play_episode_toast">Play Episode</string>
     <string name="subs_default_reset_toast">Reset to default value</string>
     <string name="season">Season</string>
+    <string name="tv_seasons">Seasons</string>
     <string name="season_format">%1$s %2$d%3$s</string>
     <string name="no_season">No Season</string>
     <string name="episode">Episode</string>
@@ -250,6 +257,15 @@
     <string name="status_ongoing">Ongoing</string>
     <string name="status_completed">Completed</string>
     <string name="status">Status</string>
+    <string name="tv_cast">Cast</string>
+    <string name="tv_original_language">Original Language</string>
+    <string name="tv_budget">Budget</string>
+    <string name="tv_revenue">Revenue</string>
+    <string name="tv_additional_information">Additional Information</string>
+    <string name="tv_episode_untitled">Untitled episode</string>
+    <string name="tv_episode_duration_hour_min_format" formatted="true">%1$dh %2$dmin</string>
+    <string name="tv_episode_rating_format">%1$s/10</string>
+    <string name="tv_no_episode_description">No description available</string>
     <string name="year">Year</string>
     <string name="rating">Rating</string>
     <string name="duration">Duration</string>
@@ -449,6 +465,8 @@
     <string name="actor_supporting">Supporting</string>
     <string name="actor_background">Background</string>
     <string name="home_source">Source</string>
+    <string name="tv_home_categories">Categories</string>
+    <string name="tv_selected">Selected</string>
     <string name="home_random">Random</string>
     <string name="coming_soon">Coming soon…</string>
     <string name="quality_cam">Cam</string>

@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.dokka)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.compose.compiler)
 }
 
 val javaTarget = JvmTarget.fromTarget(libs.versions.jvmTarget.get())
@@ -148,6 +149,7 @@ android {
     }
 
     buildFeatures {
+        compose = true
         buildConfig = true
         resValues = true
     }
@@ -228,6 +230,19 @@ dependencies {
 
         this.extra.set("isDebug", isDebug)
     })
+
+    // Compose
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.tv.material)
+    implementation(libs.navigation.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+    // Coil
+    implementation(libs.coil.compose)
+
+    // Paging3 for Home Screen Grid
+    implementation(libs.paging.runtime)
+    implementation(libs.paging.compose)
 }
 
 tasks.register<Jar>("androidSourcesJar") {

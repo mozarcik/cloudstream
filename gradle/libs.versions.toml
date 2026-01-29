@@ -47,9 +47,16 @@ video = "1.0.0"
 workRuntimeKtx = "2.10.5"
 zipline = "1.24.0"
 
+navigation-compose = "2.9.7"
+activity-compose = "1.12.3"
+compose-bom = "2026.01.01"
+tv-material = "1.0.1"
+coil-compose = "2.7.0"
+paging = "3.4.0"
+
 jvmTarget = "1.8"
 jdkToolchain = "17"
-minSdk = "21"
+minSdk = "23"
 compileSdk = "36"
 targetSdk = "36"
 
@@ -111,6 +118,16 @@ video = { module = "com.google.android.mediahome:video", version.ref = "video" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 zipline = { module = "app.cash.zipline:zipline-android", version.ref = "zipline" }
 
+lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleKtx" }
+navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigation-compose" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity-compose" }
+androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
+androidx-tv-material = { module = "androidx.tv:tv-material", version.ref = "tv-material" }
+coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil-compose" }
+
+paging-runtime = { module = "androidx.paging:paging-runtime", version.ref = "paging" }
+paging-compose = { module = "androidx.paging:paging-compose", version.ref = "paging" }
+
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }
 android-lint = { id = "com.android.lint", version.ref = "androidGradlePlugin" }
@@ -120,6 +137,7 @@ dokka = { id = "org.jetbrains.dokka", version.ref = "dokkaGradlePlugin" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlinGradlePlugin" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm" , version.ref = "kotlinGradlePlugin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlinGradlePlugin" }
+compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlinGradlePlugin" }
 
 [bundles]
 coil = ["coil", "coil-network-okhttp"]
