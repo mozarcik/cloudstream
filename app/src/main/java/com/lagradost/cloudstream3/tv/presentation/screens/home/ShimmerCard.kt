@@ -29,15 +29,15 @@ fun ShimmerCard(modifier: Modifier = Modifier) {
 @Composable
 fun shimmerBrush(): Brush {
     val shimmerColors = listOf(
-        Color.LightGray.copy(alpha = 0.4f),
-        Color.LightGray.copy(alpha = 0.2f),
-        Color.LightGray.copy(alpha = 0.4f),
+        Color(0xFF14161B),
+        Color(0xFF6B7286).copy(alpha = 0.78f),
+        Color(0xFF14161B),
     )
     
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 1000f,
+        targetValue = 1400f,
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = 1200,

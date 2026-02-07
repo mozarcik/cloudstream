@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.compat.home
 
+import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.TvType
 
 /**
@@ -13,6 +14,7 @@ sealed class MediaItemCompat {
     abstract val name: String
     abstract val posterUri: String
     abstract val type: TvType?
+    abstract val score: Score?
     
     data class Movie(
         override val id: String,
@@ -21,6 +23,7 @@ sealed class MediaItemCompat {
         override val name: String,
         override val posterUri: String,
         override val type: TvType?,
+        override val score: Score?,
         val year: Int? = null,
     ) : MediaItemCompat()
     
@@ -31,6 +34,7 @@ sealed class MediaItemCompat {
         override val name: String,
         override val posterUri: String,
         override val type: TvType?,
+        override val score: Score?,
         val year: Int? = null,
         val episodes: Int? = null,
     ) : MediaItemCompat()
@@ -42,6 +46,7 @@ sealed class MediaItemCompat {
         override val name: String,
         override val posterUri: String,
         override val type: TvType?,
+        override val score: Score?,
     ) : MediaItemCompat()
 }
 

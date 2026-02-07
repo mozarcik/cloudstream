@@ -35,6 +35,7 @@ object SearchResponseMapper {
                         url = this.url,
                         apiName = this.apiName,
                         type = if (mediaType.isEpisodeBased()) mediaType else inferredSeriesType ?: TvType.TvSeries,
+                        score = this.score,
                         year = this.year,
                         episodes = null
                     )
@@ -46,6 +47,7 @@ object SearchResponseMapper {
                         url = this.url,
                         apiName = this.apiName,
                         type = mediaType,
+                        score = this.score,
                         year = this.year
                     )
                 }
@@ -59,6 +61,7 @@ object SearchResponseMapper {
                     url = this.url,
                     apiName = this.apiName,
                     type = this.type ?: TvType.TvSeries,
+                    score = this.score,
                     year = this.year,
                     episodes = this.episodes
                 )
@@ -76,6 +79,7 @@ object SearchResponseMapper {
                     url = this.url,
                     apiName = this.apiName,
                     type = this.type ?: TvType.Anime,
+                    score = this.score,
                     year = this.year,
                     episodes = totalEpisodes
                 )
@@ -89,7 +93,8 @@ object SearchResponseMapper {
                     name = this.name,
                     url = this.url,
                     apiName = this.apiName,
-                    type = this.type ?: TvType.Live
+                    type = this.type ?: TvType.Live,
+                    score = this.score
                 )
             }
             
@@ -101,7 +106,8 @@ object SearchResponseMapper {
                     name = this.name,
                     url = this.url,
                     apiName = this.apiName,
-                    type = this.type ?: TvType.Torrent
+                    type = this.type ?: TvType.Torrent,
+                    score = this.score
                 )
             }
             
@@ -118,6 +124,7 @@ object SearchResponseMapper {
                         url = this.url,
                         apiName = this.apiName,
                         type = if (mediaType.isEpisodeBased()) mediaType else inferredSeriesType ?: TvType.TvSeries,
+                        score = this.score,
                         episodes = null
                     )
                 } else {
@@ -128,7 +135,8 @@ object SearchResponseMapper {
                         name = this.name,
                         url = this.url,
                         apiName = this.apiName,
-                        type = mediaType
+                        type = mediaType,
+                        score = this.score
                     )
                 }
             }

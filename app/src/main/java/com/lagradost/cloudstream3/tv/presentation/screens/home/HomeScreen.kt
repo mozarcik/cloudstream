@@ -1,19 +1,3 @@
-/*
- * Copyright 2023 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.activity.compose.BackHandler
@@ -35,17 +19,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +52,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -93,6 +83,8 @@ fun HomeScreen(
         factory = MediaGridViewModelFactory(FeedRepositoryImpl())
     ),
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     // Task 1.5: Observe API changes
     val currentApi by SourceRepository.selectedApi.collectAsState(initial = null)
     
@@ -105,27 +97,41 @@ fun HomeScreen(
     val pagingItems = mediaGridViewModel.pagingData.collectAsLazyPagingItems()
     
     // Task 4.4: Overlay state
-    var showOverlay by remember { mutableStateOf(false) }
+    var feedMenuState by remember { mutableStateOf<FeedMenuState>(FeedMenuState.Closed) }
+    var isFirstGridRowFocused by remember { mutableStateOf(true) }
     var availableApis by remember { mutableStateOf<List<MainAPI>>(emptyList()) }
-    var overlayOpenedFromGrid by remember { mutableStateOf(false) }
-    var feedWasSelectedInOverlay by remember { mutableStateOf(false) }
-    var sourceWasSelectedInOverlay by remember { mutableStateOf(false) }
-    var pendingGridFocusAfterSourceChange by remember { mutableStateOf(false) }
     var isSourcePickerExpanded by remember { mutableStateOf(false) }
+    var pendingGridRestoreAfterResume by rememberSaveable { mutableStateOf(false) }
+    var resumeToken by rememberSaveable { mutableIntStateOf(0) }
+    var lastClickedGridIndex by rememberSaveable { mutableIntStateOf(-1) }
+    var lastClickedGridItemKey by rememberSaveable { mutableStateOf<String?>(null) }
     
     // Task 4.2: Focus requesters
     val feedFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
-    val gridContainerFocusRequester = remember { FocusRequester() }
     val breadcrumbFocusRequester = remember { FocusRequester() }
+    var gridFocusRequestToken by remember { mutableIntStateOf(0) }
     val gridState = rememberLazyGridState()
-    var isGridContainerFocused by remember { mutableStateOf(false) }
-    val isGridScrolled by remember {
+    val isFeedMenuOpened = feedMenuState is FeedMenuState.Opened
+    val breadcrumbState by remember(isFirstGridRowFocused) {
         derivedStateOf {
-            gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0
+            if (isFirstGridRowFocused) {
+                BreadcrumbState.Expanded
+            } else {
+                BreadcrumbState.Compact
+            }
         }
     }
-    val isBreadcrumbCompact = !showOverlay && isGridScrolled
+    val isBreadcrumbCompact by remember(
+        breadcrumbState,
+        pendingGridRestoreAfterResume,
+        gridState.firstVisibleItemIndex
+    ) {
+        derivedStateOf {
+            breadcrumbState is BreadcrumbState.Compact ||
+                (pendingGridRestoreAfterResume && gridState.firstVisibleItemIndex > 0)
+        }
+    }
     val gridTopPadding by animateDpAsState(
         targetValue = if (isBreadcrumbCompact) 0.dp else 68.dp,
         label = "home_grid_top_padding"
@@ -156,8 +162,8 @@ fun HomeScreen(
         onScroll(true)
     }
 
-    LaunchedEffect(showOverlay) {
-        if (!showOverlay) {
+    LaunchedEffect(feedMenuState) {
+        if (feedMenuState is FeedMenuState.Closed) {
             isSourcePickerExpanded = false
             return@LaunchedEffect
         }
@@ -172,51 +178,64 @@ fun HomeScreen(
     
     val isGridLoading = pagingItems.loadState.refresh is LoadState.Loading
     val canFocusGrid = pagingItems.itemCount > 0 && !isGridLoading
+    val restorePreferredFocusIndex = if (pendingGridRestoreAfterResume) lastClickedGridIndex else -1
+    val restorePreferredFocusItemKey = if (pendingGridRestoreAfterResume) lastClickedGridItemKey else null
+    val focusFeedId = remember(feeds, selectedFeedIndex, selectedFeed?.id) {
+        feeds.getOrNull(selectedFeedIndex)?.id ?: selectedFeed?.id ?: "no_feed"
+    }
+    val mediaFocusContextKey = remember(currentApi?.name, focusFeedId) {
+        "${currentApi?.name.orEmpty()}|$focusFeedId"
+    }
 
-    // Task 4.4: Focus management based on overlay state
-    LaunchedEffect(showOverlay, feeds.isNotEmpty(), pagingItems.itemCount, isGridLoading) {
-        kotlinx.coroutines.delay(300)
-        if (showOverlay) {
-            if (feeds.isNotEmpty()) {
-                feedFocusRequester.requestFocus()
-            }
-        } else {
-            when {
-                sourceWasSelectedInOverlay && canFocusGrid -> {
-                    gridFocusRequester.requestFocus()
-                    pendingGridFocusAfterSourceChange = false
-                }
-                sourceWasSelectedInOverlay && !canFocusGrid -> {
-                    gridContainerFocusRequester.requestFocus()
-                    pendingGridFocusAfterSourceChange = true
-                }
-                feedWasSelectedInOverlay && canFocusGrid -> gridFocusRequester.requestFocus()
-                feedWasSelectedInOverlay && !canFocusGrid -> breadcrumbFocusRequester.requestFocus()
-                overlayOpenedFromGrid && canFocusGrid -> gridFocusRequester.requestFocus()
-                overlayOpenedFromGrid && !canFocusGrid -> gridContainerFocusRequester.requestFocus()
-                else -> breadcrumbFocusRequester.requestFocus()
-            }
-            sourceWasSelectedInOverlay = false
-            feedWasSelectedInOverlay = false
+    fun openFeedMenu() {
+        feedMenuState = FeedMenuState.Opened
+    }
+
+    fun closeFeedMenu() {
+        feedMenuState = FeedMenuState.Closed
+        isSourcePickerExpanded = false
+    }
+
+    fun requestGridFocus() {
+        if (!canFocusGrid) return
+        gridFocusRequestToken += 1
+    }
+
+    // Focus selected feed row whenever feed menu opens.
+    LaunchedEffect(feedMenuState, feeds.isNotEmpty()) {
+        if (feedMenuState is FeedMenuState.Opened && feeds.isNotEmpty()) {
+            kotlinx.coroutines.delay(140)
+            feedFocusRequester.requestFocus()
         }
     }
 
-    LaunchedEffect(pendingGridFocusAfterSourceChange, canFocusGrid) {
-        if (pendingGridFocusAfterSourceChange && canFocusGrid) {
-            gridFocusRequester.requestFocus()
-            pendingGridFocusAfterSourceChange = false
+    LaunchedEffect(canFocusGrid, isFeedMenuOpened, pendingGridRestoreAfterResume) {
+        if (canFocusGrid && !isFeedMenuOpened) {
+            requestGridFocus()
         }
     }
 
-    LaunchedEffect(isGridContainerFocused, canFocusGrid) {
-        if (isGridContainerFocused && canFocusGrid) {
-            gridFocusRequester.requestFocus()
+    val latestPendingGridRestoreAfterResume by rememberUpdatedState(pendingGridRestoreAfterResume)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && latestPendingGridRestoreAfterResume) {
+                resumeToken += 1
+            }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(resumeToken, canFocusGrid, isFeedMenuOpened, pendingGridRestoreAfterResume) {
+        if (resumeToken == 0 || !pendingGridRestoreAfterResume) return@LaunchedEffect
+        if (!canFocusGrid || isFeedMenuOpened) return@LaunchedEffect
+        kotlinx.coroutines.delay(80)
+        requestGridFocus()
     }
 
     // Overlay should close first when Back is pressed.
-    BackHandler(enabled = showOverlay) {
-        showOverlay = false
+    BackHandler(enabled = isFeedMenuOpened) {
+        closeFeedMenu()
     }
 
     // Task 4.1/4.3/4.4: Grid + Overlay layout
@@ -232,24 +251,36 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(top = gridTopPadding)
-                        .alpha(if (showOverlay) 0.3f else 1f)
-                        .focusRequester(gridContainerFocusRequester)
+                        .alpha(if (isFeedMenuOpened) 0.3f else 1f)
                         .focusProperties { canFocus = !canFocusGrid }
                         .focusable()
-                        .onFocusChanged { isGridContainerFocused = it.isFocused }
                 ) {
                     MediaGrid(
                         pagingItems = pagingItems,
-                        onMediaClick = { item ->
+                        onMediaClick = { item, index, itemKey ->
                             android.util.Log.d("HomeScreen", "Clicked: ${item.name}, url=${item.url}, api=${item.apiName}")
+                            lastClickedGridIndex = index
+                            lastClickedGridItemKey = itemKey
+                            pendingGridRestoreAfterResume = true
                             onMediaClick(item)
                         },
-                        onOpenFeedMenu = {
-                            overlayOpenedFromGrid = true
-                            sourceWasSelectedInOverlay = false
-                            feedWasSelectedInOverlay = false
-                            showOverlay = true
+                        onOpenFeedMenu = { openFeedMenu() },
+                        onFirstRowFocusChanged = { isFirstRowFocused ->
+                            isFirstGridRowFocused = isFirstRowFocused
                         },
+                        onGridItemFocused = {
+                            if (pendingGridRestoreAfterResume) {
+                                pendingGridRestoreAfterResume = false
+                                lastClickedGridIndex = -1
+                                lastClickedGridItemKey = null
+                            }
+                        },
+                        breadcrumbFocusRequester = breadcrumbFocusRequester,
+                        focusContextKey = mediaFocusContextKey,
+                        isFeedMenuOpen = isFeedMenuOpened,
+                        externalFocusRequestToken = gridFocusRequestToken,
+                        preferredFocusIndex = restorePreferredFocusIndex,
+                        preferredFocusItemKey = restorePreferredFocusItemKey,
                         focusRequester = gridFocusRequester,
                         gridState = gridState,
                         modifier = Modifier.fillMaxSize()
@@ -260,35 +291,40 @@ fun HomeScreen(
                     currentSource = currentApi?.name ?: "Loading",
                     currentFeed = selectedFeed?.name ?: feeds.firstOrNull()?.name ?: "Loading",
                     compact = isBreadcrumbCompact,
-                    onOpenFeedMenu = {
-                        overlayOpenedFromGrid = false
-                        sourceWasSelectedInOverlay = false
-                        feedWasSelectedInOverlay = false
-                        showOverlay = true
-                    },
+                    onOpenFeedMenu = { openFeedMenu() },
                     onMoveToGrid = {
-                        if (canFocusGrid) {
-                            gridFocusRequester.requestFocus()
-                        } else {
-                            gridContainerFocusRequester.requestFocus()
-                        }
+                        requestGridFocus()
                     },
                     focusRequester = breadcrumbFocusRequester,
+                    downFocusRequester = gridFocusRequester,
                     modifier = Modifier
                         .align(Alignment.TopStart)
-                        .padding(start = 20.dp, top = 14.dp)
+                        .padding(start = 16.dp, end = 16.dp, top = 14.dp),
+                    isInteractive = feedMenuState is FeedMenuState.Closed
                 )
                 
                 // Task 4.4: Sidebar overlay with animation
                 AnimatedVisibility(
-                    visible = showOverlay,
+                    visible = isFeedMenuOpened,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
+                    ) {
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = isFeedMenuOpened,
                     enter = slideInHorizontally() + fadeIn(),
                     exit = slideOutHorizontally() + fadeOut()
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.62f))
                     ) {
                         FeedSidebar(
                             feeds = feeds,
@@ -301,18 +337,22 @@ fun HomeScreen(
                                 android.util.Log.d("HomeScreen", "Selected feed: ${feeds[index].name}")
                                 // Task 5.1: Load data for selected feed
                                 mediaGridViewModel.selectFeed(feeds[index])
-                                feedWasSelectedInOverlay = true
-                                showOverlay = false // Hide overlay after selection
+                                pendingGridRestoreAfterResume = false
+                                lastClickedGridIndex = -1
+                                lastClickedGridItemKey = null
+                                closeFeedMenu()
                             },
                             onSourceSelected = { source ->
                                 if (source.name != currentApi?.name) {
                                     SourceRepository.selectApi(source)
                                     selectedFeedIndex = 0
                                 }
-                                sourceWasSelectedInOverlay = true
-                                feedWasSelectedInOverlay = false
-                                showOverlay = false
+                                pendingGridRestoreAfterResume = false
+                                lastClickedGridIndex = -1
+                                lastClickedGridItemKey = null
+                                closeFeedMenu()
                             },
+                            onCloseRequested = { closeFeedMenu() },
                             onSourcePickerVisibilityChanged = { expanded ->
                                 isSourcePickerExpanded = expanded
                             },
@@ -337,9 +377,12 @@ private fun BrowseBreadcrumbBar(
     onOpenFeedMenu: () -> Unit,
     onMoveToGrid: () -> Unit,
     focusRequester: FocusRequester,
-    modifier: Modifier = Modifier
+    downFocusRequester: FocusRequester,
+    modifier: Modifier = Modifier,
+    isInteractive: Boolean,
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    val isFocusable = !compact && isInteractive
     val shape = RoundedCornerShape(if (compact) 16.dp else 20.dp)
     val horizontalPadding by animateDpAsState(
         targetValue = if (compact) 10.dp else 14.dp,
@@ -349,19 +392,24 @@ private fun BrowseBreadcrumbBar(
         targetValue = if (compact) 7.dp else 10.dp,
         label = "breadcrumb_vertical_padding"
     )
-    val contentModifier = if (compact) {
-        Modifier.widthIn(max = 520.dp)
-    } else {
-        Modifier.fillMaxWidth(0.9f)
-    }
+    val contentModifier = Modifier.fillMaxWidth()
 
     Surface(
         onClick = onOpenFeedMenu,
         modifier = modifier
             .then(contentModifier)
+            .focusProperties {
+                canFocus = isFocusable
+                if (isFocusable) {
+                    down = downFocusRequester
+                }
+            }
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyUp) {
+                if (!isFocusable) {
+                    return@onPreviewKeyEvent false
+                }
+                if (event.type != KeyEventType.KeyDown) {
                     return@onPreviewKeyEvent false
                 }
 
@@ -457,4 +505,14 @@ private fun BreadcrumbSeparator(modifier: Modifier = Modifier) {
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.9f))
     )
+}
+
+private sealed interface FeedMenuState {
+    data object Opened : FeedMenuState
+    data object Closed : FeedMenuState
+}
+
+private sealed interface BreadcrumbState {
+    data object Expanded : BreadcrumbState
+    data object Compact : BreadcrumbState
 }
