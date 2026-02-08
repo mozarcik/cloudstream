@@ -15,6 +15,10 @@ sealed class MediaItemCompat {
     abstract val posterUri: String
     abstract val type: TvType?
     abstract val score: Score?
+    open val continueWatchingProgress: Float? = null
+    open val continueWatchingRemainingMs: Long? = null
+    open val continueWatchingSeason: Int? = null
+    open val continueWatchingEpisode: Int? = null
     
     data class Movie(
         override val id: String,
@@ -25,6 +29,10 @@ sealed class MediaItemCompat {
         override val type: TvType?,
         override val score: Score?,
         val year: Int? = null,
+        override val continueWatchingProgress: Float? = null,
+        override val continueWatchingRemainingMs: Long? = null,
+        override val continueWatchingSeason: Int? = null,
+        override val continueWatchingEpisode: Int? = null,
     ) : MediaItemCompat()
     
     data class TvSeries(
@@ -37,6 +45,10 @@ sealed class MediaItemCompat {
         override val score: Score?,
         val year: Int? = null,
         val episodes: Int? = null,
+        override val continueWatchingProgress: Float? = null,
+        override val continueWatchingRemainingMs: Long? = null,
+        override val continueWatchingSeason: Int? = null,
+        override val continueWatchingEpisode: Int? = null,
     ) : MediaItemCompat()
     
     data class Other(
@@ -47,6 +59,10 @@ sealed class MediaItemCompat {
         override val posterUri: String,
         override val type: TvType?,
         override val score: Score?,
+        override val continueWatchingProgress: Float? = null,
+        override val continueWatchingRemainingMs: Long? = null,
+        override val continueWatchingSeason: Int? = null,
+        override val continueWatchingEpisode: Int? = null,
     ) : MediaItemCompat()
 }
 

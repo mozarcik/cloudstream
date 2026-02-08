@@ -109,8 +109,10 @@ fun HomeScreen(
     // Task 4.2: Focus requesters
     val feedFocusRequester = remember { FocusRequester() }
     val gridFocusRequester = remember { FocusRequester() }
+    val continueResumeFocusRequester = remember { FocusRequester() }
     val breadcrumbFocusRequester = remember { FocusRequester() }
     var gridFocusRequestToken by remember { mutableIntStateOf(0) }
+    var continueFocusRequestToken by remember { mutableIntStateOf(0) }
     val gridState = rememberLazyGridState()
     val isFeedMenuOpened = feedMenuState is FeedMenuState.Opened
     val breadcrumbState by remember(isFirstGridRowFocused) {
@@ -178,8 +180,16 @@ fun HomeScreen(
         label = "home_feed_overlay_width"
     )
     
+    val isContinueWatchingFeed = selectedFeed?.isContinueWatching == true
+    val continueWatchingItems = if (isContinueWatchingFeed) {
+        pagingItems.itemSnapshotList.items
+    } else {
+        emptyList()
+    }
     val isGridLoading = pagingItems.loadState.refresh is LoadState.Loading
-    val canFocusGrid = pagingItems.itemCount > 0 && !isGridLoading
+    val canFocusGrid = !isContinueWatchingFeed && pagingItems.itemCount > 0 && !isGridLoading
+    val canFocusContinue = isContinueWatchingFeed && continueWatchingItems.isNotEmpty() && !isGridLoading
+    val canFocusPrimaryContent = if (isContinueWatchingFeed) canFocusContinue else canFocusGrid
     val restorePreferredFocusIndex = if (pendingGridRestoreAfterResume) lastClickedGridIndex else -1
     val restorePreferredFocusItemKey = if (pendingGridRestoreAfterResume) lastClickedGridItemKey else null
     val focusFeedId = remember(feeds, selectedFeedIndex, selectedFeed?.id) {
@@ -203,6 +213,19 @@ fun HomeScreen(
         gridFocusRequestToken += 1
     }
 
+    fun requestContinueFocus() {
+        if (!canFocusContinue) return
+        continueFocusRequestToken += 1
+    }
+
+    fun requestPrimaryContentFocus() {
+        if (isContinueWatchingFeed) {
+            requestContinueFocus()
+        } else {
+            requestGridFocus()
+        }
+    }
+
     // Focus selected feed row whenever feed menu opens.
     LaunchedEffect(feedMenuState, feeds.isNotEmpty()) {
         if (feedMenuState is FeedMenuState.Opened && feeds.isNotEmpty()) {
@@ -211,9 +234,15 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(canFocusGrid, isFeedMenuOpened, pendingGridRestoreAfterResume) {
-        if (canFocusGrid && !isFeedMenuOpened) {
-            requestGridFocus()
+    LaunchedEffect(isContinueWatchingFeed) {
+        if (isContinueWatchingFeed) {
+            isFirstGridRowFocused = true
+        }
+    }
+
+    LaunchedEffect(canFocusPrimaryContent, isFeedMenuOpened, pendingGridRestoreAfterResume, isContinueWatchingFeed) {
+        if (canFocusPrimaryContent && !isFeedMenuOpened) {
+            requestPrimaryContentFocus()
         }
     }
 
@@ -228,7 +257,8 @@ fun HomeScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(resumeToken, canFocusGrid, isFeedMenuOpened, pendingGridRestoreAfterResume) {
+    LaunchedEffect(resumeToken, canFocusGrid, isFeedMenuOpened, pendingGridRestoreAfterResume, isContinueWatchingFeed) {
+        if (isContinueWatchingFeed) return@LaunchedEffect
         if (resumeToken == 0 || !pendingGridRestoreAfterResume) return@LaunchedEffect
         if (!canFocusGrid || isFeedMenuOpened) return@LaunchedEffect
         kotlinx.coroutines.delay(80)
@@ -254,39 +284,52 @@ fun HomeScreen(
                         .fillMaxSize()
                         .padding(top = gridTopPadding)
                         .alpha(if (isFeedMenuOpened) 0.3f else 1f)
-                        .focusProperties { canFocus = !canFocusGrid }
+                        .focusProperties { canFocus = !canFocusPrimaryContent }
                         .focusable()
                 ) {
-                    MediaGrid(
-                        pagingItems = pagingItems,
-                        onMediaClick = { item, index, itemKey ->
-                            android.util.Log.d("HomeScreen", "Clicked: ${item.name}, url=${item.url}, api=${item.apiName}")
-                            lastClickedGridIndex = index
-                            lastClickedGridItemKey = itemKey
-                            pendingGridRestoreAfterResume = true
-                            onMediaClick(item)
-                        },
-                        onOpenFeedMenu = { openFeedMenu() },
-                        onFirstRowFocusChanged = { isFirstRowFocused ->
-                            isFirstGridRowFocused = isFirstRowFocused
-                        },
-                        onGridItemFocused = {
-                            if (pendingGridRestoreAfterResume) {
-                                pendingGridRestoreAfterResume = false
-                                lastClickedGridIndex = -1
-                                lastClickedGridItemKey = null
-                            }
-                        },
-                        breadcrumbFocusRequester = breadcrumbFocusRequester,
-                        focusContextKey = mediaFocusContextKey,
-                        isFeedMenuOpen = isFeedMenuOpened,
-                        externalFocusRequestToken = gridFocusRequestToken,
-                        preferredFocusIndex = restorePreferredFocusIndex,
-                        preferredFocusItemKey = restorePreferredFocusItemKey,
-                        focusRequester = gridFocusRequester,
-                        gridState = gridState,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    if (isContinueWatchingFeed) {
+                        ContinueWatchingSection(
+                            items = continueWatchingItems,
+                            externalFocusRequestToken = continueFocusRequestToken,
+                            isInteractive = !isFeedMenuOpened,
+                            resumeFocusRequester = continueResumeFocusRequester,
+                            onResumeClick = {},
+                            onDetailsClick = {},
+                            onCardClick = {},
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        MediaGrid(
+                            pagingItems = pagingItems,
+                            onMediaClick = { item, index, itemKey ->
+                                android.util.Log.d("HomeScreen", "Clicked: ${item.name}, url=${item.url}, api=${item.apiName}")
+                                lastClickedGridIndex = index
+                                lastClickedGridItemKey = itemKey
+                                pendingGridRestoreAfterResume = true
+                                onMediaClick(item)
+                            },
+                            onOpenFeedMenu = { openFeedMenu() },
+                            onFirstRowFocusChanged = { isFirstRowFocused ->
+                                isFirstGridRowFocused = isFirstRowFocused
+                            },
+                            onGridItemFocused = {
+                                if (pendingGridRestoreAfterResume) {
+                                    pendingGridRestoreAfterResume = false
+                                    lastClickedGridIndex = -1
+                                    lastClickedGridItemKey = null
+                                }
+                            },
+                            breadcrumbFocusRequester = breadcrumbFocusRequester,
+                            focusContextKey = mediaFocusContextKey,
+                            isFeedMenuOpen = isFeedMenuOpened,
+                            externalFocusRequestToken = gridFocusRequestToken,
+                            preferredFocusIndex = restorePreferredFocusIndex,
+                            preferredFocusItemKey = restorePreferredFocusItemKey,
+                            focusRequester = gridFocusRequester,
+                            gridState = gridState,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
                 }
 
                 BrowseBreadcrumbBar(
@@ -295,10 +338,14 @@ fun HomeScreen(
                     compact = isBreadcrumbCompact,
                     onOpenFeedMenu = { openFeedMenu() },
                     onMoveToGrid = {
-                        requestGridFocus()
+                        requestPrimaryContentFocus()
                     },
                     focusRequester = breadcrumbFocusRequester,
-                    downFocusRequester = gridFocusRequester,
+                    downFocusRequester = if (isContinueWatchingFeed) {
+                        continueResumeFocusRequester
+                    } else {
+                        gridFocusRequester
+                    },
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 16.dp, end = 16.dp, top = 14.dp),

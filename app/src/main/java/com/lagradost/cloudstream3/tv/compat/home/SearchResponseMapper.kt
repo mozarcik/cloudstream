@@ -8,6 +8,8 @@ import com.lagradost.cloudstream3.TorrentSearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult
+import com.lagradost.cloudstream3.utils.DataStoreHelper.fixVisual
 
 /**
  * Mapper object for converting SearchResponse types to MediaItemCompat
@@ -22,6 +24,10 @@ object SearchResponseMapper {
         val generatedId = "${this.apiName}_${this.url.hashCode()}"
         
         return when (this) {
+            is ResumeWatchingResult -> {
+                this.toContinueWatchingMediaItem(generatedId)
+            }
+
             is MovieSearchResponse -> {
                 val mediaType = this.type ?: TvType.Movie
                 val inferredSeriesType = this.inferSeriesTypeFromUrl()
@@ -141,6 +147,67 @@ object SearchResponseMapper {
                 }
             }
         }
+    }
+
+    private fun ResumeWatchingResult.toContinueWatchingMediaItem(generatedId: String): MediaItemCompat {
+        val mediaType = this.type ?: TvType.Movie
+        val inferredSeriesType = this.inferSeriesTypeFromUrl()
+        val shouldTreatAsSeries =
+            mediaType.isEpisodeBased() || inferredSeriesType != null || season != null || episode != null
+        val normalizedWatchPos = watchPos?.fixVisual()
+        val progress = normalizedWatchPos?.let { posDur ->
+            if (posDur.duration <= 0L) null else (posDur.position.toFloat() / posDur.duration.toFloat()).coerceIn(0f, 1f)
+        }
+        val remainingMs = normalizedWatchPos?.let { posDur ->
+            (posDur.duration - posDur.position).coerceAtLeast(0L)
+        }
+
+        if (shouldTreatAsSeries) {
+            return MediaItemCompat.TvSeries(
+                id = generatedId,
+                posterUri = this.posterUrl.orEmpty(),
+                name = this.name,
+                url = this.url,
+                apiName = this.apiName,
+                type = if (mediaType.isEpisodeBased()) mediaType else inferredSeriesType ?: TvType.TvSeries,
+                score = this.score,
+                episodes = null,
+                continueWatchingProgress = progress,
+                continueWatchingRemainingMs = remainingMs,
+                continueWatchingSeason = this.season,
+                continueWatchingEpisode = this.episode
+            )
+        }
+
+        if (mediaType == TvType.Movie) {
+            return MediaItemCompat.Movie(
+                id = generatedId,
+                posterUri = this.posterUrl.orEmpty(),
+                name = this.name,
+                url = this.url,
+                apiName = this.apiName,
+                type = mediaType,
+                score = this.score,
+                continueWatchingProgress = progress,
+                continueWatchingRemainingMs = remainingMs,
+                continueWatchingSeason = this.season,
+                continueWatchingEpisode = this.episode
+            )
+        }
+
+        return MediaItemCompat.Other(
+            id = generatedId,
+            posterUri = this.posterUrl.orEmpty(),
+            name = this.name,
+            url = this.url,
+            apiName = this.apiName,
+            type = mediaType,
+            score = this.score,
+            continueWatchingProgress = progress,
+            continueWatchingRemainingMs = remainingMs,
+            continueWatchingSeason = this.season,
+            continueWatchingEpisode = this.episode
+        )
     }
 
     private fun SearchResponse.inferSeriesTypeFromUrl(): TvType? {
