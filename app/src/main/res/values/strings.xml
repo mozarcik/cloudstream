@@ -471,8 +471,8 @@
     <string name="tv_grid_badge_movie">MOVIE</string>
     <string name="tv_grid_badge_series">TV SERIES</string>
     <string name="tv_grid_rating_unknown_short">—</string>
-    <string name="tv_grid_metadata_rating_year">★ %1$s • %2$d</string>
-    <string name="tv_grid_metadata_rating_only">★ %1$s</string>
+    <string name="tv_grid_metadata_year">%2$d</string>
+    <string name="tv_grid_metadata_rating">★ %1$s</string>
     <string name="home_random">Random</string>
     <string name="coming_soon">Coming soon…</string>
     <string name="quality_cam">Cam</string>

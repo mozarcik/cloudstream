@@ -350,10 +350,15 @@ private fun HomeMediaGridCard(
     )
 
     val ratingValue = item.score?.toStringNull(minScore = 0.1, maxScore = 10, decimals = 1)
-        ?: stringResource(R.string.tv_grid_rating_unknown_short)
-    val metadataText = item.yearOrNull()?.let { year ->
-        stringResource(R.string.tv_grid_metadata_rating_year, ratingValue, year)
-    } ?: stringResource(R.string.tv_grid_metadata_rating_only, ratingValue)
+    val metadataTexts = arrayListOf<String>()
+    if (ratingValue !== null) {
+        metadataTexts.add(stringResource(R.string.tv_grid_metadata_rating, ratingValue))
+    }
+    val year = item.yearOrNull()
+    if (year !== null) {
+        metadataTexts.add(stringResource(R.string.tv_grid_metadata_year, year))
+    }
+
     val typeBadge = if (item.isSeriesLike()) {
         stringResource(R.string.tv_grid_badge_series)
     } else {
@@ -494,8 +499,9 @@ private fun HomeMediaGridCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+
                     Text(
-                        text = metadataText,
+                        text = metadataTexts.joinToString(" • "),
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = interLight,
                             fontSize = 9.sp,

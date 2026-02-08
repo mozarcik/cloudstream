@@ -116,8 +116,10 @@ fun HomeScreen(
     val breadcrumbState by remember(isFirstGridRowFocused) {
         derivedStateOf {
             if (isFirstGridRowFocused) {
+                onScroll(true)
                 BreadcrumbState.Expanded
             } else {
+                onScroll(false)
                 BreadcrumbState.Compact
             }
         }

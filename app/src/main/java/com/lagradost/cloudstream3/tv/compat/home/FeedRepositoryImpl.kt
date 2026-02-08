@@ -1,10 +1,11 @@
 package com.lagradost.cloudstream3.tv.compat.home
 
 import android.util.Log
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 import com.lagradost.cloudstream3.MainAPI
-import com.lagradost.cloudstream3.mvvm.Resource
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.SearchResponseMapper.toMediaItemCompat
-import com.lagradost.cloudstream3.ui.APIRepository
+import com.lagradost.cloudstream3.ui.home.HomeViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -28,15 +29,9 @@ class FeedRepositoryImpl : FeedRepository {
             
             // Get mainPage requests from API
             val mainPageRequests = api.mainPage
-            
-            if (mainPageRequests.isEmpty()) {
-                Log.w(TAG, "API ${api.name} has no mainPage entries")
-                emit(emptyList())
-                return@flow
-            }
-            
+
             // Convert to FeedCategory objects using the existing MainPageRequest from FeedCategory.kt
-            val categories = mainPageRequests.mapIndexed { index, request ->
+            val providerCategories = mainPageRequests.mapIndexed { index, request ->
                 FeedCategory(
                     id = "${api.name}_${request.name}_$index",
                     name = request.name,
@@ -46,6 +41,19 @@ class FeedRepositoryImpl : FeedRepository {
                         horizontalImages = request.horizontalImages
                     )
                 )
+            }
+
+            val continueWatchingItems = runCatching {
+                getContinueWatchingMediaItems()
+            }.onFailure { error ->
+                Log.e(TAG, "Failed to load continue watching feed categories", error)
+            }.getOrDefault(emptyList())
+            val categories = if (continueWatchingItems.isNotEmpty()) {
+                val continueWatchingName = context?.getString(R.string.continue_watching)
+                    ?: "Continue Watching"
+                listOf(FeedCategory.continueWatching(continueWatchingName)) + providerCategories
+            } else {
+                providerCategories
             }
             
             Log.d(TAG, "Loaded ${categories.size} categories for ${api.name}: ${categories.map { it.name }}")
@@ -66,6 +74,20 @@ class FeedRepositoryImpl : FeedRepository {
         page: Int
     ): Result<MediaListCompat> = withContext(Dispatchers.IO) {
         return@withContext try {
+            if (category.isContinueWatching) {
+                val continueWatchingItems = if (page == 1) {
+                    runCatching {
+                        getContinueWatchingMediaItems()
+                    }.onFailure { error ->
+                        Log.e(TAG, "Failed to load continue watching media items", error)
+                    }.getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+                Log.d(TAG, "Loaded ${continueWatchingItems.size} continue watching items for page $page")
+                return@withContext Result.success(continueWatchingItems)
+            }
+
             // Get the MainPageRequest data
             val requestData = category.mainPageRequest
                 ?: return@withContext Result.failure(IllegalArgumentException("Category has no request data"))
@@ -113,5 +135,12 @@ class FeedRepositoryImpl : FeedRepository {
             Log.e(TAG, "Error loading media for category '${category.name}', page $page", e)
             Result.failure(e)
         }
+    }
+
+    private suspend fun getContinueWatchingMediaItems(): MediaListCompat = withContext(Dispatchers.IO) {
+        HomeViewModel.getResumeWatching()
+            .orEmpty()
+            .map { resumeItem -> resumeItem.toMediaItemCompat() }
+            .distinctBy { mediaItem -> "${mediaItem.apiName}|${mediaItem.url}" }
     }
 }
