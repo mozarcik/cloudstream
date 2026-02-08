@@ -94,80 +94,89 @@ private fun Details(
     }
 
     BackHandler(onBack = onBackPressed)
-    LazyColumn(
-        contentPadding = PaddingValues(bottom = 135.dp),
-        modifier = modifier,
-    ) {
-        item {
-            MovieDetails(
-                movieDetails = movieDetails,
-                goToMoviePlayer = goToMoviePlayer,
-                playButtonLabel = movieDetailsPlayLabel(movieDetails),
-                titleMetadata = movieDetailsTitleMetadata(movieDetails)
-            )
-        }
+    Box(modifier = modifier) {
+        MovieDetailsBackdrop(
+            posterUri = movieDetails.posterUri,
+            title = movieDetails.name,
+            modifier = Modifier.matchParentSize(),
+            gradientColor = MaterialTheme.colorScheme.background
+        )
 
-        item {
-            CastAndCrewList(
-                castAndCrew = movieDetails.cast
-            )
-        }
-
-        if (movieDetails.similarMovies.isNotEmpty()) {
+        LazyColumn(
+            contentPadding = PaddingValues(bottom = 135.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
             item {
-                MoviesRow(
-                    title = StringConstants
-                        .Composable
-                        .movieDetailsScreenSimilarTo(movieDetails.name),
-                    titleStyle = MaterialTheme.typography.titleMedium,
-                    movieList = movieDetails.similarMovies,
-                    itemDirection = ItemDirection.Horizontal,
-                    onMovieSelected = refreshScreenWithNewMovie
+                MovieDetails(
+                    movieDetails = movieDetails,
+                    goToMoviePlayer = goToMoviePlayer,
+                    playButtonLabel = movieDetailsPlayLabel(movieDetails),
+                    titleMetadata = movieDetailsTitleMetadata(movieDetails)
                 )
             }
-        }
 
-        item {
-            Box(
-                modifier = Modifier
-                    .padding(horizontal = childPadding.start)
-                    .padding(BottomDividerPadding)
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .alpha(0.15f)
-                    .background(MaterialTheme.colorScheme.onSurface)
-            )
-        }
+            item {
+                CastAndCrewList(
+                    castAndCrew = movieDetails.cast
+                )
+            }
 
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = childPadding.start),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                val itemModifier = Modifier.width(192.dp)
+            if (movieDetails.similarMovies.isNotEmpty()) {
+                item {
+                    MoviesRow(
+                        title = StringConstants
+                            .Composable
+                            .movieDetailsScreenSimilarTo(movieDetails.name),
+                        titleStyle = MaterialTheme.typography.titleMedium,
+                        movieList = movieDetails.similarMovies,
+                        itemDirection = ItemDirection.Horizontal,
+                        onMovieSelected = refreshScreenWithNewMovie
+                    )
+                }
+            }
 
-                TitleValueText(
-                    modifier = itemModifier,
-                    title = stringResource(R.string.status),
-                    value = movieDetails.status
+            item {
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = childPadding.start)
+                        .padding(BottomDividerPadding)
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .alpha(0.15f)
+                        .background(MaterialTheme.colorScheme.onSurface)
                 )
-                TitleValueText(
-                    modifier = itemModifier,
-                    title = stringResource(R.string.status),
-                    value = movieDetails.originalLanguage
-                )
-                TitleValueText(
-                    modifier = itemModifier,
-                    title = stringResource(R.string.status),
-                    value = movieDetails.budget
-                )
-                TitleValueText(
-                    modifier = itemModifier,
-                    title = stringResource(R.string.status),
-                    value = movieDetails.revenue
-                )
+            }
+
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = childPadding.start),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val itemModifier = Modifier.width(192.dp)
+
+                    TitleValueText(
+                        modifier = itemModifier,
+                        title = stringResource(R.string.status),
+                        value = movieDetails.status
+                    )
+                    TitleValueText(
+                        modifier = itemModifier,
+                        title = stringResource(R.string.status),
+                        value = movieDetails.originalLanguage
+                    )
+                    TitleValueText(
+                        modifier = itemModifier,
+                        title = stringResource(R.string.status),
+                        value = movieDetails.budget
+                    )
+                    TitleValueText(
+                        modifier = itemModifier,
+                        title = stringResource(R.string.status),
+                        value = movieDetails.revenue
+                    )
+                }
             }
         }
     }

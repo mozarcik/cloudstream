@@ -34,6 +34,7 @@ import com.lagradost.cloudstream3.tv.presentation.common.Loading
 import com.lagradost.cloudstream3.tv.presentation.common.MoviesRow
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.CastAndCrewList
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
 
 private const val DebugTag = "TvSeriesDetailsUI"
@@ -121,103 +122,106 @@ private fun Details(
     }
 
     BackHandler(onBack = onBackPressed)
-    LazyColumn(
-        contentPadding = PaddingValues(bottom = 135.dp),
-        modifier = modifier,
-    ) {
-        item {
-            MovieDetails(
-                movieDetails = tvSeriesDetails,
-                goToMoviePlayer = { goToPlayer(resolveDefaultEpisodeData(tvSeriesDetails)) },
-                playButtonLabel = tvSeriesPlayLabel(tvSeriesDetails),
-                titleMetadata = tvSeriesTitleMetadata(tvSeriesDetails)
-            )
-        }
+    Box(modifier = modifier) {
+        MovieDetailsBackdrop(
+            posterUri = tvSeriesDetails.posterUri,
+            title = tvSeriesDetails.name,
+            modifier = Modifier.matchParentSize(),
+            gradientColor = MaterialTheme.colorScheme.background
+        )
 
-        if (seasons.isNotEmpty()) {
+        LazyColumn(
+            contentPadding = PaddingValues(bottom = 135.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
             item {
-                SeasonsSectionHeader(
-                    modifier = Modifier.padding(start = childPadding.start)
-                )
-                SeasonSelectorRow(
-                    seasons = seasons,
-                    selectedSeasonId = selectedSeasonId,
-                    onSeasonSelected = { season -> selectedSeasonId = season.id }
-                )
-            }
-        }
-
-        item {
-            EpisodesSectionHeader(
-                modifier = Modifier.padding(start = childPadding.start)
-            )
-        }
-
-        if (selectedEpisodes.isEmpty()) {
-            item {
-                NoEpisodesRow(
-                    modifier = Modifier
-                        .padding(start = childPadding.start, end = childPadding.end)
-                        .padding(bottom = 8.dp)
-                )
-            }
-        } else {
-            items(
-                items = selectedEpisodes,
-                key = { episode -> episode.id }
-            ) { episode ->
-                EpisodeCard(
-                    episode = episode,
-                    fallbackDescription = tvSeriesDetails.description,
-                    onEpisodeSelected = { selectedEpisode ->
-                        goToPlayer(selectedEpisode.data)
-                    },
-                    modifier = Modifier
-                        .padding(start = childPadding.start, end = childPadding.end)
-                        .padding(bottom = 12.dp)
-                )
-            }
-        }
-
-        if (tvSeriesDetails.cast.isNotEmpty()) {
-            item {
-                CastAndCrewList(
-                    castAndCrew = tvSeriesDetails.cast
-                )
-            }
-        }
-
-        if (tvSeriesDetails.similarMovies.isNotEmpty()) {
-            item {
-                MoviesRow(
-                    title = StringConstants
-                        .Composable
-                        .movieDetailsScreenSimilarTo(tvSeriesDetails.name),
-                    titleStyle = MaterialTheme.typography.titleMedium,
-                    movieList = tvSeriesDetails.similarMovies,
-                    itemDirection = ItemDirection.Horizontal,
-                    onMovieSelected = refreshScreenWithNewItem
-                )
-            }
-        }
-
-        if (hasAdditionalInfo) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .padding(start = childPadding.start, end = childPadding.end)
-                        .padding(BottomDividerPadding)
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .alpha(0.15f)
-                        .background(MaterialTheme.colorScheme.onSurface)
+                MovieDetails(
+                    movieDetails = tvSeriesDetails,
+                    goToMoviePlayer = { goToPlayer(resolveDefaultEpisodeData(tvSeriesDetails)) },
+                    playButtonLabel = tvSeriesPlayLabel(tvSeriesDetails),
+                    titleMetadata = tvSeriesTitleMetadata(tvSeriesDetails)
                 )
             }
 
-            item {
-                AdditionalInfoSection(
-                    tvSeriesDetails = tvSeriesDetails
-                )
+            if (seasons.isNotEmpty()) {
+                item {
+                    SeasonSelectorRow(
+                        seasons = seasons,
+                        selectedSeasonId = selectedSeasonId,
+                        onSeasonSelected = { season -> selectedSeasonId = season.id },
+                        modifier = Modifier
+                            .padding(start = childPadding.start, end = childPadding.end)
+                            .padding(bottom = 8.dp)
+                    )
+                }
+            }
+
+            if (selectedEpisodes.isEmpty()) {
+                item {
+                    NoEpisodesRow(
+                        modifier = Modifier
+                            .padding(start = childPadding.start, end = childPadding.end)
+                            .padding(bottom = 8.dp)
+                    )
+                }
+            } else {
+                items(
+                    items = selectedEpisodes,
+                    key = { episode -> episode.id }
+                ) { episode ->
+                    EpisodeCard(
+                        episode = episode,
+                        fallbackDescription = tvSeriesDetails.description,
+                        onEpisodeSelected = { selectedEpisode ->
+                            goToPlayer(selectedEpisode.data)
+                        },
+                        modifier = Modifier
+                            .padding(start = childPadding.start, end = childPadding.end)
+                            .padding(bottom = 12.dp)
+                    )
+                }
+            }
+
+            if (tvSeriesDetails.cast.isNotEmpty()) {
+                item {
+                    CastAndCrewList(
+                        castAndCrew = tvSeriesDetails.cast
+                    )
+                }
+            }
+
+            if (tvSeriesDetails.similarMovies.isNotEmpty()) {
+                item {
+                    MoviesRow(
+                        title = StringConstants
+                            .Composable
+                            .movieDetailsScreenSimilarTo(tvSeriesDetails.name),
+                        titleStyle = MaterialTheme.typography.titleMedium,
+                        movieList = tvSeriesDetails.similarMovies,
+                        itemDirection = ItemDirection.Horizontal,
+                        onMovieSelected = refreshScreenWithNewItem
+                    )
+                }
+            }
+
+            if (hasAdditionalInfo) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = childPadding.start, end = childPadding.end)
+                            .padding(BottomDividerPadding)
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .alpha(0.15f)
+                            .background(MaterialTheme.colorScheme.onSurface)
+                    )
+                }
+
+                item {
+                    AdditionalInfoSection(
+                        tvSeriesDetails = tvSeriesDetails
+                    )
+                }
             }
         }
     }

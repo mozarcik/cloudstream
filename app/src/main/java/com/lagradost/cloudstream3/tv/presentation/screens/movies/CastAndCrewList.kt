@@ -43,28 +43,15 @@ fun CastAndCrewList(
     title: String? = null
 ) {
     val childPadding = rememberChildPadding()
-    val sectionTitle = title ?: stringResource(R.string.tv_cast)
 
-    Column(
-        modifier = Modifier.padding(top = childPadding.top),
+    LazyRow(
+        modifier = Modifier
+            .padding(top = 16.dp)
+            .focusRestorer(),
+        contentPadding = PaddingValues(start = childPadding.start)
     ) {
-        Text(
-            text = sectionTitle,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 18.sp
-            ),
-            modifier = Modifier.padding(start = childPadding.start)
-        )
-        // ToDo: specify the pivot offset
-        LazyRow(
-            modifier = Modifier
-                .padding(top = 16.dp)
-                .focusRestorer(),
-            contentPadding = PaddingValues(start = childPadding.start)
-        ) {
-            items(castAndCrew, key = { it.id }) {
-                CastAndCrewItem(it, modifier = Modifier.width(144.dp))
-            }
+        items(castAndCrew, key = { it.id }) {
+            CastAndCrewItem(it, modifier = Modifier.width(144.dp))
         }
     }
 }

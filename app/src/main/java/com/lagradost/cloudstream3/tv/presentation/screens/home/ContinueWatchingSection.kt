@@ -318,6 +318,9 @@ fun ContinueWatchingInfoPanel(
     onMoveUpToBreadcrumb: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var isResumeFocused by remember { mutableStateOf(false) }
+    var isDetailsFocused by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(14.dp, alignment = Alignment.Bottom)
@@ -350,6 +353,7 @@ fun ContinueWatchingInfoPanel(
                         right = detailsFocusRequester
                     }
                     .onFocusChanged { focusState ->
+                        isResumeFocused = focusState.isFocused
                         if (focusState.isFocused) {
                             onFocusedInPanel()
                         }
@@ -386,7 +390,10 @@ fun ContinueWatchingInfoPanel(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(text = stringResource(R.string.resume))
+                Text(
+                    text = stringResource(R.string.resume),
+                    color = if (isResumeFocused) Color.Black else Color.White
+                )
             }
 
             OutlinedButton(
@@ -398,6 +405,7 @@ fun ContinueWatchingInfoPanel(
                         left = resumeFocusRequester
                     }
                     .onFocusChanged { focusState ->
+                        isDetailsFocused = focusState.isFocused
                         if (focusState.isFocused) {
                             onFocusedInPanel()
                         }
@@ -429,7 +437,10 @@ fun ContinueWatchingInfoPanel(
                     contentDescription = null
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(text = stringResource(R.string.details))
+                Text(
+                    text = stringResource(R.string.details),
+                    color = if (isDetailsFocused) Color.Black else Color.White
+                )
             }
         }
     }

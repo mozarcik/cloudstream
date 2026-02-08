@@ -94,7 +94,6 @@ internal fun SeasonSelectorRow(
 
     TabRow(
         modifier = modifier
-            .padding(start = childPadding.start, end = childPadding.end)
             .focusRequester(tabRowFocusRequester)
             .focusRestorer(firstTabFocusRequester),
         selectedTabIndex = selectedTabIndex,
@@ -266,7 +265,7 @@ private fun SectionHeaderText(
         style = MaterialTheme.typography.titleMedium.copy(
             fontWeight = FontWeight.SemiBold
         ),
-        modifier = modifier.padding(top = 28.dp, bottom = 12.dp)
+        modifier = modifier.padding(top = 12.dp, bottom = 8.dp)
     )
 }
 
