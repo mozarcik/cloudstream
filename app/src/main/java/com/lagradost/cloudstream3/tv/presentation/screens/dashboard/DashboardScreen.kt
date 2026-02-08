@@ -43,7 +43,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.SettingsScreen
@@ -72,7 +71,7 @@ fun DashboardScreen(
     openMovieDetailsScreen: (movieId: String) -> Unit,
     openTvSeriesDetailsScreen: (seriesId: String) -> Unit,
     openMediaDetailsScreen: (mediaId: String) -> Unit,
-    openVideoPlayer: (Movie) -> Unit,
+    openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     isComingBackFromDifferentScreen: Boolean,
     resetIsComingBackFromDifferentScreen: () -> Unit,
     onBackPressed: () -> Unit
@@ -214,7 +213,7 @@ private fun Body(
     openMovieDetailsScreen: (movieId: String) -> Unit,
     openTvSeriesDetailsScreen: (seriesId: String) -> Unit,
     openMediaDetailsScreen: (mediaId: String) -> Unit,
-    openVideoPlayer: (Movie) -> Unit,
+    openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -254,7 +253,13 @@ private fun Body(
                         }
                     }
                 },
-                goToVideoPlayer = openVideoPlayer,
+                onResumeMediaClick = { item ->
+                    Log.d(
+                        DebugTag,
+                        "onResumeMediaClick name=${item.name} api=${item.apiName} type=${item.type}"
+                    )
+                    openVideoPlayer(item.url, item.apiName, null)
+                },
                 onScroll = updateTopBarVisibility,
                 isTopBarVisible = isTopBarVisible
             )

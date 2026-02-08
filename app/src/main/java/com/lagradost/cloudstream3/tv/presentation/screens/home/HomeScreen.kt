@@ -66,14 +66,14 @@ import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.FeedRepositoryImpl
+import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.compat.home.SourceRepository
-import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.presentation.common.Loading
 
 @Composable
 fun HomeScreen(
-    onMediaClick: (com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat) -> Unit,
-    goToVideoPlayer: (movie: Movie) -> Unit,
+    onMediaClick: (MediaItemCompat) -> Unit,
+    onResumeMediaClick: (MediaItemCompat) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
     isTopBarVisible: Boolean,
     feedViewModel: FeedViewModel = viewModel(
@@ -293,9 +293,21 @@ fun HomeScreen(
                             externalFocusRequestToken = continueFocusRequestToken,
                             isInteractive = !isFeedMenuOpened,
                             resumeFocusRequester = continueResumeFocusRequester,
-                            onResumeClick = {},
-                            onDetailsClick = {},
-                            onCardClick = {},
+                            onResumeClick = { item ->
+                                onResumeMediaClick(item)
+                            },
+                            onDetailsClick = { item ->
+                                onMediaClick(item)
+                            },
+                            onCardClick = { item ->
+                                onResumeMediaClick(item)
+                            },
+                            onSectionContentFocused = { isFirstGridRowFocused = false },
+                            onOpenFeedMenu = { openFeedMenu() },
+                            onMoveUpToBreadcrumb = {
+                                isFirstGridRowFocused = true
+                                breadcrumbFocusRequester.requestFocus()
+                            },
                             modifier = Modifier.fillMaxSize()
                         )
                     } else {
@@ -349,7 +361,12 @@ fun HomeScreen(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(start = 16.dp, end = 16.dp, top = 14.dp),
-                    isInteractive = feedMenuState is FeedMenuState.Closed
+                    isInteractive = feedMenuState is FeedMenuState.Closed,
+                    onFocusStateChanged = { isFocused ->
+                        if (isFocused) {
+                            isFirstGridRowFocused = true
+                        }
+                    }
                 )
                 
                 // Task 4.4: Sidebar overlay with animation
@@ -429,6 +446,7 @@ private fun BrowseBreadcrumbBar(
     downFocusRequester: FocusRequester,
     modifier: Modifier = Modifier,
     isInteractive: Boolean,
+    onFocusStateChanged: (Boolean) -> Unit = {},
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val isFocusable = !compact && isInteractive
@@ -483,7 +501,10 @@ private fun BrowseBreadcrumbBar(
                 shape = shape
             )
             .clip(shape)
-            .onFocusChanged { isFocused = it.isFocused }
+            .onFocusChanged {
+                isFocused = it.isFocused
+                onFocusStateChanged(it.isFocused)
+            }
             .background(
                 brush = Brush.horizontalGradient(
                     colors = if (compact) {

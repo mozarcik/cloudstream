@@ -68,8 +68,13 @@ fun TvApp(
                             navController.navigate(Screens.MediaDetails.withArgs(encodedUrl, encodedApiName))
                         }
                     },
-                    openVideoPlayer = {
-                        // TODO: Navigate to video player
+                    openVideoPlayer = { url, apiName, episodeData ->
+                        val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
+                        val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
+                        val encodedEpisodeData = URLEncoder.encode(episodeData.orEmpty(), StandardCharsets.UTF_8.toString())
+                        navController.navigate(
+                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedEpisodeData)
+                        )
                     },
                     onBackPressed = onBackPressed,
                     isComingBackFromDifferentScreen = isComingBackFromDifferentScreen,

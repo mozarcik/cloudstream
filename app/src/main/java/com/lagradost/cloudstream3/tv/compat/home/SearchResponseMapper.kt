@@ -152,8 +152,9 @@ object SearchResponseMapper {
     private fun ResumeWatchingResult.toContinueWatchingMediaItem(generatedId: String): MediaItemCompat {
         val mediaType = this.type ?: TvType.Movie
         val inferredSeriesType = this.inferSeriesTypeFromUrl()
+        val hasSeriesResumeMarker = (season ?: 0) > 0 || (episode ?: 0) > 0
         val shouldTreatAsSeries =
-            mediaType.isEpisodeBased() || inferredSeriesType != null || season != null || episode != null
+            mediaType.isEpisodeBased() || inferredSeriesType != null || hasSeriesResumeMarker
         val normalizedWatchPos = watchPos?.fixVisual()
         val progress = normalizedWatchPos?.let { posDur ->
             if (posDur.duration <= 0L) null else (posDur.position.toFloat() / posDur.duration.toFloat()).coerceIn(0f, 1f)
