@@ -151,6 +151,11 @@ object SearchResponseMapper {
 
     private fun ResumeWatchingResult.toContinueWatchingMediaItem(generatedId: String): MediaItemCompat {
         val mediaType = this.type ?: TvType.Movie
+        val hasBackdrop = !this.backdropUrl.isNullOrBlank()
+        val artworkUri = this.backdropUrl
+            ?.takeIf { it.isNotBlank() }
+            ?: this.posterUrl?.takeIf { it.isNotBlank() }
+            .orEmpty()
         val inferredSeriesType = this.inferSeriesTypeFromUrl()
         val hasSeriesResumeMarker = (season ?: 0) > 0 || (episode ?: 0) > 0
         val shouldTreatAsSeries =
@@ -166,7 +171,7 @@ object SearchResponseMapper {
         if (shouldTreatAsSeries) {
             return MediaItemCompat.TvSeries(
                 id = generatedId,
-                posterUri = this.posterUrl.orEmpty(),
+                posterUri = artworkUri,
                 name = this.name,
                 url = this.url,
                 apiName = this.apiName,
@@ -176,14 +181,15 @@ object SearchResponseMapper {
                 continueWatchingProgress = progress,
                 continueWatchingRemainingMs = remainingMs,
                 continueWatchingSeason = this.season,
-                continueWatchingEpisode = this.episode
+                continueWatchingEpisode = this.episode,
+                continueWatchingHasBackdrop = hasBackdrop
             )
         }
 
         if (mediaType == TvType.Movie) {
             return MediaItemCompat.Movie(
                 id = generatedId,
-                posterUri = this.posterUrl.orEmpty(),
+                posterUri = artworkUri,
                 name = this.name,
                 url = this.url,
                 apiName = this.apiName,
@@ -192,13 +198,14 @@ object SearchResponseMapper {
                 continueWatchingProgress = progress,
                 continueWatchingRemainingMs = remainingMs,
                 continueWatchingSeason = this.season,
-                continueWatchingEpisode = this.episode
+                continueWatchingEpisode = this.episode,
+                continueWatchingHasBackdrop = hasBackdrop
             )
         }
 
         return MediaItemCompat.Other(
             id = generatedId,
-            posterUri = this.posterUrl.orEmpty(),
+            posterUri = artworkUri,
             name = this.name,
             url = this.url,
             apiName = this.apiName,
@@ -207,7 +214,8 @@ object SearchResponseMapper {
             continueWatchingProgress = progress,
             continueWatchingRemainingMs = remainingMs,
             continueWatchingSeason = this.season,
-            continueWatchingEpisode = this.episode
+            continueWatchingEpisode = this.episode,
+            continueWatchingHasBackdrop = hasBackdrop
         )
     }
 

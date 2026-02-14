@@ -1,6 +1,4 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
-
-import android.util.Log
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -43,15 +41,25 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
+import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
-import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.downloads.DownloadMediaType
+import com.lagradost.cloudstream3.tv.presentation.screens.downloads.DownloadsScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedGridScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreenV2
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.SettingsScreen
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
 private val DashboardTopBarHorizontalPadding = 48.dp
 private val DashboardTopBarVerticalPadding = 10.dp
-private const val DebugTag = "TvDashboardNav"
 
 @Composable
 fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.current): Padding {
@@ -68,8 +76,8 @@ fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.curre
 @Composable
 fun DashboardScreen(
     openCategoryMovieList: (categoryId: String) -> Unit,
-    openMovieDetailsScreen: (movieId: String) -> Unit,
-    openTvSeriesDetailsScreen: (seriesId: String) -> Unit,
+    openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
+    openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (mediaId: String) -> Unit,
     openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     isComingBackFromDifferentScreen: Boolean,
@@ -83,13 +91,33 @@ fun DashboardScreen(
     var isTopBarFocused by remember { mutableStateOf(false) }
     var isTopBarFocusable by remember { mutableStateOf(true) }
 
+    val homeTabIndex = remember { TopBarTabs.indexOf(Screens.Home).coerceAtLeast(0) }
+    val libraryTabIndex = remember { TopBarTabs.indexOf(Screens.Library).coerceAtLeast(0) }
+    val searchTabIndex = remember { TopBarTabs.indexOf(Screens.Search).coerceAtLeast(0) }
     var currentDestination: String? by remember { mutableStateOf(null) }
-    val currentTopBarSelectedTabIndex by remember(currentDestination) {
+    val currentTopBarSelectedTabIndex by remember(
+        currentDestination,
+        homeTabIndex,
+        libraryTabIndex,
+        searchTabIndex
+    ) {
         derivedStateOf {
-            currentDestination?.let { TopBarTabs.indexOf(Screens.valueOf(it)) } ?: 0
+            val destination = currentDestination ?: return@derivedStateOf homeTabIndex
+            if (destination == Screens.HomeFeedGrid.name) {
+                return@derivedStateOf homeTabIndex
+            }
+            if (destination == Screens.LibraryFeedGrid.name) {
+                return@derivedStateOf libraryTabIndex
+            }
+            if (destination == Screens.SearchFeedGrid.name) {
+                return@derivedStateOf searchTabIndex
+            }
+
+            val screen = runCatching { Screens.valueOf(destination) }.getOrNull()
+            val tabIndex = screen?.let { TopBarTabs.indexOf(it) } ?: -1
+            if (tabIndex >= 0) tabIndex else homeTabIndex
         }
     }
-    val homeTabIndex = remember { TopBarTabs.indexOf(Screens.Home).coerceAtLeast(0) }
 
     DisposableEffect(Unit) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -109,7 +137,10 @@ fun DashboardScreen(
         // 2. On second back press, bring focus back to the first displayed tab
         // 3. On third back press, exit the app
         onBackPressed = {
-            if (!isTopBarVisible) {
+            val isOnTopBarTab = TopBarTabs.any { tab -> tab() == currentDestination }
+            if (!isOnTopBarTab && navController.previousBackStackEntry != null) {
+                navController.popBackStack()
+            } else if (!isTopBarVisible) {
                 isTopBarVisible = true
                 TopBarFocusRequesters[currentTopBarSelectedTabIndex + 1].requestFocus()
             } else if (currentTopBarSelectedTabIndex == homeTabIndex) onBackPressed()
@@ -173,14 +204,12 @@ fun DashboardScreen(
         }
 
         Body(
-            openCategoryMovieList = openCategoryMovieList,
             openMovieDetailsScreen = openMovieDetailsScreen,
             openTvSeriesDetailsScreen = openTvSeriesDetailsScreen,
             openMediaDetailsScreen = openMediaDetailsScreen,
             openVideoPlayer = openVideoPlayer,
             updateTopBarVisibility = { isTopBarVisible = it },
             updateTopBarFocusable = { isTopBarFocusable = it },
-            isTopBarVisible = isTopBarVisible,
             navController = navController,
             modifier = Modifier.padding(top = navHostTopPaddingDp),
         )
@@ -209,16 +238,14 @@ private fun BackPressHandledArea(
 
 @Composable
 private fun Body(
-    openCategoryMovieList: (categoryId: String) -> Unit,
-    openMovieDetailsScreen: (movieId: String) -> Unit,
-    openTvSeriesDetailsScreen: (seriesId: String) -> Unit,
+    openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
+    openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (mediaId: String) -> Unit,
     openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    navController: NavHostController = rememberNavController(),
-    isTopBarVisible: Boolean = true,
+    navController: NavHostController = rememberNavController()
 ) =
     NavHost(
         modifier = modifier,
@@ -232,43 +259,180 @@ private fun Body(
              PlaceholderScreen("Sources - Coming Soon")
         }
         composable(Screens.Home()) {
-            HomeScreen(
+            HomeScreenV2(
                 onMediaClick = { item ->
-                    Log.d(
-                        DebugTag,
-                        "onMediaClick class=${item::class.java.simpleName} name=${item.name} api=${item.apiName} type=${item.type}"
-                    )
                     when (item) {
-                        is com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat.Movie -> {
-                            Log.d(DebugTag, "navigate -> MovieDetails")
-                            openMovieDetailsScreen("${item.url}|${item.apiName}")
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
                         }
-                        is com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat.TvSeries -> {
-                            Log.d(DebugTag, "navigate -> TvSeriesDetails")
-                            openTvSeriesDetailsScreen("${item.url}|${item.apiName}")
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
                         }
-                        is com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat.Other -> {
-                            Log.d(DebugTag, "navigate -> MediaDetails")
+                        is MediaItemCompat.Other -> {
                             openMediaDetailsScreen("${item.url}|${item.apiName}")
                         }
                     }
                 },
-                onResumeMediaClick = { item ->
-                    Log.d(
-                        DebugTag,
-                        "onResumeMediaClick name=${item.name} api=${item.apiName} type=${item.type}"
-                    )
+                onContinueWatchingPlay = { item ->
                     openVideoPlayer(item.url, item.apiName, null)
                 },
-                onScroll = updateTopBarVisibility,
-                isTopBarVisible = isTopBarVisible
+                onOpenFeedGrid = { feed ->
+                    HomeFeedGridSelectionStore.setSelectedFeed(feed)
+                    navController.navigate(Screens.HomeFeedGrid())
+                },
+                onScroll = updateTopBarVisibility
+            )
+        }
+        composable(Screens.HomeFeedGrid()) {
+            HomeFeedGridScreen(
+                onMediaClick = { item ->
+                    when (item) {
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
+                        }
+
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
+                        }
+
+                        is MediaItemCompat.Other -> {
+                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                        }
+                    }
+                },
+                onBack = {
+                    navController.popBackStack()
+                },
+                onScroll = updateTopBarVisibility
             )
         }
         composable(Screens.Library()) {
-            PlaceholderScreen("Library")
+            LibraryScreen(
+                onMediaClick = { item ->
+                    when (item) {
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
+                        }
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
+                        }
+                        is MediaItemCompat.Other -> {
+                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                        }
+                    }
+                },
+                onOpenFeedGrid = { section ->
+                    LibraryFeedGridSelectionStore.setSelectedSection(section)
+                    navController.navigate(Screens.LibraryFeedGrid())
+                },
+                onScroll = updateTopBarVisibility
+            )
+        }
+        composable(Screens.LibraryFeedGrid()) {
+            LibraryFeedGridScreen(
+                onMediaClick = { item ->
+                    when (item) {
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
+                        }
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
+                        }
+                        is MediaItemCompat.Other -> {
+                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                        }
+                    }
+                },
+                onBack = {
+                    navController.popBackStack()
+                },
+                onScroll = updateTopBarVisibility
+            )
         }
         composable(Screens.Downloads()) {
-            PlaceholderScreen("Downloads")
+            DownloadsScreen(
+                onOpenDetails = { item ->
+                    if (item.sourceUrl.isNotBlank() && item.apiName.isNotBlank()) {
+                        when (item.mediaType) {
+                            DownloadMediaType.Movie -> {
+                                openMovieDetailsScreen(
+                                    MediaItemCompat.Movie(
+                                        id = item.id,
+                                        url = item.sourceUrl,
+                                        apiName = item.apiName,
+                                        name = item.title,
+                                        posterUri = item.posterUrl.orEmpty(),
+                                        type = null,
+                                        score = null
+                                    )
+                                )
+                            }
+
+                            DownloadMediaType.Series -> {
+                                openTvSeriesDetailsScreen(
+                                    MediaItemCompat.TvSeries(
+                                        id = item.id,
+                                        url = item.sourceUrl,
+                                        apiName = item.apiName,
+                                        name = item.title,
+                                        posterUri = item.posterUrl.orEmpty(),
+                                        type = null,
+                                        score = null
+                                    )
+                                )
+                            }
+
+                            DownloadMediaType.Media -> {
+                                openMediaDetailsScreen("${item.sourceUrl}|${item.apiName}")
+                            }
+                        }
+                    }
+                },
+                onScroll = updateTopBarVisibility
+            )
+        }
+        composable(Screens.Search()) {
+            SearchScreen(
+                onMediaClick = { item ->
+                    when (item) {
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
+                        }
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
+                        }
+                        is MediaItemCompat.Other -> {
+                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                        }
+                    }
+                },
+                onOpenFeedGrid = { section ->
+                    SearchFeedGridSelectionStore.setSelectedSection(section)
+                    navController.navigate(Screens.SearchFeedGrid())
+                },
+                onScroll = updateTopBarVisibility
+            )
+        }
+        composable(Screens.SearchFeedGrid()) {
+            SearchFeedGridScreen(
+                onMediaClick = { item ->
+                    when (item) {
+                        is MediaItemCompat.Movie -> {
+                            openMovieDetailsScreen(item)
+                        }
+                        is MediaItemCompat.TvSeries -> {
+                            openTvSeriesDetailsScreen(item)
+                        }
+                        is MediaItemCompat.Other -> {
+                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                        }
+                    }
+                },
+                onBack = {
+                    navController.popBackStack()
+                },
+                onScroll = updateTopBarVisibility
+            )
         }
         composable(Screens.Settings()) {
             SettingsScreen(

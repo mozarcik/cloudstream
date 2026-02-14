@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.SearchResponseMapper.toMediaItemCompat
 import com.lagradost.cloudstream3.ui.home.HomeViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -60,6 +61,9 @@ class FeedRepositoryImpl : FeedRepository {
             emit(categories)
             
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                throw e
+            }
             Log.e(TAG, "Error loading categories for ${api.name}", e)
             emit(emptyList())
         }

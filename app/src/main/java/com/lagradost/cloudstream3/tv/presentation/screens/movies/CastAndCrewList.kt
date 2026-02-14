@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ClassicCard
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -34,6 +35,7 @@ import com.lagradost.cloudstream3.tv.data.entities.MovieCast
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamBorderWidth
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
+import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamSurfaceDefaults
 import com.lagradost.cloudstream3.tv.presentation.utils.ourColors
 
 @OptIn(ExperimentalComposeUiApi::class)

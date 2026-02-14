@@ -136,6 +136,8 @@ fun ResultEpisode.getWatchProgress(): Float {
 object ResultFragment {
     private const val URL_BUNDLE = "url"
     private const val NAME_BUNDLE = "name"
+    private const val POSTER_BUNDLE = "poster"
+    private const val BACKDROP_BUNDLE = "backdrop"
     private const val API_NAME_BUNDLE = "apiName"
     private const val SEASON_BUNDLE = "season"
     private const val EPISODE_BUNDLE = "episode"
@@ -150,7 +152,9 @@ object ResultFragment {
             putString(URL_BUNDLE, card.url)
             putString(API_NAME_BUNDLE, card.apiName)
             putString(NAME_BUNDLE, card.name)
+            putString(POSTER_BUNDLE, card.posterUrl)
             if (card is DataStoreHelper.ResumeWatchingResult) {
+                putString(BACKDROP_BUNDLE, card.backdropUrl)
                 if (card.season != null)
                     putInt(SEASON_BUNDLE, card.season)
                 if (card.episode != null)

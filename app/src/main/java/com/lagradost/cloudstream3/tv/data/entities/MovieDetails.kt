@@ -2,6 +2,9 @@ package com.lagradost.cloudstream3.tv.data.entities
 
 data class MovieDetails(
     val id: String,
+    val isFavorite: Boolean = false,
+    val isBookmarked: Boolean = false,
+    val bookmarkLabelRes: Int? = null,
     val name: String,
     val description: String,
     val posterUri: String,

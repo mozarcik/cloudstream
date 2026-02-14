@@ -40,6 +40,7 @@ object VideoDownloadHelper {
         @JsonProperty("type") val type: TvType,
         @JsonProperty("name") val name: String,
         @JsonProperty("poster") val poster: String?,
+        @JsonProperty("backdrop") val backdrop: String? = null,
         @JsonProperty("cacheTime") val cacheTime: Long,
         override val id: Int,
     ): DownloadCached(id)

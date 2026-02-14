@@ -22,7 +22,18 @@ class TvSeriesDetailsComposeFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        val savedStateHandle = SavedStateHandle.Companion.createHandle(null, arguments)
+        val args = arguments
+        val savedStateHandle = SavedStateHandle.Companion.createHandle(null, args).apply {
+            args?.getString("name")?.takeIf { it.isNotBlank() }?.let { title ->
+                set(TvSeriesDetailsScreen.LoadingTitleBundleKey, title)
+            }
+            args?.getString("poster")?.takeIf { it.isNotBlank() }?.let { poster ->
+                set(TvSeriesDetailsScreen.LoadingPosterBundleKey, poster)
+            }
+            args?.getString("backdrop")?.takeIf { it.isNotBlank() }?.let { backdrop ->
+                set(TvSeriesDetailsScreen.LoadingBackdropBundleKey, backdrop)
+            }
+        }
         val viewModel = ViewModelProvider(
             this,
             TvSeriesDetailsScreenViewModelFactory(

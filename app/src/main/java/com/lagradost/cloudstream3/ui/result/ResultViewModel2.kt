@@ -719,6 +719,7 @@ class ResultViewModel2 : ViewModel() {
             currentHeaderName: String,
             currentType: TvType,
             currentPoster: String?,
+            currentBackdrop: String?,
             apiName: String,
             parentId: Int,
             url: String,
@@ -752,6 +753,8 @@ class ResultViewModel2 : ViewModel() {
                         type = currentType,
                         name = currentHeaderName,
                         poster = currentPoster,
+                        backdrop = currentBackdrop?.takeIf { it.isNotBlank() }
+                            ?: currentPoster?.takeIf { it.isNotBlank() },
                         id = parentId,
                         cacheTime = System.currentTimeMillis(),
                     )
@@ -861,6 +864,7 @@ class ResultViewModel2 : ViewModel() {
                     currentIsMovie,
                     currentHeaderName,
                     currentType,
+                    currentPoster,
                     currentPoster,
                     apiName,
                     parentId,
@@ -1640,6 +1644,7 @@ class ResultViewModel2 : ViewModel() {
                             response.isMovie(),
                             response.name,
                             response.type,
+                            response.posterUrl,
                             response.posterUrl,
                             response.apiName,
                             response.getId(),
@@ -2822,6 +2827,9 @@ class ResultViewModel2 : ViewModel() {
                             type = loadResponse.type,
                             name = loadResponse.name,
                             poster = loadResponse.posterUrl,
+                            backdrop = loadResponse.backgroundPosterUrl
+                                ?.takeIf { it.isNotBlank() }
+                                ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() },
                             id = mainId,
                             cacheTime = System.currentTimeMillis(),
                         )

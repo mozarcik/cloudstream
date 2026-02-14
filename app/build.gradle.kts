@@ -168,6 +168,7 @@ dependencies {
 
     // Android Core & Lifecycle
     implementation(libs.core.ktx)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.activity.ktx)
     implementation(libs.appcompat)
     implementation(libs.fragment.ktx)
@@ -235,6 +236,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.tv.material)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.compose)
     // Coil

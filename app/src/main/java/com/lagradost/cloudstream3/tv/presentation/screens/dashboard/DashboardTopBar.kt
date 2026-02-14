@@ -32,7 +32,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.LocalContentColor
@@ -45,7 +44,6 @@ import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import com.lagradost.cloudstream3.tv.presentation.theme.IconSize
-import com.lagradost.cloudstream3.tv.presentation.theme.LexendExa
 import com.lagradost.cloudstream3.tv.presentation.utils.occupyScreenSize
 
 val TopBarTabs = Screens.entries.toList().filter { it.isTabItem && it != Screens.Sources }
@@ -70,7 +68,6 @@ fun DashboardTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp)
                 .background(MaterialTheme.colorScheme.surface)
                 .focusRestorer(),
             verticalAlignment = Alignment.CenterVertically
@@ -176,9 +173,7 @@ private fun CloudstreamLogo(
         )
         Text(
             text = stringResource(R.string.brand_logo_text),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Medium,
-            fontFamily = LexendExa
+            style = MaterialTheme.typography.titleSmall
         )
     }
 }

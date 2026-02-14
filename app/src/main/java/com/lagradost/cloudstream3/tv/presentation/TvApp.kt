@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepositoryImpl
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardScreen
@@ -43,22 +44,31 @@ fun TvApp(
                     openCategoryMovieList = { categoryId ->
                         // TODO: Navigate to category movie list
                     },
-                    openMovieDetailsScreen = { movieData ->
-                        // movieData format: "url|apiName"
-                        val parts = movieData.split("|")
-                        if (parts.size == 2) {
-                            val encodedUrl = URLEncoder.encode(parts[0], StandardCharsets.UTF_8.toString())
-                            val encodedApiName = URLEncoder.encode(parts[1], StandardCharsets.UTF_8.toString())
-                            navController.navigate(Screens.MovieDetails.withArgs(encodedUrl, encodedApiName))
+                    openMovieDetailsScreen = { movie ->
+                        val encodedUrl = URLEncoder.encode(movie.url, StandardCharsets.UTF_8.toString())
+                        val encodedApiName = URLEncoder.encode(movie.apiName, StandardCharsets.UTF_8.toString())
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set(MovieDetailsScreen.LoadingTitleBundleKey, movie.name)
+                            set(MovieDetailsScreen.LoadingPosterBundleKey, movie.posterUri)
+                            set(
+                                MovieDetailsScreen.LoadingBackdropBundleKey,
+                                movie.posterUri.takeIf { movie.continueWatchingHasBackdrop && it.isNotBlank() }
+                            )
                         }
+                        navController.navigate(Screens.MovieDetails.withArgs(encodedUrl, encodedApiName))
                     },
-                    openTvSeriesDetailsScreen = { seriesData ->
-                        val parts = seriesData.split("|")
-                        if (parts.size == 2) {
-                            val encodedUrl = URLEncoder.encode(parts[0], StandardCharsets.UTF_8.toString())
-                            val encodedApiName = URLEncoder.encode(parts[1], StandardCharsets.UTF_8.toString())
-                            navController.navigate(Screens.TvSeriesDetails.withArgs(encodedUrl, encodedApiName))
+                    openTvSeriesDetailsScreen = { series ->
+                        val encodedUrl = URLEncoder.encode(series.url, StandardCharsets.UTF_8.toString())
+                        val encodedApiName = URLEncoder.encode(series.apiName, StandardCharsets.UTF_8.toString())
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set(TvSeriesDetailsScreen.LoadingTitleBundleKey, series.name)
+                            set(TvSeriesDetailsScreen.LoadingPosterBundleKey, series.posterUri)
+                            set(
+                                TvSeriesDetailsScreen.LoadingBackdropBundleKey,
+                                series.posterUri.takeIf { series.continueWatchingHasBackdrop && it.isNotBlank() }
+                            )
                         }
+                        navController.navigate(Screens.TvSeriesDetails.withArgs(encodedUrl, encodedApiName))
                     },
                     openMediaDetailsScreen = { mediaData ->
                         val parts = mediaData.split("|")
@@ -96,10 +106,20 @@ fun TvApp(
                 val encodedApiName = backStackEntry.arguments?.getString("apiName") ?: ""
                 val url = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
                 val apiName = URLDecoder.decode(encodedApiName, StandardCharsets.UTF_8.toString())
-                
+                val previousSavedStateHandle = navController.previousBackStackEntry?.savedStateHandle
+                val loadingTitle = previousSavedStateHandle
+                    ?.remove<String>(MovieDetailsScreen.LoadingTitleBundleKey)
+                val loadingPoster = previousSavedStateHandle
+                    ?.remove<String>(MovieDetailsScreen.LoadingPosterBundleKey)
+                val loadingBackdrop = previousSavedStateHandle
+                    ?.remove<String>(MovieDetailsScreen.LoadingBackdropBundleKey)
+
                 val savedStateHandle = SavedStateHandle().apply {
                     set(MovieDetailsScreen.UrlBundleKey, url)
                     set(MovieDetailsScreen.ApiNameBundleKey, apiName)
+                    set(MovieDetailsScreen.LoadingTitleBundleKey, loadingTitle)
+                    set(MovieDetailsScreen.LoadingPosterBundleKey, loadingPoster)
+                    set(MovieDetailsScreen.LoadingBackdropBundleKey, loadingBackdrop)
                 }
                 
                 val viewModel: MovieDetailsScreenViewModel = viewModel(
@@ -128,9 +148,14 @@ fun TvApp(
                         isComingBackFromDifferentScreen = true
                     },
                     refreshScreenWithNewMovie = { movie ->
-                        // Navigate to new movie details
+                        val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set(MovieDetailsScreen.LoadingTitleBundleKey, movie.name)
+                            set(MovieDetailsScreen.LoadingPosterBundleKey, movie.posterUri)
+                            set(MovieDetailsScreen.LoadingBackdropBundleKey, null as String?)
+                        }
                         val newEncodedUrl = URLEncoder.encode(movie.id, StandardCharsets.UTF_8.toString())
-                        navController.navigate(Screens.MovieDetails.withArgs(newEncodedUrl, movie.name))
+                        navController.navigate(Screens.MovieDetails.withArgs(newEncodedUrl, encodedApiName))
                     },
                     movieDetailsScreenViewModel = viewModel
                 )
@@ -147,10 +172,20 @@ fun TvApp(
                 val encodedApiName = backStackEntry.arguments?.getString("apiName") ?: ""
                 val url = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
                 val apiName = URLDecoder.decode(encodedApiName, StandardCharsets.UTF_8.toString())
+                val previousSavedStateHandle = navController.previousBackStackEntry?.savedStateHandle
+                val loadingTitle = previousSavedStateHandle
+                    ?.remove<String>(TvSeriesDetailsScreen.LoadingTitleBundleKey)
+                val loadingPoster = previousSavedStateHandle
+                    ?.remove<String>(TvSeriesDetailsScreen.LoadingPosterBundleKey)
+                val loadingBackdrop = previousSavedStateHandle
+                    ?.remove<String>(TvSeriesDetailsScreen.LoadingBackdropBundleKey)
 
                 val savedStateHandle = SavedStateHandle().apply {
                     set(TvSeriesDetailsScreen.UrlBundleKey, url)
                     set(TvSeriesDetailsScreen.ApiNameBundleKey, apiName)
+                    set(TvSeriesDetailsScreen.LoadingTitleBundleKey, loadingTitle)
+                    set(TvSeriesDetailsScreen.LoadingPosterBundleKey, loadingPoster)
+                    set(TvSeriesDetailsScreen.LoadingBackdropBundleKey, loadingBackdrop)
                 }
 
                 val viewModel: TvSeriesDetailsScreenViewModel = viewModel(
@@ -179,6 +214,11 @@ fun TvApp(
                         isComingBackFromDifferentScreen = true
                     },
                     refreshScreenWithNewItem = { movie ->
+                        navController.currentBackStackEntry?.savedStateHandle?.apply {
+                            set(TvSeriesDetailsScreen.LoadingTitleBundleKey, movie.name)
+                            set(TvSeriesDetailsScreen.LoadingPosterBundleKey, movie.posterUri)
+                            set(TvSeriesDetailsScreen.LoadingBackdropBundleKey, null as String?)
+                        }
                         val newEncodedUrl = URLEncoder.encode(movie.id, StandardCharsets.UTF_8.toString())
                         navController.navigate(Screens.TvSeriesDetails.withArgs(newEncodedUrl, URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())))
                     },

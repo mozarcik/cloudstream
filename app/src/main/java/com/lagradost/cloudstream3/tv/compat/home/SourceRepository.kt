@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.compat.home
 
-import android.util.Log
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.MainAPI
 import kotlinx.coroutines.flow.Flow
@@ -21,31 +20,14 @@ object SourceRepository {
      */
     fun getAvailableApis(): List<MainAPI> {
         val allApis = APIHolder.apis
-        Log.d("SourceRepo", "=== getAvailableApis() called ===")
-        Log.d("SourceRepo", "APIHolder.apis.size = ${allApis.size}")
-        
         if (allApis.isEmpty()) {
-            Log.w("SourceRepo", "WARNING: APIHolder.apis is EMPTY! Plugins may not be loaded yet.")
-            Log.w("SourceRepo", "Returning empty list. Try opening menu again after a few seconds.")
             return emptyList()
         }
-        
-        // Log first 10 APIs
-        allApis.take(10).forEach { 
-            Log.d("SourceRepo", "  API: ${it.name} (hasMainPage=${it.hasMainPage})") 
-        }
-        
+
         // Jeśli są API z hasMainPage, używamy ich; w przeciwnym razie wszystkie
         val filtered = allApis.filter { it.hasMainPage }
-        Log.d("SourceRepo", "Filtered (hasMainPage=true): ${filtered.size} APIs")
-        
-        return if (filtered.isNotEmpty()) {
-            Log.d("SourceRepo", "Returning ${filtered.size} filtered APIs")
-            filtered
-        } else {
-            Log.d("SourceRepo", "No APIs with hasMainPage=true, returning all ${allApis.size} APIs")
-            allApis
-        }
+
+        return if (filtered.isNotEmpty()) filtered else allApis
     }
     
     /**
@@ -53,7 +35,6 @@ object SourceRepository {
      */
     fun selectApi(api: MainAPI) {
         _selectedApi.value = api
-        Log.d("SourceRepo", "Selected API: ${api.name}")
     }
     
     /**
@@ -74,10 +55,9 @@ object SourceRepository {
      * Returns first available API or null if timeout.
      */
     suspend fun waitForApiOrNull(): MainAPI? {
-        repeat(50) { attempt ->
+        repeat(50) {
             val availableApis = getAvailableApis()
             if (availableApis.isNotEmpty()) {
-                Log.d("SourceRepo", "APIs available after ${attempt * 100}ms")
                 if (_selectedApi.value == null) {
                     _selectedApi.value = availableApis.firstOrNull()
                 }
@@ -85,7 +65,6 @@ object SourceRepository {
             }
             kotlinx.coroutines.delay(100)
         }
-        Log.e("SourceRepo", "Timeout waiting for API providers (5s)")
         return null
     }
     
@@ -96,11 +75,6 @@ object SourceRepository {
         if (_selectedApi.value == null) {
             val availableApis = getAvailableApis()
             _selectedApi.value = availableApis.firstOrNull()
-            Log.d("SourceRepo", "Lazy init - Available APIs: ${availableApis.size}")
-            availableApis.take(3).forEach {
-                Log.d("SourceRepo", "  - ${it.name}")
-            }
-            Log.d("SourceRepo", "Initialized with default API: ${_selectedApi.value?.name}")
         }
     }
 }

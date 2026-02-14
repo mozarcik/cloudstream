@@ -5,7 +5,6 @@
 
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
@@ -41,15 +40,12 @@ class MediaGridViewModel(
      */
     val pagingData: Flow<PagingData<MediaItemCompat>> = _selectedFeed.flatMapLatest { feed ->
         if (feed == null) {
-            Log.d(TAG, "No feed selected, returning empty paging data")
             flowOf(PagingData.empty())
         } else {
-            Log.d(TAG, "Creating pager for feed: ${feed.name}")
             // Use flow to wait for API before creating pager
             kotlinx.coroutines.flow.flow {
                 val api = SourceRepository.waitForApiOrNull()
                 if (api == null) {
-                    Log.e(TAG, "No API available, returning empty")
                     emit(PagingData.empty())
                 } else {
                     createPagerForFeed(feed, api).collect { emit(it) }
@@ -62,7 +58,6 @@ class MediaGridViewModel(
      * Select a feed to load media items
      */
     fun selectFeed(feed: FeedCategory) {
-        Log.d(TAG, "Feed selected: ${feed.name}")
         _selectedFeed.value = feed
     }
     
@@ -83,7 +78,4 @@ class MediaGridViewModel(
         ).flow.cachedIn(viewModelScope)
     }
     
-    companion object {
-        private const val TAG = "MediaGridViewModel"
-    }
 }

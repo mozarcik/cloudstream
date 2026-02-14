@@ -1,23 +1,30 @@
 package com.lagradost.cloudstream3.tv.presentation.theme // ktlint-disable filename
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.darkColorScheme
 
 private val darkColorScheme = darkColorScheme(
-    primary = Color(0xFFA8C8FF),
+    primary = Color(0xFFE3E2E6),
     onPrimary = Color(0xFF003062),
     primaryContainer = Color(0xFF00468A),
-    onPrimaryContainer = Color(0xFFD6E3FF),
+    onPrimaryContainer = Color(0xFFE3E2E6),
     secondary = Color(0xFFBDC7DC),
     onSecondary = Color(0xFF273141),
     secondaryContainer = Color(0xFF3E4758),
-    onSecondaryContainer = Color(0xFFD9E3F8),
+    onSecondaryContainer = Color(0xFFE3E2E6),
     tertiary = Color(0xFFDCBCE1),
     onTertiary = Color(0xFF3E2845),
     tertiaryContainer = Color(0xFF563E5C),
@@ -55,4 +62,51 @@ fun CloudStreamTheme(
             }
         }
     }
+}
+
+object CloudStreamSurfaceDefaults {
+
+    @Composable
+    fun border(
+        shape: Shape = CloudStreamCardShape,
+        width: Dp = 1.dp,
+        color: Color = MaterialTheme.colorScheme.border,
+    ) = ClickableSurfaceDefaults.border(
+        focusedBorder = Border(
+            border = BorderStroke(width = width, color = color),
+            shape = shape
+        ),
+        pressedBorder = Border(
+            border = BorderStroke(width = width, color = color),
+            shape = shape
+        )
+    )
+
+    @Composable
+    fun glow(
+        elevation: Dp = 5.dp,
+        elevationColor: Color = MaterialTheme.colorScheme.primary,
+    ) = ClickableSurfaceDefaults.glow(
+        focusedGlow = Glow(
+            elevation = elevation,
+            elevationColor = elevationColor
+        ),
+        pressedGlow = Glow(
+            elevation = elevation,
+            elevationColor = elevationColor
+        )
+    )
+
+    @Composable
+    fun colors(
+        containerColor: Color = Color.Transparent,
+        focusedContainerColor: Color = Color.Transparent,
+    ) = ClickableSurfaceDefaults.colors(
+        containerColor = containerColor,
+        focusedContainerColor = focusedContainerColor
+    )
+
+    fun scale(
+        focusedScale: Float = 1.06f,
+    ) = ClickableSurfaceDefaults.scale(focusedScale = focusedScale)
 }

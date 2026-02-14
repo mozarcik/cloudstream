@@ -26,8 +26,19 @@ class MovieDetailsComposeFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+        val args = arguments
         // Create ViewModel manually (without Hilt)
-        val savedStateHandle = SavedStateHandle.Companion.createHandle(null, arguments)
+        val savedStateHandle = SavedStateHandle.Companion.createHandle(null, args).apply {
+            args?.getString("name")?.takeIf { it.isNotBlank() }?.let { title ->
+                set(MovieDetailsScreen.LoadingTitleBundleKey, title)
+            }
+            args?.getString("poster")?.takeIf { it.isNotBlank() }?.let { poster ->
+                set(MovieDetailsScreen.LoadingPosterBundleKey, poster)
+            }
+            args?.getString("backdrop")?.takeIf { it.isNotBlank() }?.let { backdrop ->
+                set(MovieDetailsScreen.LoadingBackdropBundleKey, backdrop)
+            }
+        }
         val viewModel = ViewModelProvider(
             this,
             MovieDetailsScreenViewModelFactory(

@@ -1,38 +1,63 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.tvseries
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
+import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.OutlinedButton
+import androidx.tv.material3.OutlinedButtonDefaults
+import androidx.tv.material3.OutlinedIconButtonDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Tab
+import androidx.tv.material3.TabDefaults
 import androidx.tv.material3.TabRow
+import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -40,6 +65,10 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.icons.CustomDownload
+import com.lagradost.cloudstream3.tv.presentation.common.ActionIconSpec
+import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPill
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.TitleValueText
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamBorderWidth
@@ -86,7 +115,6 @@ internal fun SeasonSelectorRow(
 ) {
     if (seasons.isEmpty()) return
 
-    val childPadding = rememberChildPadding()
     val focusManager = LocalFocusManager.current
     val (tabRowFocusRequester, firstTabFocusRequester) = remember { FocusRequester.createRefs() }
     val selectedTabIndex = seasons.indexOfFirst { season -> season.id == selectedSeasonId }
@@ -97,7 +125,7 @@ internal fun SeasonSelectorRow(
             .focusRequester(tabRowFocusRequester)
             .focusRestorer(firstTabFocusRequester),
         selectedTabIndex = selectedTabIndex,
-        separator = { Spacer(modifier = Modifier.width(12.dp)) }
+        separator = { Spacer(modifier = Modifier.width(12.dp)) },
     ) {
         seasons.forEachIndexed { index, season ->
             val tabModifier = if (index == 0) {
@@ -110,7 +138,7 @@ internal fun SeasonSelectorRow(
                 selected = index == selectedTabIndex,
                 onFocus = { onSeasonSelected(season) },
                 onClick = { focusManager.moveFocus(FocusDirection.Down) },
-                modifier = tabModifier
+                modifier = tabModifier,
             ) {
                 Text(
                     text = seasonChipLabel(season = season),
@@ -133,11 +161,20 @@ internal fun EpisodeCard(
     episode: TvEpisode,
     fallbackDescription: String,
     onEpisodeSelected: (TvEpisode) -> Unit,
+    onEpisodeQuickActionClick: (TvEpisode, MovieDetailsQuickAction) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
+    val actionFocusRequester = remember { FocusRequester() }
+
+    var hasCardOrChildFocus by remember { mutableStateOf(false) }
+
     Surface(
         onClick = { onEpisodeSelected(episode) },
-        modifier = modifier,
+        modifier = modifier
+            .focusProperties { right = actionFocusRequester }
+            .onFocusChanged { focusState ->
+                hasCardOrChildFocus = focusState.hasFocus
+            },
         shape = ClickableSurfaceDefaults.shape(CloudStreamCardShape),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
@@ -152,7 +189,7 @@ internal fun EpisodeCard(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)
         ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f)
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
     ) {
         Row(
             modifier = Modifier
@@ -202,6 +239,18 @@ internal fun EpisodeCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                AnimatedVisibility(visible = hasCardOrChildFocus) {
+                    DetailsActionsRow(
+                        onPlayClick = {},
+                        playButtonLabel = "Play",
+                        onPlayLongClick = { },
+                        onQuickActionClick = { action ->
+                            onEpisodeQuickActionClick(episode, action)
+                        },
+                        playButtonModifier = Modifier.focusRequester(actionFocusRequester)
+                    )
+                }
             }
         }
     }
@@ -327,4 +376,91 @@ private fun formatEpisodeDuration(durationMinutes: Int): String {
     val hours = durationMinutes / 60
     val minutes = durationMinutes % 60
     return stringResource(R.string.tv_episode_duration_hour_min_format, hours, minutes)
+}
+
+@Composable
+private fun DetailsActionsRow(
+    onPlayClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    playButtonModifier: Modifier = Modifier,
+    playButtonLabel: String? = null,
+    onPlayLongClick: (() -> Unit)? = null,
+    onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
+) {
+    val downloadLabel = stringResource(R.string.download)
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        PrimaryPlayButton(
+            goToMoviePlayer = onPlayClick,
+            playButtonLabel = playButtonLabel,
+            onLongClick = onPlayLongClick,
+            modifier = playButtonModifier,
+        )
+
+        val actions =
+            listOf(
+                ActionIconSpec(
+                    icon = Icons.Default.Done,
+                    label = "Watched",
+                    testTag = "action_watched",
+                    action = MovieDetailsQuickAction.Bookmark
+                ),
+                ActionIconSpec(
+                    icon = Icons.Default.DoneAll,
+                    label = "Watched up to",
+                    testTag = "action_watched_all",
+                    action = MovieDetailsQuickAction.Favorite
+                ),
+                ActionIconSpec(
+                    icon = Icons.Filled.CustomDownload,
+                    label = downloadLabel,
+                    testTag = "action_download",
+                    action = MovieDetailsQuickAction.Download
+                ),
+                ActionIconSpec(
+                    icon = Icons.Default.MoreVert,
+                    label = "More",
+                    testTag = "action_more",
+                    action = MovieDetailsQuickAction.More
+                ),
+            )
+
+
+        ActionIconsPill(
+            actions = actions,
+            onActionClick = onQuickActionClick,
+        )
+    }
+}
+
+
+@Composable
+private fun PrimaryPlayButton(
+    goToMoviePlayer: () -> Unit,
+    playButtonLabel: String? = null,
+    onLongClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    val label = playButtonLabel ?: stringResource(R.string.movies_singular)
+
+    Button(
+        onClick = goToMoviePlayer,
+        onLongClick = onLongClick,
+        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = null
+        )
+        Spacer(Modifier.size(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall
+        )
+    }
 }

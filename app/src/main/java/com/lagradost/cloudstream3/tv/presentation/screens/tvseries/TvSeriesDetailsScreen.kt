@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.tvseries
 
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -12,36 +13,62 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatActionOutcome
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatDownloadSnapshot
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatPanelItem
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatSelectionRequest
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.presentation.common.Error
 import com.lagradost.cloudstream3.tv.presentation.common.ItemDirection
-import com.lagradost.cloudstream3.tv.presentation.common.Loading
 import com.lagradost.cloudstream3.tv.presentation.common.MoviesRow
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.CastAndCrewList
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.BookmarkStatusSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsLoadingPlaceholder
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieActionsSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
+import com.lagradost.cloudstream3.ui.WatchType
+import com.lagradost.cloudstream3.utils.VideoDownloadManager
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val DebugTag = "TvSeriesDetailsUI"
+private const val SkipDownloadLoadingActionId = -10_001
 
 object TvSeriesDetailsScreen {
     const val UrlBundleKey = "url"
     const val ApiNameBundleKey = "apiName"
+    const val LoadingTitleBundleKey = "tvSeriesLoadingTitle"
+    const val LoadingPosterBundleKey = "tvSeriesLoadingPoster"
+    const val LoadingBackdropBundleKey = "tvSeriesLoadingBackdrop"
 }
 
 @Composable
@@ -55,7 +82,12 @@ fun TvSeriesDetailsScreen(
 
     when (val s = uiState) {
         is TvSeriesDetailsScreenUiState.Loading -> {
-            Loading(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            MovieDetailsLoadingPlaceholder(
+                title = s.preview.title ?: stringResource(R.string.tv_series_singular),
+                posterUri = s.preview.posterUri,
+                backdropUri = s.preview.backdropUri,
+                modifier = Modifier.fillMaxSize()
+            )
         }
 
         is TvSeriesDetailsScreenUiState.Error -> {
@@ -65,9 +97,13 @@ fun TvSeriesDetailsScreen(
         is TvSeriesDetailsScreenUiState.Done -> {
             Details(
                 tvSeriesDetails = s.tvSeriesDetails,
+                sourceUrl = s.sourceUrl,
+                apiName = s.apiName,
                 goToPlayer = goToPlayer,
                 onBackPressed = onBackPressed,
                 refreshScreenWithNewItem = refreshScreenWithNewItem,
+                onFavoriteClick = tvSeriesDetailsScreenViewModel::onFavoriteClick,
+                onBookmarkClick = tvSeriesDetailsScreenViewModel::onBookmarkClick,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
@@ -80,12 +116,67 @@ fun TvSeriesDetailsScreen(
 @Composable
 private fun Details(
     tvSeriesDetails: MovieDetails,
+    sourceUrl: String,
+    apiName: String,
     goToPlayer: (String?) -> Unit,
     onBackPressed: () -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
+    onFavoriteClick: () -> Unit,
+    onBookmarkClick: (WatchType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val childPadding = rememberChildPadding()
+    val coroutineScope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
+    var isActionsPanelVisible by rememberSaveable(tvSeriesDetails.id) { mutableStateOf(false) }
+    var isBookmarkPanelVisible by rememberSaveable(tvSeriesDetails.id) { mutableStateOf(false) }
+    var isDownloadPanelVisible by rememberSaveable(tvSeriesDetails.id) { mutableStateOf(false) }
+    var isActionInProgress by remember { mutableStateOf(false) }
+    var isPanelLoading by remember(tvSeriesDetails.id) { mutableStateOf(false) }
+    var isDownloadPanelLoading by remember(tvSeriesDetails.id) { mutableStateOf(false) }
+    var panelItems by remember(tvSeriesDetails.id) { mutableStateOf<List<MovieDetailsCompatPanelItem>>(emptyList()) }
+    var panelSelection by remember(tvSeriesDetails.id) { mutableStateOf<MovieDetailsCompatSelectionRequest?>(null) }
+    var downloadPanelSelection by remember(tvSeriesDetails.id) {
+        mutableStateOf<MovieDetailsCompatSelectionRequest?>(null)
+    }
+    var downloadEpisodeId by remember(tvSeriesDetails.id) { mutableStateOf<Int?>(null) }
+    var downloadStatus by remember(tvSeriesDetails.id) {
+        mutableStateOf<VideoDownloadManager.DownloadType?>(null)
+    }
+    var downloadProgressFraction by remember(tvSeriesDetails.id) { mutableStateOf(0f) }
+    var downloadLoadedSourcesCount by remember(tvSeriesDetails.id) { mutableIntStateOf(0) }
+    var skipDownloadSourcesLoading by remember(tvSeriesDetails.id) { mutableStateOf(false) }
+    var downloadRequestVersion by remember(tvSeriesDetails.id) { mutableIntStateOf(0) }
+    var lastLoggedProgressPercent by remember(tvSeriesDetails.id) { mutableIntStateOf(-1) }
+    var hasLoggedPendingWarning by remember(tvSeriesDetails.id) { mutableStateOf(false) }
+
+    val createEpisodeActionsCompat = remember(sourceUrl, apiName) {
+        { season: Int?, episode: Int? ->
+            MovieDetailsEpisodeActionsCompat(
+                sourceUrl = sourceUrl,
+                apiName = apiName,
+                preferredSeason = season,
+                preferredEpisode = episode,
+            )
+        }
+    }
+
+    val actionsCompat = remember(
+        sourceUrl,
+        apiName,
+        tvSeriesDetails.currentSeason,
+        tvSeriesDetails.currentEpisode
+    ) {
+        createEpisodeActionsCompat(
+            tvSeriesDetails.currentSeason,
+            tvSeriesDetails.currentEpisode
+        )
+    }
+    var activeDownloadActionsCompat by remember(tvSeriesDetails.id) {
+        mutableStateOf<MovieDetailsEpisodeActionsCompat?>(null)
+    }
     val seasons = tvSeriesDetails.seasons
     var selectedSeasonId by rememberSaveable(tvSeriesDetails.id) {
         mutableStateOf(resolveInitialSeasonId(seasons, tvSeriesDetails.currentSeason))
@@ -98,6 +189,247 @@ private fun Details(
         tvSeriesDetails.budget,
         tvSeriesDetails.revenue
     ).any { value -> value.isNotBlank() }
+
+    fun closePanel() {
+        panelSelection = null
+        isActionsPanelVisible = false
+    }
+
+    fun closeBookmarkPanel() {
+        isBookmarkPanelVisible = false
+    }
+
+    fun closeDownloadPanel() {
+        Log.d(DebugTag, "close download panel")
+        skipDownloadSourcesLoading = true
+        downloadRequestVersion += 1
+        downloadLoadedSourcesCount = 0
+        downloadPanelSelection = null
+        activeDownloadActionsCompat = null
+        isDownloadPanelVisible = false
+        isDownloadPanelLoading = false
+        isActionInProgress = false
+    }
+
+    fun navigatePanelBack() {
+        if (panelSelection != null) {
+            panelSelection = null
+        } else {
+            closePanel()
+        }
+    }
+
+    fun handleActionOutcome(outcome: MovieDetailsCompatActionOutcome) {
+        when (outcome) {
+            MovieDetailsCompatActionOutcome.Completed -> closePanel()
+            is MovieDetailsCompatActionOutcome.OpenSelection -> {
+                panelSelection = outcome.request
+                isActionsPanelVisible = true
+            }
+        }
+    }
+
+    fun executeAction(actionId: Int) {
+        if (isActionInProgress || isPanelLoading) return
+
+        coroutineScope.launch {
+            isActionInProgress = true
+            try {
+                val selection = panelSelection
+                val outcome = if (selection != null) {
+                    selection.onOptionSelected(actionId)
+                } else {
+                    actionsCompat.execute(
+                        actionId = actionId,
+                        context = context,
+                        onPlayInApp = { goToPlayer(resolveDefaultEpisodeData(tvSeriesDetails)) },
+                    )
+                }
+                handleActionOutcome(outcome)
+            } finally {
+                isActionInProgress = false
+            }
+        }
+    }
+
+    fun openActionsPanel() {
+        if (isPanelLoading || isActionInProgress) return
+
+        closeBookmarkPanel()
+        closeDownloadPanel()
+        isActionsPanelVisible = true
+        panelSelection = null
+        panelItems = emptyList()
+
+        coroutineScope.launch {
+            isPanelLoading = true
+            try {
+                val loadedActions = actionsCompat.loadPanelActions(context)
+                panelItems = loadedActions
+
+                if (loadedActions.isEmpty()) {
+                    closePanel()
+                    CommonActivity.showToast(R.string.no_links_found_toast, Toast.LENGTH_SHORT)
+                }
+            } finally {
+                isPanelLoading = false
+            }
+        }
+    }
+
+    fun openBookmarkPanel() {
+        if (isPanelLoading || isActionInProgress) return
+        closePanel()
+        closeDownloadPanel()
+        isBookmarkPanelVisible = true
+    }
+
+    suspend fun refreshDownloadSnapshot(
+        reason: String,
+        compat: MovieDetailsEpisodeActionsCompat = actionsCompat
+    ) {
+        val snapshot = compat.getDownloadSnapshot(context)
+        if (snapshot == null) {
+            Log.d(DebugTag, "download snapshot[$reason]: null")
+            downloadEpisodeId = null
+            downloadStatus = null
+            downloadProgressFraction = 0f
+            lastLoggedProgressPercent = -1
+            hasLoggedPendingWarning = false
+            return
+        }
+
+        val normalizedStatus = normalizeDownloadStatus(snapshot)
+        val normalizedProgress = when (normalizedStatus) {
+            VideoDownloadManager.DownloadType.IsDone -> 1f
+            else -> calculateProgressFraction(snapshot.downloadedBytes, snapshot.totalBytes)
+        }
+
+        Log.d(
+            DebugTag,
+            "download snapshot[$reason]: id=${snapshot.episodeId} status=${snapshot.status} normalizedStatus=$normalizedStatus downloaded=${snapshot.downloadedBytes} total=${snapshot.totalBytes} pending=${snapshot.hasPendingRequest} progress=${(normalizedProgress * 100f).toInt()}%"
+        )
+
+        downloadEpisodeId = snapshot.episodeId
+        downloadStatus = normalizedStatus
+        downloadProgressFraction = normalizedProgress
+        lastLoggedProgressPercent = (normalizedProgress * 100f).toInt()
+        hasLoggedPendingWarning = false
+    }
+
+    fun handleDownloadActionOutcome(outcome: MovieDetailsCompatActionOutcome) {
+        when (outcome) {
+            MovieDetailsCompatActionOutcome.Completed -> {
+                Log.d(DebugTag, "download outcome: completed")
+                closeDownloadPanel()
+            }
+
+            is MovieDetailsCompatActionOutcome.OpenSelection -> {
+                Log.d(
+                    DebugTag,
+                    "download outcome: open selection options=${outcome.request.options.size}"
+                )
+                downloadPanelSelection = outcome.request
+                isDownloadPanelVisible = true
+            }
+        }
+    }
+
+    fun executeDownloadSelection(actionId: Int) {
+        val selection = downloadPanelSelection ?: return
+        if (isActionInProgress || isDownloadPanelLoading) return
+
+        coroutineScope.launch {
+            isActionInProgress = true
+            downloadStatus = VideoDownloadManager.DownloadType.IsPending
+            downloadProgressFraction = 0f
+            lastLoggedProgressPercent = 0
+            hasLoggedPendingWarning = false
+            Log.d(DebugTag, "download source selected actionId=$actionId")
+            try {
+                val outcome = selection.onOptionSelected(actionId)
+                handleDownloadActionOutcome(outcome)
+                refreshDownloadSnapshot(
+                    reason = "after_source_selected",
+                    compat = activeDownloadActionsCompat ?: actionsCompat
+                )
+                delay(900)
+                refreshDownloadSnapshot(
+                    reason = "after_source_selected_delayed",
+                    compat = activeDownloadActionsCompat ?: actionsCompat
+                )
+            } finally {
+                isActionInProgress = false
+            }
+        }
+    }
+
+    fun skipDownloadLoading() {
+        if (!isDownloadPanelLoading || downloadLoadedSourcesCount <= 0) return
+        Log.d(
+            DebugTag,
+            "skip download source loading requested loadedSources=$downloadLoadedSourcesCount"
+        )
+        skipDownloadSourcesLoading = true
+    }
+
+    fun openDownloadPanel(downloadCompat: MovieDetailsEpisodeActionsCompat) {
+        if (isActionInProgress || isPanelLoading || isDownloadPanelLoading) return
+
+        Log.d(DebugTag, "open download panel")
+        closeBookmarkPanel()
+        closePanel()
+        activeDownloadActionsCompat = downloadCompat
+        val requestVersion = downloadRequestVersion + 1
+        downloadRequestVersion = requestVersion
+        skipDownloadSourcesLoading = false
+        downloadLoadedSourcesCount = 0
+        downloadPanelSelection = null
+        isDownloadPanelVisible = true
+        isDownloadPanelLoading = true
+
+        coroutineScope.launch {
+            isActionInProgress = true
+            try {
+                val outcome = downloadCompat.requestDownloadMirrorSelection(
+                    context = context,
+                    onSourcesProgress = { loadedSources ->
+                        coroutineScope.launch {
+                            if (downloadRequestVersion == requestVersion) {
+                                downloadLoadedSourcesCount = loadedSources
+                                Log.d(
+                                    DebugTag,
+                                    "download sources loading progress: loadedSources=$loadedSources requestVersion=$requestVersion"
+                                )
+                            }
+                        }
+                    },
+                    shouldSkipLoading = {
+                        skipDownloadSourcesLoading || downloadRequestVersion != requestVersion
+                    }
+                )
+                if (downloadRequestVersion != requestVersion) return@launch
+                handleDownloadActionOutcome(outcome)
+            } finally {
+                if (downloadRequestVersion == requestVersion) {
+                    isActionInProgress = false
+                    isDownloadPanelLoading = false
+                    skipDownloadSourcesLoading = false
+                }
+            }
+        }
+    }
+
+    fun openDefaultDownloadPanel() {
+        openDownloadPanel(actionsCompat)
+    }
+
+    fun openEpisodeDownloadPanel(episode: TvEpisode) {
+        val targetSeason = episode.seasonNumber ?: selectedSeason?.displaySeasonNumber ?: selectedSeason?.seasonNumber
+        val targetEpisode = episode.episodeNumber
+        val episodeActionsCompat = createEpisodeActionsCompat(targetSeason, targetEpisode)
+        openDownloadPanel(episodeActionsCompat)
+    }
 
     LaunchedEffect(seasons, tvSeriesDetails.currentSeason) {
         if (seasons.none { season -> season.id == selectedSeasonId }) {
@@ -121,7 +453,90 @@ private fun Details(
         }
     }
 
-    BackHandler(onBack = onBackPressed)
+    LaunchedEffect(actionsCompat, context) {
+        refreshDownloadSnapshot(reason = "enter_details")
+    }
+
+    DisposableEffect(downloadEpisodeId) {
+        val targetId = downloadEpisodeId
+        if (targetId == null) {
+            onDispose { }
+        } else {
+            val statusObserver: (Pair<Int, VideoDownloadManager.DownloadType>) -> Unit =
+                { (id, status) ->
+                    if (id == targetId) {
+                        coroutineScope.launch {
+                            Log.d(
+                                DebugTag,
+                                "download status event: id=$id status=$status currentProgress=${(downloadProgressFraction * 100f).toInt()}%"
+                            )
+                            downloadStatus = status
+                            if (status == VideoDownloadManager.DownloadType.IsDone) {
+                                downloadProgressFraction = 1f
+                            } else if (
+                                status == VideoDownloadManager.DownloadType.IsStopped ||
+                                status == VideoDownloadManager.DownloadType.IsFailed
+                            ) {
+                                downloadProgressFraction = 0f
+                            }
+
+                            if (status == VideoDownloadManager.DownloadType.IsPending &&
+                                downloadProgressFraction <= 0f &&
+                                !hasLoggedPendingWarning
+                            ) {
+                                hasLoggedPendingWarning = true
+                                Log.w(
+                                    DebugTag,
+                                    "download pending with 0% progress. If it persists, check battery optimization/background restrictions for CloudStream."
+                                )
+                            }
+                        }
+                    }
+                }
+
+            val progressObserver: (Triple<Int, Long, Long>) -> Unit = { (id, downloaded, total) ->
+                if (id == targetId) {
+                    coroutineScope.launch {
+                        val progress = calculateProgressFraction(downloaded, total)
+                        downloadProgressFraction = when {
+                            downloadStatus == VideoDownloadManager.DownloadType.IsDone -> 1f
+                            progress > 0f -> progress
+                            else -> downloadProgressFraction
+                        }
+                        val progressPercent = (downloadProgressFraction * 100f).toInt()
+                        val shouldLogProgress = progressPercent != lastLoggedProgressPercent &&
+                            (progressPercent <= 5 || progressPercent % 5 == 0 || progressPercent == 100)
+
+                        if (shouldLogProgress) {
+                            lastLoggedProgressPercent = progressPercent
+                            Log.d(
+                                DebugTag,
+                                "download progress event: id=$id progress=$progressPercent% bytes=$downloaded/$total"
+                            )
+                        }
+                    }
+                }
+            }
+
+            VideoDownloadManager.downloadStatusEvent += statusObserver
+            VideoDownloadManager.downloadProgressEvent += progressObserver
+
+            onDispose {
+                VideoDownloadManager.downloadStatusEvent -= statusObserver
+                VideoDownloadManager.downloadProgressEvent -= progressObserver
+            }
+        }
+    }
+
+    val downloadActionState = resolveDownloadActionState(
+        status = downloadStatus,
+        progressFraction = downloadProgressFraction
+    )
+
+    BackHandler(
+        enabled = !isActionsPanelVisible && !isBookmarkPanelVisible && !isDownloadPanelVisible,
+        onBack = onBackPressed
+    )
     Box(modifier = modifier) {
         MovieDetailsBackdrop(
             posterUri = tvSeriesDetails.posterUri,
@@ -131,6 +546,7 @@ private fun Details(
         )
 
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(bottom = 135.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -139,7 +555,28 @@ private fun Details(
                     movieDetails = tvSeriesDetails,
                     goToMoviePlayer = { goToPlayer(resolveDefaultEpisodeData(tvSeriesDetails)) },
                     playButtonLabel = tvSeriesPlayLabel(tvSeriesDetails),
-                    titleMetadata = tvSeriesTitleMetadata(tvSeriesDetails)
+                    titleMetadata = tvSeriesTitleMetadata(tvSeriesDetails),
+                    downloadActionState = downloadActionState,
+                    onPrimaryActionsFocused = {
+                        if (listState.firstVisibleItemIndex == 0 &&
+                            listState.firstVisibleItemScrollOffset == 0
+                        ) {
+                            return@MovieDetails
+                        }
+                        if (listState.isScrollInProgress) return@MovieDetails
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(0)
+                        }
+                    },
+                    onQuickActionClick = { quickAction ->
+                        when (quickAction) {
+                            MovieDetailsQuickAction.Bookmark -> openBookmarkPanel()
+                            MovieDetailsQuickAction.Favorite -> onFavoriteClick()
+                            MovieDetailsQuickAction.Download -> openDefaultDownloadPanel()
+                            MovieDetailsQuickAction.More -> openActionsPanel()
+                            else -> Unit
+                        }
+                    },
                 )
             }
 
@@ -151,7 +588,7 @@ private fun Details(
                         onSeasonSelected = { season -> selectedSeasonId = season.id },
                         modifier = Modifier
                             .padding(start = childPadding.start, end = childPadding.end)
-                            .padding(bottom = 8.dp)
+                            .padding(bottom = 8.dp, top = 8.dp)
                     )
                 }
             }
@@ -174,6 +611,12 @@ private fun Details(
                         fallbackDescription = tvSeriesDetails.description,
                         onEpisodeSelected = { selectedEpisode ->
                             goToPlayer(selectedEpisode.data)
+                        },
+                        onEpisodeQuickActionClick = { selectedEpisode, quickAction ->
+                            when (quickAction) {
+                                MovieDetailsQuickAction.Download -> openEpisodeDownloadPanel(selectedEpisode)
+                                else -> Unit
+                            }
                         },
                         modifier = Modifier
                             .padding(start = childPadding.start, end = childPadding.end)
@@ -224,6 +667,90 @@ private fun Details(
                 }
             }
         }
+
+        val currentTitle = panelSelection?.title ?: stringResource(R.string.episode_more_options_des)
+        val currentItems = panelSelection?.options ?: panelItems
+
+        MovieActionsSidePanel(
+            visible = isActionsPanelVisible,
+            loading = isPanelLoading,
+            inProgress = isActionInProgress,
+            title = currentTitle,
+            items = currentItems,
+            onCloseRequested = { navigatePanelBack() },
+            onActionSelected = { actionId -> executeAction(actionId) }
+        )
+
+        val downloadPanelTitle = downloadPanelSelection?.title
+            ?: stringResource(R.string.episode_action_download_mirror)
+        val downloadPanelItems = downloadPanelSelection?.options ?: emptyList()
+        val skipLoadingItem = MovieDetailsCompatPanelItem(
+            id = SkipDownloadLoadingActionId,
+            label = stringResource(R.string.skip_loading),
+            iconRes = R.drawable.ic_baseline_fast_forward_24
+        )
+        val downloadPanelActionItems = when {
+            isDownloadPanelLoading && downloadLoadedSourcesCount > 0 -> listOf(skipLoadingItem)
+            else -> downloadPanelItems
+        }
+
+        MovieActionsSidePanel(
+            visible = isDownloadPanelVisible,
+            loading = isDownloadPanelLoading,
+            inProgress = isActionInProgress,
+            title = downloadPanelTitle,
+            items = downloadPanelActionItems,
+            onCloseRequested = { closeDownloadPanel() },
+            onActionSelected = { actionId ->
+                if (actionId == SkipDownloadLoadingActionId) {
+                    skipDownloadLoading()
+                } else {
+                    executeDownloadSelection(actionId)
+                }
+            },
+            panelTestTag = "tv_series_download_sources_side_panel",
+            showItemsWhileLoading = downloadLoadedSourcesCount > 0,
+            headerContent = {
+                if (isDownloadPanelLoading) {
+                    Text(
+                        text = stringResource(
+                            R.string.tv_player_loading_sources_progress,
+                            downloadLoadedSourcesCount
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+            },
+            emptyContent = {
+                if (isDownloadPanelLoading) {
+                    Text(
+                        text = stringResource(R.string.loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.no_links_found_toast),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+            }
+        )
+
+        BookmarkStatusSidePanel(
+            visible = isBookmarkPanelVisible,
+            currentStatus = WatchType.entries.firstOrNull { watchType ->
+                watchType.stringRes == tvSeriesDetails.bookmarkLabelRes
+            } ?: WatchType.NONE,
+            onCloseRequested = { closeBookmarkPanel() },
+            onBookmarkSelected = { selectedStatus ->
+                onBookmarkClick(selectedStatus)
+                closeBookmarkPanel()
+            },
+            panelTestTag = "tv_series_bookmark_side_panel"
+        )
     }
 }
 
@@ -273,4 +800,73 @@ private fun tvSeriesTitleMetadata(tvSeriesDetails: MovieDetails): List<String> {
         tvSeriesDetails.seasonCount?.let { "$seasonLabel $it" },
         tvSeriesDetails.episodeCount?.let { "$episodesLabel $it" }
     )
+}
+
+private val ActiveDownloadStates = setOf(
+    VideoDownloadManager.DownloadType.IsDownloading,
+    VideoDownloadManager.DownloadType.IsPending,
+    VideoDownloadManager.DownloadType.IsPaused
+)
+
+private fun resolveDownloadActionState(
+    status: VideoDownloadManager.DownloadType?,
+    progressFraction: Float,
+): MovieDetailsDownloadActionState {
+    val normalizedProgress = progressFraction.coerceIn(0f, 1f)
+
+    return when {
+        status == VideoDownloadManager.DownloadType.IsDone || normalizedProgress >= 0.999f ->
+            MovieDetailsDownloadActionState.Downloaded
+
+        status in ActiveDownloadStates ->
+            MovieDetailsDownloadActionState.Downloading(progress = normalizedProgress)
+
+        else -> MovieDetailsDownloadActionState.Idle
+    }
+}
+
+private fun normalizeDownloadStatus(
+    snapshot: MovieDetailsCompatDownloadSnapshot,
+): VideoDownloadManager.DownloadType? {
+    val status = snapshot.status
+    if (status != null) {
+        return status
+    }
+
+    if (snapshot.hasPendingRequest) {
+        return if (snapshot.downloadedBytes > 0L) {
+            VideoDownloadManager.DownloadType.IsDownloading
+        } else {
+            VideoDownloadManager.DownloadType.IsPending
+        }
+    }
+
+    if (snapshot.downloadedBytes > 0L && snapshot.totalBytes <= 0L) {
+        return VideoDownloadManager.DownloadType.IsDownloading
+    }
+
+    if (snapshot.totalBytes <= 0L) {
+        return null
+    }
+
+    val hasFinishedDownload = snapshot.totalBytes > 0L &&
+        snapshot.downloadedBytes > 1024L &&
+        snapshot.downloadedBytes + 1024L >= snapshot.totalBytes
+
+    return if (hasFinishedDownload) {
+        VideoDownloadManager.DownloadType.IsDone
+    } else {
+        VideoDownloadManager.DownloadType.IsDownloading
+    }
+}
+
+private fun calculateProgressFraction(
+    downloadedBytes: Long,
+    totalBytes: Long,
+): Float {
+    if (downloadedBytes <= 0L || totalBytes <= 0L) {
+        return 0f
+    }
+
+    return (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
 }

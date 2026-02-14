@@ -710,7 +710,7 @@ object AppContextUtils {
 
     private fun getResultsId(): Int {
         return if (Globals.isLayout(Globals.TV or Globals.EMULATOR)) {
-            R.id.global_to_navigation_movie_details_compose // MVP v1: Use Compose for TV
+            R.id.global_to_navigation_results_tv
         } else {
             R.id.global_to_navigation_results_phone
         }

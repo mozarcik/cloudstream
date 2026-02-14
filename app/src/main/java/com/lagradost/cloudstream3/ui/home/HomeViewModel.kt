@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.APIHolder.getApiFromNameNull
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.HomePageList
 import com.lagradost.cloudstream3.LoadResponse
@@ -58,6 +59,40 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class HomeViewModel : ViewModel() {
     companion object {
+        private suspend fun enrichResumeHeaderIfNeeded(
+            resume: VideoDownloadHelper.ResumeWatching,
+            header: VideoDownloadHelper.DownloadHeaderCached,
+        ): VideoDownloadHelper.DownloadHeaderCached {
+            if (!header.backdrop.isNullOrBlank()) {
+                return header
+            }
+
+            val api = getApiFromNameNull(header.apiName) ?: return header
+            val loadResponse = (runCatching { APIRepository(api).load(header.url) }.getOrNull() as? Resource.Success)
+                ?.value
+                ?: return header
+
+            val resolvedBackdrop = loadResponse.backgroundPosterUrl
+                ?.takeIf { it.isNotBlank() }
+                ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() }
+                ?: return header
+
+            val updatedHeader = header.copy(
+                poster = header.poster?.takeIf { it.isNotBlank() }
+                    ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() },
+                backdrop = resolvedBackdrop,
+                cacheTime = System.currentTimeMillis()
+            )
+
+            setKey(
+                DOWNLOAD_HEADER_CACHE,
+                resume.parentId.toString(),
+                updatedHeader
+            )
+
+            return updatedHeader
+        }
+
         suspend fun getResumeWatching(): List<DataStoreHelper.ResumeWatchingResult>? {
             val resumeWatching = withContext(Dispatchers.IO) {
                 getAllResumeStateIds()?.mapNotNull { id ->
@@ -65,29 +100,31 @@ class HomeViewModel : ViewModel() {
                 }?.sortedBy { -it.updateTime }
             }
             val resumeWatchingResult = withContext(Dispatchers.IO) {
-                resumeWatching?.mapNotNull { resume ->
-
-                    val data = getKey<VideoDownloadHelper.DownloadHeaderCached>(
+                resumeWatching?.amap { resume ->
+                    val cachedHeader = getKey<VideoDownloadHelper.DownloadHeaderCached>(
                         DOWNLOAD_HEADER_CACHE,
                         resume.parentId.toString()
-                    ) ?: return@mapNotNull null
+                    ) ?: return@amap null
+
+                    val data = enrichResumeHeaderIfNeeded(resume, cachedHeader)
 
                     val watchPos = getViewPos(resume.episodeId)
 
                     DataStoreHelper.ResumeWatchingResult(
-                        data.name,
-                        data.url,
-                        data.apiName,
-                        data.type,
-                        data.poster,
-                        watchPos,
-                        resume.episodeId,
-                        resume.parentId,
-                        resume.episode,
-                        resume.season,
-                        resume.isFromDownload
+                        name = data.name,
+                        url = data.url,
+                        apiName = data.apiName,
+                        type = data.type,
+                        posterUrl = data.poster,
+                        backdropUrl = data.backdrop,
+                        watchPos = watchPos,
+                        id = resume.episodeId,
+                        parentId = resume.parentId,
+                        episode = resume.episode,
+                        season = resume.season,
+                        isFromDownload = resume.isFromDownload
                     )
-                }
+                }?.filterNotNull()
             }
             return resumeWatchingResult
         }

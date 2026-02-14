@@ -31,20 +31,6 @@
             app:argType="boolean" />
     </action>
     <action
-        android:id="@+id/global_to_navigation_movie_details_compose"
-        app:destination="@id/navigation_movie_details_compose"
-        app:enterAnim="@anim/enter_anim"
-        app:exitAnim="@anim/exit_anim"
-        app:popEnterAnim="@anim/enter_anim"
-        app:popExitAnim="@anim/exit_anim">
-        <argument
-            android:name="url"
-            app:argType="string" />
-        <argument
-            android:name="apiName"
-            app:argType="string" />
-    </action>
-    <action
         android:id="@+id/global_to_navigation_results_phone"
         app:destination="@id/navigation_results_phone"
         app:enterAnim="@anim/enter_anim"
