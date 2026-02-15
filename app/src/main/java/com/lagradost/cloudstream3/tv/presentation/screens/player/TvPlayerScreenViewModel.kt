@@ -20,10 +20,7 @@ import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import com.lagradost.cloudstream3.ui.result.buildResultEpisode
-import com.lagradost.cloudstream3.isLiveStream
 import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
-import com.lagradost.cloudstream3.utils.DataStoreHelper.getViewPos
-import com.lagradost.cloudstream3.utils.DataStoreHelper.setViewPosAndResume
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -35,7 +32,6 @@ import kotlinx.coroutines.launch
 private const val DebugTag = "TvPlayerVM"
 private const val ReadyRefreshBatchSize = 10
 private const val ReadyRefreshMinIntervalMs = 500L
-private const val PlaybackProgressPersistIntervalMs = 1_000L
 
 data class TvPlayerMetadata(
     val title: String,
@@ -71,6 +67,9 @@ sealed interface TvPlayerUiState {
         val sources: List<ExtractorLink> = emptyList(),
         val currentSourceIndex: Int = -1,
         val subtitles: List<SubtitleData> = emptyList(),
+        val selectedSubtitleIndex: Int = -1,
+        val selectedAudioTrackIndex: Int = -1,
+        val panels: TvPlayerPanelsUiState = TvPlayerPanelsUiState(),
         val episodeId: Int = -1,
         val resumePositionMs: Long = 0L,
     ) : TvPlayerUiState
@@ -110,8 +109,8 @@ class TvPlayerScreenViewModel(
     private var pendingReadyRefreshChanges: Int = 0
     private var lastReadyRefreshAtElapsedMs: Long = 0L
     private var currentEpisode: ResultEpisode? = null
-    private var currentResumePositionMs: Long = 0L
-    private var lastPlaybackProgressPersistAtElapsedMs: Long = 0L
+    private val playbackProgressState = TvPlayerPlaybackProgressState()
+    private val panelsState = TvPlayerPanelsStateHolder()
 
     init {
         loadSources()
@@ -129,8 +128,8 @@ class TvPlayerScreenViewModel(
         pendingReadyRefreshChanges = 0
         lastReadyRefreshAtElapsedMs = 0L
         currentEpisode = null
-        currentResumePositionMs = 0L
-        lastPlaybackProgressPersistAtElapsedMs = 0L
+        playbackProgressState.reset()
+        panelsState.reset()
         loadSources()
     }
 
@@ -148,18 +147,16 @@ class TvPlayerScreenViewModel(
     }
 
     fun onPlaybackProgress(positionMs: Long, durationMs: Long) {
-        persistPlaybackProgress(
+        playbackProgressState.onPlaybackProgress(
             positionMs = positionMs,
             durationMs = durationMs,
-            force = false,
         )
     }
 
     fun onPlaybackStopped(positionMs: Long, durationMs: Long) {
-        persistPlaybackProgress(
+        playbackProgressState.onPlaybackStopped(
             positionMs = positionMs,
             durationMs = durationMs,
-            force = true,
         )
     }
 
@@ -167,11 +164,59 @@ class TvPlayerScreenViewModel(
         if (!hasFinalized) return
         val selectedLink = orderedLinks.getOrNull(index) ?: return
 
+        if (index == currentLinkIndex) {
+            if (panelsState.closePanel()) {
+                postReadyStateForCurrentLink()
+            }
+            return
+        }
+
+        panelsState.onSourceChanged()
         currentLinkIndex = index
         postReadyState(
             link = selectedLink,
             currentIndex = index,
         )
+    }
+
+    fun openPanel(panel: TvPlayerSidePanel) {
+        if (!hasFinalized) return
+        if (panelsState.openPanel(panel)) {
+            postReadyStateForCurrentLink()
+        }
+    }
+
+    fun closePanel() {
+        if (!hasFinalized) return
+        if (panelsState.closePanel()) {
+            postReadyStateForCurrentLink()
+        }
+    }
+
+    fun disableSubtitlesFromPlaybackError() {
+        if (!hasFinalized) return
+        if (panelsState.disableSubtitlesFromPlaybackError()) {
+            postReadyStateForCurrentLink()
+        }
+    }
+
+    fun onPanelItemAction(action: TvPlayerPanelItemAction) {
+        if (!hasFinalized) return
+
+        val outcome = panelsState.onPanelItemAction(
+            action = action,
+            currentLink = orderedLinks.getOrNull(currentLinkIndex),
+            subtitles = orderedSubtitles,
+        )
+        val selectedSourceIndex = outcome.selectedSourceIndex
+        if (selectedSourceIndex != null) {
+            selectSource(selectedSourceIndex)
+            return
+        }
+
+        if (outcome.stateChanged) {
+            postReadyStateForCurrentLink()
+        }
     }
 
     fun onPlaybackError() {
@@ -180,6 +225,7 @@ class TvPlayerScreenViewModel(
         val nextIndex = currentLinkIndex + 1
         val nextLink = orderedLinks.getOrNull(nextIndex)
         if (nextLink != null) {
+            panelsState.onSourceChanged()
             currentLinkIndex = nextIndex
             postReadyState(
                 link = nextLink,
@@ -246,8 +292,7 @@ class TvPlayerScreenViewModel(
 
             metadata = target.metadata
             currentEpisode = target.episode
-            currentResumePositionMs = getResumePosition(target.episode.id)
-            lastPlaybackProgressPersistAtElapsedMs = 0L
+            playbackProgressState.onEpisodeChanged(target.episode)
             postLoadingState()
 
             val generator = RepoLinkGenerator(
@@ -526,6 +571,7 @@ class TvPlayerScreenViewModel(
             orderedSubtitles = synchronized(loadedSubtitlesById) {
                 sortSubs(loadedSubtitlesById.values.toSet())
             }
+            panelsState.onSourceChanged()
             currentLinkIndex = 0
             hasFinalized = true
             postReadyState(
@@ -549,6 +595,10 @@ class TvPlayerScreenViewModel(
         currentIndex: Int,
     ) {
         lastReadyRefreshAtElapsedMs = SystemClock.elapsedRealtime()
+        val panelSelection = panelsState.selection(
+            currentLink = link,
+            subtitles = orderedSubtitles,
+        )
         val episodeId = currentEpisode?.id ?: -1
         _uiState.value = TvPlayerUiState.Ready(
             metadata = metadata,
@@ -557,39 +607,25 @@ class TvPlayerScreenViewModel(
             sources = orderedLinks,
             currentSourceIndex = currentIndex,
             subtitles = orderedSubtitles,
+            selectedSubtitleIndex = panelSelection.selectedSubtitleIndex,
+            selectedAudioTrackIndex = panelSelection.selectedAudioTrackIndex,
+            panels = panelsState.buildPanelsUiState(
+                orderedLinks = orderedLinks,
+                currentSourceIndex = currentIndex,
+                currentLink = link,
+                subtitles = orderedSubtitles,
+            ),
             episodeId = episodeId,
-            resumePositionMs = currentResumePositionMs,
+            resumePositionMs = playbackProgressState.resumePositionMs,
         )
     }
 
-    private fun getResumePosition(episodeId: Int): Long {
-        val posDur = getViewPos(episodeId) ?: return 0L
-        if (posDur.duration == 0L) return 0L
-        if (posDur.position * 100L / posDur.duration > 95L) return 0L
-        return posDur.position
-    }
-
-    private fun persistPlaybackProgress(
-        positionMs: Long,
-        durationMs: Long,
-        force: Boolean,
-    ) {
-        val episode = currentEpisode ?: return
-        if (episode.tvType.isLiveStream() || episode.tvType == TvType.NSFW) return
-        if (durationMs <= 0L) return
-
-        val now = SystemClock.elapsedRealtime()
-        if (!force && now - lastPlaybackProgressPersistAtElapsedMs < PlaybackProgressPersistIntervalMs) {
-            return
-        }
-
-        lastPlaybackProgressPersistAtElapsedMs = now
-        setViewPosAndResume(
-            id = episode.id,
-            position = positionMs.coerceAtLeast(0L),
-            duration = durationMs,
-            currentEpisode = episode,
-            nextEpisode = null,
+    private fun postReadyStateForCurrentLink() {
+        if (!hasFinalized) return
+        val link = orderedLinks.getOrNull(currentLinkIndex) ?: return
+        postReadyState(
+            link = link,
+            currentIndex = currentLinkIndex,
         )
     }
 }
