@@ -40,6 +40,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionEffect
+import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionEvent
+import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatActionOutcome
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatDownloadSnapshot
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatPanelItem
@@ -56,10 +59,12 @@ import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 private const val DebugTag = "TvMovieDetailsUI"
 private const val SkipDownloadLoadingActionId = -10_001
+private const val DownloadLinksPrefetchDelayMs = 500L
 
 object MovieDetailsScreen {
     const val UrlBundleKey = "url"
@@ -130,23 +135,15 @@ private fun Details(
 
     var isActionsPanelVisible by rememberSaveable(movieDetails.id) { mutableStateOf(false) }
     var isBookmarkPanelVisible by rememberSaveable(movieDetails.id) { mutableStateOf(false) }
-    var isDownloadPanelVisible by rememberSaveable(movieDetails.id) { mutableStateOf(false) }
     var isActionInProgress by remember { mutableStateOf(false) }
     var isPanelLoading by remember(movieDetails.id) { mutableStateOf(false) }
-    var isDownloadPanelLoading by remember(movieDetails.id) { mutableStateOf(false) }
     var panelItems by remember(movieDetails.id) { mutableStateOf<List<MovieDetailsCompatPanelItem>>(emptyList()) }
     var panelSelection by remember(movieDetails.id) { mutableStateOf<MovieDetailsCompatSelectionRequest?>(null) }
-    var downloadPanelSelection by remember(movieDetails.id) {
-        mutableStateOf<MovieDetailsCompatSelectionRequest?>(null)
-    }
     var downloadEpisodeId by remember(movieDetails.id) { mutableStateOf<Int?>(null) }
     var downloadStatus by remember(movieDetails.id) {
         mutableStateOf<VideoDownloadManager.DownloadType?>(null)
     }
     var downloadProgressFraction by remember(movieDetails.id) { mutableStateOf(0f) }
-    var downloadLoadedSourcesCount by remember(movieDetails.id) { mutableIntStateOf(0) }
-    var skipDownloadSourcesLoading by remember(movieDetails.id) { mutableStateOf(false) }
-    var downloadRequestVersion by remember(movieDetails.id) { mutableIntStateOf(0) }
     var lastLoggedProgressPercent by remember(movieDetails.id) { mutableIntStateOf(-1) }
     var hasLoggedPendingWarning by remember(movieDetails.id) { mutableStateOf(false) }
 
@@ -163,6 +160,10 @@ private fun Details(
             preferredEpisode = movieDetails.currentEpisode,
         )
     }
+    val downloadMirrorStateHolder = remember(movieDetails.id, coroutineScope) {
+        DownloadMirrorSelectionStateHolder(scope = coroutineScope)
+    }
+    val downloadMirrorState by downloadMirrorStateHolder.uiState.collectAsStateWithLifecycle()
 
     suspend fun refreshDownloadSnapshot(reason: String) {
         val snapshot = actionsCompat.getDownloadSnapshot(context)
@@ -205,12 +206,7 @@ private fun Details(
 
     fun closeDownloadPanel() {
         Log.d(DebugTag, "close download panel")
-        skipDownloadSourcesLoading = true
-        downloadRequestVersion += 1
-        downloadLoadedSourcesCount = 0
-        downloadPanelSelection = null
-        isDownloadPanelVisible = false
-        isDownloadPanelLoading = false
+        downloadMirrorStateHolder.onEvent(DownloadMirrorSelectionEvent.Close)
         isActionInProgress = false
     }
 
@@ -298,15 +294,14 @@ private fun Details(
                     DebugTag,
                     "download outcome: open selection options=${outcome.request.options.size}"
                 )
-                downloadPanelSelection = outcome.request
-                isDownloadPanelVisible = true
+                downloadMirrorStateHolder.updateSelectionRequest(outcome.request)
             }
         }
     }
 
     fun executeDownloadSelection(actionId: Int) {
-        val selection = downloadPanelSelection ?: return
-        if (isActionInProgress || isDownloadPanelLoading) return
+        val selection = downloadMirrorState.selectionRequest ?: return
+        if (isActionInProgress) return
 
         coroutineScope.launch {
             isActionInProgress = true
@@ -328,58 +323,26 @@ private fun Details(
     }
 
     fun skipDownloadLoading() {
-        if (!isDownloadPanelLoading || downloadLoadedSourcesCount <= 0) return
+        if (!downloadMirrorState.isLoading || downloadMirrorState.loadedSourcesCount <= 0) return
         Log.d(
             DebugTag,
-            "skip download source loading requested loadedSources=$downloadLoadedSourcesCount"
+            "skip download source loading requested loadedSources=${downloadMirrorState.loadedSourcesCount}"
         )
-        skipDownloadSourcesLoading = true
+        downloadMirrorStateHolder.onEvent(DownloadMirrorSelectionEvent.SkipLoadingUi)
     }
 
     fun openDownloadPanel() {
-        if (isActionInProgress || isPanelLoading || isDownloadPanelLoading) return
+        if (isActionInProgress || isPanelLoading || downloadMirrorState.isLoading) return
 
         Log.d(DebugTag, "open download panel")
         closeBookmarkPanel()
         closePanel()
-        val requestVersion = downloadRequestVersion + 1
-        downloadRequestVersion = requestVersion
-        skipDownloadSourcesLoading = false
-        downloadLoadedSourcesCount = 0
-        downloadPanelSelection = null
-        isDownloadPanelVisible = true
-        isDownloadPanelLoading = true
-
-        coroutineScope.launch {
-            isActionInProgress = true
-            try {
-                val outcome = actionsCompat.requestDownloadMirrorSelection(
-                    context = context,
-                    onSourcesProgress = { loadedSources ->
-                        coroutineScope.launch {
-                            if (downloadRequestVersion == requestVersion) {
-                                downloadLoadedSourcesCount = loadedSources
-                                Log.d(
-                                    DebugTag,
-                                    "download sources loading progress: loadedSources=$loadedSources requestVersion=$requestVersion"
-                                )
-                            }
-                        }
-                    },
-                    shouldSkipLoading = {
-                        skipDownloadSourcesLoading || downloadRequestVersion != requestVersion
-                    }
-                )
-                if (downloadRequestVersion != requestVersion) return@launch
-                handleDownloadActionOutcome(outcome)
-            } finally {
-                if (downloadRequestVersion == requestVersion) {
-                    isActionInProgress = false
-                    isDownloadPanelLoading = false
-                    skipDownloadSourcesLoading = false
-                }
-            }
-        }
+        downloadMirrorStateHolder.onEvent(
+            DownloadMirrorSelectionEvent.Open(
+                compat = actionsCompat,
+                context = context
+            )
+        )
     }
 
     LaunchedEffect(
@@ -396,6 +359,27 @@ private fun Details(
 
     LaunchedEffect(actionsCompat, context) {
         refreshDownloadSnapshot(reason = "enter_details")
+    }
+
+    LaunchedEffect(actionsCompat) {
+        delay(DownloadLinksPrefetchDelayMs)
+        actionsCompat.prefetchDownloadMirrorLinks()
+    }
+
+    LaunchedEffect(downloadMirrorStateHolder) {
+        downloadMirrorStateHolder.effects.collect { effect ->
+            when (effect) {
+                is DownloadMirrorSelectionEffect.LoadingFinished -> {
+                    handleDownloadActionOutcome(effect.outcome)
+                }
+            }
+        }
+    }
+
+    DisposableEffect(downloadMirrorStateHolder) {
+        onDispose {
+            downloadMirrorStateHolder.onEvent(DownloadMirrorSelectionEvent.Close)
+        }
     }
 
     DisposableEffect(downloadEpisodeId) {
@@ -473,7 +457,7 @@ private fun Details(
     )
 
     BackHandler(
-        enabled = !isActionsPanelVisible && !isBookmarkPanelVisible && !isDownloadPanelVisible,
+        enabled = !isActionsPanelVisible && !isBookmarkPanelVisible && !downloadMirrorState.isVisible,
         onBack = onBackPressed
     )
 
@@ -598,22 +582,25 @@ private fun Details(
             onActionSelected = { actionId -> executeAction(actionId) }
         )
 
-        val downloadPanelTitle = downloadPanelSelection?.title
+        val downloadPanelTitle = downloadMirrorState.selectionRequest?.title
             ?: stringResource(R.string.episode_action_download_mirror)
-        val downloadPanelItems = downloadPanelSelection?.options ?: emptyList()
+        val downloadPanelItems = downloadMirrorState.selectionRequest?.options ?: emptyList()
         val skipLoadingItem = MovieDetailsCompatPanelItem(
             id = SkipDownloadLoadingActionId,
             label = stringResource(R.string.skip_loading),
             iconRes = R.drawable.ic_baseline_fast_forward_24
         )
+        val showSkipLoadingAction = downloadMirrorState.isLoading &&
+            !downloadMirrorState.isLoadingUiSkipped &&
+            downloadMirrorState.loadedSourcesCount > 0
         val downloadPanelActionItems = when {
-            isDownloadPanelLoading && downloadLoadedSourcesCount > 0 -> listOf(skipLoadingItem)
+            showSkipLoadingAction -> listOf(skipLoadingItem)
             else -> downloadPanelItems
         }
 
         MovieActionsSidePanel(
-            visible = isDownloadPanelVisible,
-            loading = isDownloadPanelLoading,
+            visible = downloadMirrorState.isVisible,
+            loading = downloadMirrorState.isLoading,
             inProgress = isActionInProgress,
             title = downloadPanelTitle,
             items = downloadPanelActionItems,
@@ -626,13 +613,13 @@ private fun Details(
                 }
             },
             panelTestTag = "movie_download_sources_side_panel",
-            showItemsWhileLoading = downloadLoadedSourcesCount > 0,
+            showItemsWhileLoading = downloadMirrorState.loadedSourcesCount > 0,
             headerContent = {
-                if (isDownloadPanelLoading) {
+                if (downloadMirrorState.isLoading) {
                     Text(
                         text = stringResource(
                             R.string.tv_player_loading_sources_progress,
-                            downloadLoadedSourcesCount
+                            downloadMirrorState.loadedSourcesCount
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
@@ -640,7 +627,7 @@ private fun Details(
                 }
             },
             emptyContent = {
-                if (isDownloadPanelLoading) {
+                if (downloadMirrorState.isLoading) {
                     Text(
                         text = stringResource(R.string.loading),
                         style = MaterialTheme.typography.bodyMedium,

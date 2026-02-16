@@ -91,13 +91,33 @@ fun MenuListSidePanel(
     val focusRequesters = remember(focusableItemIds) {
         focusableItemIds.associateWith { FocusRequester() }
     }
+    var hasRequestedInitialFocus by remember { mutableStateOf(false) }
 
-    LaunchedEffect(visible, initialFocusedItemId, focusableItemIds) {
-        if (!visible || focusableItemIds.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(visible) {
+        if (!visible) {
+            hasRequestedInitialFocus = false
+        }
+    }
+
+    LaunchedEffect(visible, initialFocusedItemId, focusableItemIds, hasRequestedInitialFocus) {
+        if (!visible || hasRequestedInitialFocus || focusableItemIds.isEmpty()) {
+            return@LaunchedEffect
+        }
+
         delay(100)
         val focusItemId = initialFocusedItemId?.takeIf { focusRequesters.containsKey(it) }
             ?: focusableItemIds.first()
-        focusRequesters[focusItemId]?.requestFocus()
+        val focusRequester = focusRequesters[focusItemId] ?: return@LaunchedEffect
+
+        repeat(20) {
+            if (focusRequester.requestFocus()) {
+                hasRequestedInitialFocus = true
+                return@LaunchedEffect
+            }
+            delay(16)
+        }
+
+        hasRequestedInitialFocus = true
     }
 
     SlidingSidePanel(

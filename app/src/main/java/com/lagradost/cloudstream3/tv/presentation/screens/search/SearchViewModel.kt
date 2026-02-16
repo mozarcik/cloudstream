@@ -5,25 +5,19 @@ import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.tv.compat.home.SearchResponseMapper.toMediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.ui.APIRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 
-private const val SEARCH_DEBOUNCE_MS = 350L
-
 class SearchViewModel : ViewModel() {
-    private val queryFlow = MutableStateFlow("")
+    private var searchJob: Job? = null
     private var repositories = synchronized(apis) {
         apis.map { api ->
             APIRepository(api)
@@ -33,92 +27,168 @@ class SearchViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(SearchScreenUiState())
     val uiState = _uiState.asStateFlow()
 
-    init {
-        observeQuery()
-    }
-
     fun onQueryChanged(query: String) {
         _uiState.update { state ->
             state.copy(query = query)
         }
-        queryFlow.value = query
     }
 
-    @OptIn(FlowPreview::class)
-    private fun observeQuery() {
-        viewModelScope.launch {
-            queryFlow
-                .map { it.trim() }
-                .debounce(SEARCH_DEBOUNCE_MS)
-                .distinctUntilChanged()
-                .collectLatest { normalizedQuery ->
-                    if (normalizedQuery.isBlank()) {
-                        _uiState.update { state ->
-                            state.copy(
-                                isLoading = false,
-                                hasSearched = false,
-                                sections = emptyList(),
-                            )
-                        }
-                        return@collectLatest
-                    }
+    fun onSearchSubmitted() {
+        val normalizedQuery = _uiState.value.query.trim()
 
-                    performSearch(normalizedQuery)
-                }
+        if (normalizedQuery.isBlank()) {
+            searchJob?.cancel()
+            _uiState.update { state ->
+                state.copy(
+                    submittedQuery = "",
+                    isLoading = false,
+                    hasSearched = false,
+                    sections = emptyList(),
+                )
+            }
+            return
+        }
+
+        val state = _uiState.value
+        if (state.isLoading && state.submittedQuery == normalizedQuery) {
+            return
+        }
+
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            performSearch(normalizedQuery)
         }
     }
 
-    private suspend fun performSearch(query: String) {
-        repositories = synchronized(apis) {
+    private fun resolveRepositories(): List<APIRepository> {
+        return synchronized(apis) {
             val currentRepoNames = repositories.map { it.name }
             val currentApiNames = apis.map { it.name }
-            if (currentRepoNames == currentApiNames) {
+            repositories = if (currentRepoNames == currentApiNames) {
                 repositories
             } else {
                 apis.map { api ->
                     APIRepository(api)
                 }
             }
+
+            repositories
+        }
+    }
+
+    private suspend fun performSearch(query: String) {
+        val availableRepositories = resolveRepositories()
+        val initialSections = availableRepositories.map { repository ->
+            SearchSectionUiState(
+                id = repository.name,
+                title = repository.name,
+                state = HomeFeedLoadState.Loading,
+            )
         }
 
         _uiState.update { state ->
             state.copy(
-                isLoading = true,
+                submittedQuery = query,
+                isLoading = initialSections.isNotEmpty(),
                 hasSearched = true,
-                sections = emptyList(),
+                sections = initialSections,
             )
         }
 
-        val sections = supervisorScope {
-            repositories.map { repository ->
-                async(Dispatchers.IO) {
-                    val search = repository.search(query = query, page = 1)
-                    val searchItems = (search as? Resource.Success)?.value?.items.orEmpty()
-                    if (searchItems.isEmpty()) {
-                        return@async null
-                    }
-
-                    SearchSectionUiState(
-                        id = repository.name,
-                        title = repository.name,
-                        items = searchItems.map { response ->
-                            response.toMediaItemCompat()
-                        }
-                    )
+        if (initialSections.isEmpty()) {
+            _uiState.update { state ->
+                if (state.submittedQuery != query) {
+                    state
+                } else {
+                    state.copy(isLoading = false)
                 }
-            }.awaitAll().filterNotNull()
+            }
+            return
+        }
+
+        supervisorScope {
+            availableRepositories.forEach { repository ->
+                launch(Dispatchers.IO) {
+                    try {
+                        updateSectionState(
+                            query = query,
+                            sectionId = repository.name,
+                            sectionState = resolveSectionState(
+                                repository = repository,
+                                query = query,
+                            ),
+                        )
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Throwable) {
+                        updateSectionState(
+                            query = query,
+                            sectionId = repository.name,
+                            sectionState = HomeFeedLoadState.Error,
+                        )
+                    }
+                }
+            }
         }
 
         _uiState.update { state ->
-            if (state.query.trim() != query) {
+            if (state.submittedQuery != query) {
                 state
             } else {
                 state.copy(
                     isLoading = false,
-                    hasSearched = true,
-                    sections = sections,
                 )
             }
+        }
+    }
+
+    private suspend fun resolveSectionState(
+        repository: APIRepository,
+        query: String,
+    ): HomeFeedLoadState {
+        return when (val response = repository.search(query = query, page = 1)) {
+            is Resource.Success -> HomeFeedLoadState.Success(
+                response.value.items.map { item ->
+                    item.toMediaItemCompat()
+                }
+            )
+
+            is Resource.Failure -> HomeFeedLoadState.Error
+            is Resource.Loading -> HomeFeedLoadState.Loading
+        }
+    }
+
+    private fun updateSectionState(
+        query: String,
+        sectionId: String,
+        sectionState: HomeFeedLoadState,
+    ) {
+        _uiState.update { state ->
+            if (state.submittedQuery != query) {
+                return@update state
+            }
+
+            val sectionIndex = state.sections.indexOfFirst { section ->
+                section.id == sectionId
+            }
+            if (sectionIndex == -1) {
+                return@update state
+            }
+
+            val currentSection = state.sections[sectionIndex]
+            if (currentSection.state == sectionState) {
+                return@update state
+            }
+
+            val updatedSections = state.sections.toMutableList()
+            updatedSections[sectionIndex] = currentSection.copy(state = sectionState)
+
+            state.copy(
+                sections = updatedSections,
+                isLoading = updatedSections.any { section ->
+                    section.state is HomeFeedLoadState.Loading
+                }
+            )
         }
     }
 }

@@ -97,6 +97,8 @@ class MovieDetailsEpisodeActionsCompat(
 ) {
     private companion object {
         const val DebugTag = "MovieActionsCompat"
+        const val DownloadUiBatchSize = 10
+        const val LinkLoadingPollIntervalMs = 80L
     }
 
     private data class TargetEpisode(
@@ -113,7 +115,20 @@ class MovieDetailsEpisodeActionsCompat(
         val episodesBySeason: Map<Int, List<TargetEpisode>>,
     )
 
+    private data class LoadLinksCacheKey(
+        val sourceTypes: Set<ExtractorLinkType>,
+        val isCasting: Boolean,
+    )
+
+    private data class LinksBatchUpdate(
+        val loadedCount: Int,
+        val links: List<com.lagradost.cloudstream3.utils.ExtractorLink>,
+        val subtitles: List<com.lagradost.cloudstream3.ui.player.SubtitleData>,
+        val isCompleted: Boolean,
+    )
+
     private var cachedTarget: MovieActionTarget? = null
+    private val cachedLinks = mutableMapOf<LoadLinksCacheKey, LinkLoadingResult>()
 
     suspend fun loadPanelActions(context: Context?): List<MovieDetailsCompatPanelItem> {
         val target = resolveTarget() ?: return emptyList()
@@ -307,7 +322,8 @@ class MovieDetailsEpisodeActionsCompat(
     suspend fun requestDownloadMirrorSelection(
         context: Context?,
         onSourcesProgress: (Int) -> Unit = {},
-        shouldSkipLoading: (() -> Boolean)? = null,
+        onSelectionUpdated: ((MovieDetailsCompatSelectionRequest) -> Unit)? = null,
+        shouldCancelLoading: (() -> Boolean)? = null,
     ): MovieDetailsCompatActionOutcome {
         val target = resolveTarget()
         if (target == null) {
@@ -319,7 +335,8 @@ class MovieDetailsEpisodeActionsCompat(
             target = target,
             context = context,
             onSourcesProgress = onSourcesProgress,
-            shouldSkipLoading = shouldSkipLoading,
+            onSelectionUpdated = onSelectionUpdated,
+            shouldCancelLoading = shouldCancelLoading,
         )
     }
 
@@ -337,7 +354,8 @@ class MovieDetailsEpisodeActionsCompat(
         target: MovieActionTarget,
         context: Context?,
         onSourcesProgress: (Int) -> Unit = {},
-        shouldSkipLoading: (() -> Boolean)? = null,
+        onSelectionUpdated: ((MovieDetailsCompatSelectionRequest) -> Unit)? = null,
+        shouldCancelLoading: (() -> Boolean)? = null,
     ): MovieDetailsCompatActionOutcome {
         Log.d(
             DebugTag,
@@ -347,8 +365,22 @@ class MovieDetailsEpisodeActionsCompat(
         val loaded = loadLinks(
             target = target,
             sourceTypes = LOADTYPE_INAPP_DOWNLOAD,
-            onLinksLoaded = onSourcesProgress,
-            shouldSkipLoading = shouldSkipLoading
+            onLinksBatchUpdated = { batch ->
+                onSourcesProgress(batch.loadedCount)
+                if (batch.links.isEmpty()) return@loadLinks
+
+                val selection = buildDownloadMirrorSelectionRequest(
+                    target = target,
+                    context = context,
+                    loaded = LinkLoadingResult(
+                        links = batch.links,
+                        subs = batch.subtitles,
+                        syncData = HashMap(target.loadResponse.syncData)
+                    )
+                )
+                onSelectionUpdated?.invoke(selection)
+            },
+            shouldCancelLoading = shouldCancelLoading
         )
 
         Log.d(
@@ -361,6 +393,32 @@ class MovieDetailsEpisodeActionsCompat(
             return MovieDetailsCompatActionOutcome.Completed
         }
 
+        return MovieDetailsCompatActionOutcome.OpenSelection(
+            request = buildDownloadMirrorSelectionRequest(
+                target = target,
+                context = context,
+                loaded = loaded
+            )
+        )
+    }
+
+    suspend fun prefetchDownloadMirrorLinks() {
+        val target = resolveTarget() ?: return
+        val loaded = loadLinks(
+            target = target,
+            sourceTypes = LOADTYPE_INAPP_DOWNLOAD
+        )
+        Log.d(
+            DebugTag,
+            "prefetch download links done episodeId=${target.episode.id} links=${loaded.links.size}"
+        )
+    }
+
+    private fun buildDownloadMirrorSelectionRequest(
+        target: MovieActionTarget,
+        context: Context?,
+        loaded: LinkLoadingResult,
+    ): MovieDetailsCompatSelectionRequest {
         val options = loaded.links.mapIndexed { index, link ->
             MovieDetailsCompatPanelItem(
                 id = index,
@@ -368,28 +426,25 @@ class MovieDetailsEpisodeActionsCompat(
                 iconRes = R.drawable.baseline_downloading_24
             )
         }
-
         val title = context?.getString(R.string.episode_action_download_mirror)
             ?: "Download mirror"
 
-        return MovieDetailsCompatActionOutcome.OpenSelection(
-            request = MovieDetailsCompatSelectionRequest(
-                title = title,
-                options = options,
-                onOptionSelected = { selectedIndex ->
-                    Log.d(
-                        DebugTag,
-                        "download mirror selected index=$selectedIndex episodeId=${target.episode.id}"
-                    )
-                    startMirrorDownload(
-                        target = target,
-                        loaded = loaded,
-                        selectedIndex = selectedIndex,
-                        context = context
-                    )
-                    MovieDetailsCompatActionOutcome.Completed
-                }
-            )
+        return MovieDetailsCompatSelectionRequest(
+            title = title,
+            options = options,
+            onOptionSelected = { selectedIndex ->
+                Log.d(
+                    DebugTag,
+                    "download mirror selected index=$selectedIndex episodeId=${target.episode.id}"
+                )
+                startMirrorDownload(
+                    target = target,
+                    loaded = loaded,
+                    selectedIndex = selectedIndex,
+                    context = context
+                )
+                MovieDetailsCompatActionOutcome.Completed
+            }
         )
     }
 
@@ -843,10 +898,65 @@ class MovieDetailsEpisodeActionsCompat(
         clearCache: Boolean = false,
         isCasting: Boolean = false,
         onLinksLoaded: ((Int) -> Unit)? = null,
-        shouldSkipLoading: (() -> Boolean)? = null,
+        onLinksBatchUpdated: ((LinksBatchUpdate) -> Unit)? = null,
+        shouldCancelLoading: (() -> Boolean)? = null,
     ): LinkLoadingResult {
+        val cacheKey = LoadLinksCacheKey(
+            sourceTypes = sourceTypes.toSet(),
+            isCasting = isCasting
+        )
+
+        if (clearCache) {
+            synchronized(cachedLinks) {
+                cachedLinks.remove(cacheKey)
+            }
+        }
+
+        if (!clearCache) {
+            val cachedResult = synchronized(cachedLinks) { cachedLinks[cacheKey] }
+            if (cachedResult != null) {
+                onLinksLoaded?.invoke(cachedResult.links.size)
+                onLinksBatchUpdated?.invoke(
+                    LinksBatchUpdate(
+                        loadedCount = cachedResult.links.size,
+                        links = cachedResult.links,
+                        subtitles = cachedResult.subs,
+                        isCompleted = true
+                    )
+                )
+                return cachedResult
+            }
+        }
+
         val links = linkedSetOf<com.lagradost.cloudstream3.utils.ExtractorLink>()
         val subtitles = linkedSetOf<com.lagradost.cloudstream3.ui.player.SubtitleData>()
+        var lastPublishedBatchCount = 0
+        var cancelledByExternalRequest = false
+        var completedWithoutCancellation = false
+
+        fun emitBatchUpdate(isCompleted: Boolean) {
+            val callback = onLinksBatchUpdated ?: return
+            val loadedCount = links.size
+
+            val shouldEmit = when {
+                isCompleted -> loadedCount != lastPublishedBatchCount || loadedCount == 0
+                loadedCount == 1 && lastPublishedBatchCount == 0 -> true
+                loadedCount - lastPublishedBatchCount >= DownloadUiBatchSize -> true
+                else -> false
+            }
+
+            if (!shouldEmit) return
+
+            lastPublishedBatchCount = loadedCount
+            callback(
+                LinksBatchUpdate(
+                    loadedCount = loadedCount,
+                    links = sortUrls(links),
+                    subtitles = sortSubs(subtitles),
+                    isCompleted = isCompleted
+                )
+            )
+        }
 
         coroutineScope {
             val loadJob = async {
@@ -860,6 +970,7 @@ class MovieDetailsEpisodeActionsCompat(
                         callback = { (link, _) ->
                             if (link != null && links.add(link)) {
                                 onLinksLoaded?.invoke(links.size)
+                                emitBatchUpdate(isCompleted = false)
                                 Log.d(
                                     DebugTag,
                                     "loadLinks source added count=${links.size} name=${link.name} quality=${link.quality} episodeId=${target.episode.id}"
@@ -871,6 +982,7 @@ class MovieDetailsEpisodeActionsCompat(
                         },
                         isCasting = isCasting
                     )
+                    completedWithoutCancellation = true
                 } catch (_: CancellationException) {
                     Log.d(DebugTag, "link loading cancelled for action")
                 } catch (error: Throwable) {
@@ -878,17 +990,18 @@ class MovieDetailsEpisodeActionsCompat(
                 }
             }
 
-            if (shouldSkipLoading != null) {
+            if (shouldCancelLoading != null) {
                 while (loadJob.isActive) {
-                    if (shouldSkipLoading() && links.isNotEmpty()) {
+                    if (shouldCancelLoading()) {
+                        cancelledByExternalRequest = true
                         Log.d(
                             DebugTag,
-                            "loadLinks skip requested with alreadyLoaded=${links.size} episodeId=${target.episode.id}"
+                            "loadLinks cancelled by external request episodeId=${target.episode.id} loaded=${links.size}"
                         )
                         loadJob.cancel()
                         break
                     }
-                    delay(80)
+                    delay(LinkLoadingPollIntervalMs)
                 }
             }
 
@@ -899,11 +1012,19 @@ class MovieDetailsEpisodeActionsCompat(
             }
         }
 
-        return LinkLoadingResult(
+        emitBatchUpdate(isCompleted = true)
+
+        val result = LinkLoadingResult(
             links = sortUrls(links),
             subs = sortSubs(subtitles),
             syncData = HashMap(target.loadResponse.syncData)
         )
+        if (!cancelledByExternalRequest && completedWithoutCancellation) {
+            synchronized(cachedLinks) {
+                cachedLinks[cacheKey] = result
+            }
+        }
+        return result
     }
 
     private fun createDownloadMeta(target: MovieActionTarget): DownloadEpisodeMetadata {

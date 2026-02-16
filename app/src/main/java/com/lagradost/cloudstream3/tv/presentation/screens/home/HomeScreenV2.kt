@@ -1,4 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
+
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,8 +34,6 @@ import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val HOME_FEED_PLACEHOLDER_COUNT = 4
 
 @Composable
 fun HomeScreenV2(
@@ -173,7 +172,7 @@ fun HomeScreenV2(
             }
 
             if (uiState.feedSections.isEmpty() && uiState.isFeedListLoading) {
-                items(count = HOME_FEED_PLACEHOLDER_COUNT) {
+                items(count = 4) {
                     FeedSection(
                         title = loadingLabel,
                         state = HomeFeedLoadState.Loading,

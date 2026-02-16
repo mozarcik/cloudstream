@@ -32,10 +32,10 @@ internal class TvPlayerPanelsStateHolder {
         expandedSubtitleGroups.clear()
     }
 
-    fun onSourceChanged() {
+    fun onSourceChanged(newLink: ExtractorLink?) {
         activePanel = TvPlayerSidePanel.None
         selectedSubtitleIndex = -1
-        selectedAudioTrackIndex = -1
+        selectedAudioTrackIndex = defaultAudioTrackIndex(newLink)
         expandedSubtitleGroups.clear()
     }
 
@@ -334,6 +334,11 @@ internal class TvPlayerPanelsStateHolder {
         if (selectedAudioTrackIndex !in currentLink.audioTracks.indices) {
             selectedAudioTrackIndex = -1
         }
+    }
+
+    private fun defaultAudioTrackIndex(link: ExtractorLink?): Int {
+        if (link == null) return -1
+        return if (link.audioTracks.isNotEmpty()) 0 else -1
     }
 
     private fun subtitleItemStyle(itemIndex: Int, groupSize: Int): TvPlayerPanelItemStyle {

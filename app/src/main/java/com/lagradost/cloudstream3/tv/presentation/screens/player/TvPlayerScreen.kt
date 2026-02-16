@@ -45,17 +45,24 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
@@ -70,11 +77,14 @@ import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
+import com.lagradost.cloudstream3.ui.player.UpdatedDefaultExtractorsFactory
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
+import java.util.Locale
 
 object TvPlayerScreen {
     const val UrlBundleKey = "url"
@@ -210,19 +220,18 @@ private fun LoadingSourcesState(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
             )
 
-            if (state.canSkip) {
-                Button(
-                    onClick = onSkipLoading,
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .focusRequester(skipFocusRequester),
-                    contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-                ) {
-                    Text(
-                        text = stringResource(R.string.skip_loading),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
+            Button(
+                onClick = onSkipLoading,
+                enabled = state.canSkip,
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .focusRequester(skipFocusRequester),
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            ) {
+                Text(
+                    text = stringResource(R.string.skip_loading),
+                    style = MaterialTheme.typography.titleSmall,
+                )
             }
         }
     }
@@ -323,19 +332,16 @@ private fun PlaybackState(
     var pendingPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
 
     val selectedSubtitle = state.subtitles.getOrNull(state.selectedSubtitleIndex)
-    val selectedAudioTrack = state.link.audioTracks.getOrNull(state.selectedAudioTrackIndex)
 
     val exoPlayer = remember(
         state.link.url,
         selectedSubtitle?.getId(),
-        selectedAudioTrack?.url,
-        selectedAudioTrack?.headers,
     ) {
         createPlayer(
             context = context,
             link = state.link,
             subtitle = selectedSubtitle,
-            audioTrack = selectedAudioTrack,
+            audioTracks = state.link.audioTracks,
         )
     }
 
@@ -345,6 +351,10 @@ private fun PlaybackState(
     var playerWantsToPlay by remember { mutableStateOf(exoPlayer.playWhenReady) }
     var errorHandled by remember(state.link.url) { mutableStateOf(false) }
     var hasAppliedInitialResume by remember(state.episodeId) { mutableStateOf(false) }
+    var runtimeTrackPanelVisible by remember(state.link.url) { mutableStateOf(false) }
+    var runtimeAudioTracks by remember(state.link.url) { mutableStateOf<List<PlayerAudioTrackOption>>(emptyList()) }
+    var runtimeSelectedAudioTrackId by remember(state.link.url) { mutableStateOf<String?>(null) }
+    var hasAppliedInitialAudioSelection by remember(state.link.url) { mutableStateOf(false) }
 
     val rootFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
@@ -371,8 +381,23 @@ private fun PlaybackState(
             Toast.LENGTH_SHORT,
         ).show()
     }
+    fun selectRuntimeAudioTrack(track: PlayerAudioTrackOption?) {
+        applyRuntimeAudioTrackSelection(
+            player = exoPlayer,
+            track = track,
+        )
+        runtimeSelectedAudioTrackId = track?.selectionId
+    }
+    fun refreshRuntimeAudioTracks(tracksSnapshot: Tracks = exoPlayer.currentTracks) {
+        val extractedAudioTracks = extractRuntimeAudioTracks(tracksSnapshot)
+        runtimeAudioTracks = extractedAudioTracks
+        runtimeSelectedAudioTrackId = extractedAudioTracks.firstOrNull { track ->
+            track.isSelected
+        }?.selectionId
+    }
     val activePanel = state.panels.activePanel
-    val hasSidePanel = activePanel != TvPlayerSidePanel.None
+    val hasSidePanel = activePanel != TvPlayerSidePanel.None || runtimeTrackPanelVisible
+    val showRuntimeTracksButton = runtimeAudioTracks.size > 1
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -382,10 +407,28 @@ private fun PlaybackState(
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playerPlaybackState = playbackState
+                if (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING) {
+                    refreshRuntimeAudioTracks()
+                }
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 playerWantsToPlay = playWhenReady
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                val extractedAudioTracks = extractRuntimeAudioTracks(tracks)
+                runtimeAudioTracks = extractedAudioTracks
+                runtimeSelectedAudioTrackId = extractedAudioTracks.firstOrNull { track ->
+                    track.isSelected
+                }?.selectionId
+                if (!hasAppliedInitialAudioSelection && extractedAudioTracks.isNotEmpty()) {
+                    hasAppliedInitialAudioSelection = true
+                    if (runtimeSelectedAudioTrackId == null) {
+                        val firstAudioTrack = extractedAudioTracks.first()
+                        selectRuntimeAudioTrack(firstAudioTrack)
+                    }
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -432,6 +475,8 @@ private fun PlaybackState(
             hasAppliedInitialResume = true
         }
 
+        refreshRuntimeAudioTracks()
+
         pendingSeekPositionMs?.let { resumePositionMs ->
             seekPlayerTo(exoPlayer, resumePositionMs)
             pendingSeekPositionMs = null
@@ -447,16 +492,16 @@ private fun PlaybackState(
         }
     }
 
-    LaunchedEffect(controlsVisible, activePanel) {
-        if (controlsVisible && activePanel == TvPlayerSidePanel.None) {
+    LaunchedEffect(controlsVisible, activePanel, runtimeTrackPanelVisible) {
+        if (controlsVisible && activePanel == TvPlayerSidePanel.None && !runtimeTrackPanelVisible) {
             playPauseFocusRequester.requestFocus()
         } else if (!controlsVisible) {
             rootFocusRequester.requestFocus()
         }
     }
 
-    LaunchedEffect(controlsVisible, playerWantsToPlay, activePanel, controlsInteractionEvents) {
-        if (!controlsVisible || !playerWantsToPlay || activePanel != TvPlayerSidePanel.None) {
+    LaunchedEffect(controlsVisible, playerWantsToPlay, activePanel, runtimeTrackPanelVisible, controlsInteractionEvents) {
+        if (!controlsVisible || !playerWantsToPlay || activePanel != TvPlayerSidePanel.None || runtimeTrackPanelVisible) {
             return@LaunchedEffect
         }
 
@@ -474,7 +519,9 @@ private fun PlaybackState(
     }
 
     BackHandler {
-        if (activePanel != TvPlayerSidePanel.None) {
+        if (runtimeTrackPanelVisible) {
+            runtimeTrackPanelVisible = false
+        } else if (activePanel != TvPlayerSidePanel.None) {
             tvPlayerScreenViewModel.closePanel()
         } else if (controlsVisible && playerWantsToPlay) {
             controlsVisible = false
@@ -558,7 +605,7 @@ private fun PlaybackState(
             metadata = state.metadata,
             link = state.link,
             isPlaying = isPlaying,
-            showTracksButton = state.link.audioTracks.isNotEmpty(),
+            showTracksButton = showRuntimeTracksButton,
             showNextEpisodeButton = state.metadata.isEpisodeBased,
             playPauseFocusRequester = playPauseFocusRequester,
             timelineFocusRequester = timelineFocusRequester,
@@ -582,7 +629,7 @@ private fun PlaybackState(
                         tvPlayerScreenViewModel.openPanel(TvPlayerSidePanel.Subtitles)
                     }
                     TvPlayerControlsEvent.OpenTracks -> {
-                        tvPlayerScreenViewModel.openPanel(TvPlayerSidePanel.Tracks)
+                        runtimeTrackPanelVisible = runtimeAudioTracks.size > 1
                     }
                     TvPlayerControlsEvent.SyncSubtitles -> Unit
                     TvPlayerControlsEvent.ToggleResizeMode -> {
@@ -624,6 +671,25 @@ private fun PlaybackState(
                 tvPlayerScreenViewModel.onPanelItemAction(action)
             },
         )
+
+        RuntimeAudioTracksSidePanel(
+            visible = runtimeTrackPanelVisible,
+            tracks = runtimeAudioTracks,
+            selectedTrackId = runtimeSelectedAudioTrackId,
+            onCloseRequested = {
+                runtimeTrackPanelVisible = false
+            },
+            onSelectDefault = {
+                registerControlsInteraction()
+                selectRuntimeAudioTrack(null)
+                runtimeTrackPanelVisible = false
+            },
+            onSelectTrack = { track ->
+                registerControlsInteraction()
+                selectRuntimeAudioTrack(track)
+                runtimeTrackPanelVisible = false
+            },
+        )
     }
 }
 
@@ -662,6 +728,52 @@ private fun PlayerSidePanels(
         items = trackItems,
         showSelectionRadio = true,
         initialFocusedItemId = panels.trackInitialFocusedItemId,
+    )
+}
+
+@Composable
+private fun RuntimeAudioTracksSidePanel(
+    visible: Boolean,
+    tracks: List<PlayerAudioTrackOption>,
+    selectedTrackId: String?,
+    onCloseRequested: () -> Unit,
+    onSelectDefault: () -> Unit,
+    onSelectTrack: (PlayerAudioTrackOption) -> Unit,
+) {
+    val defaultItemId = "runtime_track_default"
+    val items = buildList {
+        add(
+            SidePanelMenuItem(
+                id = defaultItemId,
+                title = stringResource(R.string.action_default),
+                selected = selectedTrackId == null,
+                onClick = onSelectDefault,
+            )
+        )
+        tracks.forEach { track ->
+            add(
+                SidePanelMenuItem(
+                    id = track.selectionId,
+                    title = track.label,
+                    selected = selectedTrackId == track.selectionId,
+                    onClick = {
+                        onSelectTrack(track)
+                    },
+                )
+            )
+        }
+    }
+    val initialFocusedItemId = selectedTrackId?.takeIf { selectedId ->
+        items.any { item -> item.id == selectedId }
+    } ?: defaultItemId
+
+    MenuListSidePanel(
+        visible = visible,
+        onCloseRequested = onCloseRequested,
+        title = stringResource(R.string.audio_tracks),
+        items = items,
+        showSelectionRadio = true,
+        initialFocusedItemId = initialFocusedItemId,
     )
 }
 
@@ -812,11 +924,117 @@ private fun TvPlayerPanelItemAction.requiresPlaybackRestore(): Boolean {
     }
 }
 
+private data class PlayerAudioTrackOption(
+    val selectionId: String,
+    val label: String,
+    val language: String?,
+    val trackGroup: androidx.media3.common.TrackGroup,
+    val trackIndex: Int,
+    val isSelected: Boolean,
+)
+
+private fun extractRuntimeAudioTracks(tracks: Tracks): List<PlayerAudioTrackOption> {
+    val runtimeTracks = mutableListOf<PlayerAudioTrackOption>()
+    var ordinal = 0
+    tracks.groups.forEachIndexed { groupIndex, group ->
+        if (group.type != C.TRACK_TYPE_AUDIO) {
+            return@forEachIndexed
+        }
+        val trackGroup = group.mediaTrackGroup
+        for (trackIndex in 0 until trackGroup.length) {
+            if (!group.isTrackSupported(trackIndex)) {
+                continue
+            }
+            val format = trackGroup.getFormat(trackIndex)
+            val selectionId = "runtime_track_${groupIndex}_${trackIndex}_${format.id.orEmpty()}"
+            runtimeTracks += PlayerAudioTrackOption(
+                selectionId = selectionId,
+                label = formatRuntimeAudioTrackLabel(index = ordinal, format = format),
+                language = format.language,
+                trackGroup = trackGroup,
+                trackIndex = trackIndex,
+                isSelected = group.isTrackSelected(trackIndex),
+            )
+            ordinal += 1
+        }
+    }
+    return runtimeTracks
+}
+
+private fun formatRuntimeAudioTrackLabel(
+    index: Int,
+    format: Format,
+): String {
+    val languageLabel = format.language
+        ?.takeIf { it.isNotBlank() && !it.equals("und", ignoreCase = true) }
+        ?.let(::languageDisplayName)
+        ?: format.label?.takeIf { it.isNotBlank() }
+        ?: "Audio ${index + 1}"
+    val codecLabel = format.sampleMimeType
+        ?.substringAfter('/')
+        ?.uppercase(Locale.ROOT)
+    val channelsLabel = when (format.channelCount) {
+        1 -> "MONO"
+        2 -> "STEREO"
+        6 -> "5.1"
+        8 -> "7.1"
+        else -> format.channelCount.takeIf { it > 0 }?.let { "$it CH" }
+    }
+    return listOfNotNull(
+        "[${index + 1}]",
+        languageLabel,
+        codecLabel,
+        channelsLabel,
+    ).joinToString(separator = " . ")
+}
+
+private fun applyRuntimeAudioTrackSelection(
+    player: ExoPlayer,
+    track: PlayerAudioTrackOption?,
+) {
+    val newParameters = player.trackSelectionParameters.buildUpon()
+        .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+        .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
+        .apply {
+            if (track != null) {
+                setOverrideForType(TrackSelectionOverride(track.trackGroup, track.trackIndex))
+                track.language?.takeIf { it.isNotBlank() }?.let(::setPreferredAudioLanguage)
+            } else {
+                setPreferredAudioLanguage(null)
+            }
+        }
+        .build()
+    player.trackSelectionParameters = newParameters
+}
+
+private fun languageDisplayName(languageTag: String): String {
+    val locale = Locale.forLanguageTag(languageTag)
+    val languageCode = locale.language
+    if (languageCode.isNullOrBlank()) {
+        return languageTag
+    }
+    val localized = locale.getDisplayLanguage(Locale.getDefault())
+    return localized.takeIf { it.isNotBlank() } ?: languageTag
+}
+
+private fun createTvPlayerRenderersFactory(context: Context): androidx.media3.exoplayer.RenderersFactory {
+    return runCatching {
+        NextRenderersFactory(context).apply {
+            setEnableDecoderFallback(true)
+            setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        }
+    }.getOrElse {
+        DefaultRenderersFactory(context).apply {
+            setEnableDecoderFallback(true)
+        }
+    }
+}
+
 private fun createPlayer(
     context: Context,
     link: ExtractorLink,
     subtitle: com.lagradost.cloudstream3.ui.player.SubtitleData?,
-    audioTrack: com.lagradost.cloudstream3.AudioFile?,
+    audioTracks: List<com.lagradost.cloudstream3.AudioFile>,
 ): ExoPlayer {
     val subtitleConfiguration = subtitle?.let { subtitleData ->
         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitleData.getFixedUrl()))
@@ -830,12 +1048,14 @@ private fun createPlayer(
     val subtitleHeadersByUri = subtitle?.let { subtitleData ->
         mapOf(subtitleData.getFixedUrl() to subtitleData.headers)
     }.orEmpty()
+    val extractorFactory = UpdatedDefaultExtractorsFactory()
+        .setFragmentedMp4ExtractorFlags(FragmentedMp4Extractor.FLAG_MERGE_FRAGMENTED_SIDX)
     val videoDataSourceFactory = createDataSourceFactory(
         context = context,
         link = link,
         perUriExtraHeaders = subtitleHeadersByUri,
     )
-    val videoMediaSourceFactory = DefaultMediaSourceFactory(videoDataSourceFactory)
+    val videoMediaSourceFactory = DefaultMediaSourceFactory(videoDataSourceFactory, extractorFactory)
 
     val videoMediaItem = MediaItem.Builder()
         .setUri(link.url)
@@ -847,20 +1067,42 @@ private fun createPlayer(
         .build()
     val videoMediaSource = videoMediaSourceFactory.createMediaSource(videoMediaItem)
 
-    val mediaSource = if (audioTrack == null) {
+    val externalAudioSources = audioTracks.mapIndexedNotNull { index, audioTrack ->
+        runCatching {
+            val audioDataSourceFactory = createDataSourceFactory(
+                context = context,
+                link = link,
+                globalExtraHeaders = audioTrack.headers.orEmpty(),
+            )
+            val audioMediaItem = MediaItem.Builder()
+                .setUri(audioTrack.url)
+                .setMimeType(MimeTypes.AUDIO_UNKNOWN)
+                .setMediaId("external_audio_$index")
+                .build()
+            val audioMediaSource = DefaultMediaSourceFactory(audioDataSourceFactory, extractorFactory)
+                .createMediaSource(audioMediaItem)
+            audioMediaSource
+        }.getOrNull()
+    }
+
+    val mediaSource = if (externalAudioSources.isEmpty()) {
         videoMediaSource
     } else {
-        val audioDataSourceFactory = createDataSourceFactory(
-            context = context,
-            link = link,
-            globalExtraHeaders = audioTrack.headers.orEmpty(),
-        )
-        val audioMediaSource = DefaultMediaSourceFactory(audioDataSourceFactory)
-            .createMediaSource(MediaItem.fromUri(audioTrack.url))
-        MergingMediaSource(videoMediaSource, audioMediaSource)
+        val allSources = ArrayList<androidx.media3.exoplayer.source.MediaSource>(externalAudioSources.size + 1)
+        allSources.add(videoMediaSource)
+        allSources.addAll(externalAudioSources)
+        MergingMediaSource(*allSources.toTypedArray())
+    }
+
+    val trackSelector = DefaultTrackSelector(context).apply {
+        parameters = buildUponParameters()
+            .setPreferredAudioLanguage(null)
+            .build()
     }
 
     return ExoPlayer.Builder(context)
+        .setRenderersFactory(createTvPlayerRenderersFactory(context))
+        .setTrackSelector(trackSelector)
         .setMediaSourceFactory(videoMediaSourceFactory)
         .build()
         .apply {

@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.AnimeLoadResponse
+import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.R
@@ -20,7 +21,9 @@ import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import com.lagradost.cloudstream3.ui.result.buildResultEpisode
+import com.lagradost.cloudstream3.ui.result.getId
 import com.lagradost.cloudstream3.utils.AppContextUtils.sortSubs
+import com.lagradost.cloudstream3.utils.DataStoreHelper.getDub
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -138,12 +141,7 @@ class TvPlayerScreenViewModel(
         if (!hasLoadedSources) {
             return
         }
-        if (!hasFinalized) {
-            finalizeLoading(forceError = true)
-        }
-        loadingJob?.cancel()
-        loadingJob = null
-        pendingReadyRefreshChanges = 0
+        finalizeLoading(forceError = true)
     }
 
     fun onPlaybackProgress(positionMs: Long, durationMs: Long) {
@@ -171,7 +169,7 @@ class TvPlayerScreenViewModel(
             return
         }
 
-        panelsState.onSourceChanged()
+        panelsState.onSourceChanged(selectedLink)
         currentLinkIndex = index
         postReadyState(
             link = selectedLink,
@@ -225,7 +223,7 @@ class TvPlayerScreenViewModel(
         val nextIndex = currentLinkIndex + 1
         val nextLink = orderedLinks.getOrNull(nextIndex)
         if (nextLink != null) {
-            panelsState.onSourceChanged()
+            panelsState.onSourceChanged(nextLink)
             currentLinkIndex = nextIndex
             postReadyState(
                 link = nextLink,
@@ -327,7 +325,6 @@ class TvPlayerScreenViewModel(
                     }
                 )
             } catch (_: CancellationException) {
-                Log.d(DebugTag, "source loading cancelled")
             } catch (t: Throwable) {
                 logError(t)
             }
@@ -348,6 +345,7 @@ class TvPlayerScreenViewModel(
         var resolvedSeason: Int? = null
         var resolvedEpisode = 0
         var resolvedEpisodeTitle: String? = null
+        var resolvedAnimeDubStatus: DubStatus? = null
 
         if (resolvedData.isNullOrBlank()) {
             loadResponse = (repository.load(url) as? Resource.Success)?.value
@@ -371,8 +369,21 @@ class TvPlayerScreenViewModel(
                 }
 
                 is AnimeLoadResponse -> {
-                    val first = loadResponse.episodes.values
-                        .flatten()
+                    val mainId = loadResponse.getId()
+                    val preferredDubStatus = resolvePreferredAnimeDubStatus(loadResponse, mainId)
+                    val preferredDubEpisodes = preferredDubStatus
+                        ?.let { dubStatus -> loadResponse.episodes[dubStatus].orEmpty() }
+                        .orEmpty()
+
+                    val first = if (preferredDubEpisodes.isNotEmpty()) {
+                        resolvedAnimeDubStatus = preferredDubStatus
+                        preferredDubEpisodes
+                    } else {
+                        val fallbackEntry = loadResponse.episodes.entries
+                            .firstOrNull { entry -> entry.value.isNotEmpty() }
+                        resolvedAnimeDubStatus = fallbackEntry?.key
+                        fallbackEntry?.value.orEmpty()
+                    }
                         .sortedWith(compareBy({ it.season ?: Int.MAX_VALUE }, { it.episode ?: Int.MAX_VALUE }))
                         .firstOrNull()
                     resolvedData = first?.data
@@ -398,11 +409,18 @@ class TvPlayerScreenViewModel(
                 }
 
                 is AnimeLoadResponse -> {
-                    val matchingEpisode = loadResponse.episodes.values
-                        .flatten()
-                        .firstOrNull { episode ->
+                    val matchingEntry = loadResponse.episodes.entries
+                        .firstOrNull { entry ->
+                            entry.value.any { episode ->
+                                episode.data == resolvedData
+                            }
+                        }
+                    val matchingEpisode = matchingEntry
+                        ?.value
+                        ?.firstOrNull { episode ->
                             episode.data == resolvedData
                         }
+                    resolvedAnimeDubStatus = matchingEntry?.key
                     resolvedSeason = matchingEpisode?.season
                     resolvedEpisode = matchingEpisode?.episode ?: 1
                     resolvedEpisodeTitle = matchingEpisode?.name
@@ -418,8 +436,40 @@ class TvPlayerScreenViewModel(
 
         val resolvedType = loadResponse?.type ?: TvType.TvSeries
         val resolvedTitle = loadResponse?.name ?: apiName
-        val parentId = url.hashCode()
-        val episodeId = "$apiName|$resolvedData".hashCode()
+        val parentId = loadResponse?.getId() ?: url.hashCode()
+        val episodeId = when (val response = loadResponse) {
+            is MovieLoadResponse -> parentId
+
+            is TvSeriesLoadResponse -> {
+                val matchingEpisode = response.episodes.firstOrNull { episode ->
+                    episode.data == resolvedData
+                }
+                val episodeNumber = matchingEpisode?.episode ?: resolvedEpisode.takeIf { it > 0 } ?: 1
+                val seasonNumber = matchingEpisode?.season ?: resolvedSeason
+                parentId + (seasonNumber?.times(100_000) ?: 0) + episodeNumber + 1
+            }
+
+            is AnimeLoadResponse -> {
+                val matchingEntry = response.episodes.entries.firstOrNull { entry ->
+                    entry.value.any { episode ->
+                        episode.data == resolvedData
+                    }
+                }
+                val matchingEpisode = matchingEntry
+                    ?.value
+                    ?.firstOrNull { episode ->
+                        episode.data == resolvedData
+                    }
+                val dubStatus = matchingEntry?.key
+                    ?: resolvedAnimeDubStatus
+                    ?: resolvePreferredAnimeDubStatus(response, parentId)
+                val episodeNumber = matchingEpisode?.episode ?: resolvedEpisode.takeIf { it > 0 } ?: 1
+                val seasonNumber = matchingEpisode?.season ?: resolvedSeason
+                parentId + episodeNumber + ((dubStatus?.id ?: 0) * 1_000_000) + (seasonNumber?.times(10_000) ?: 0)
+            }
+
+            else -> "$apiName|$resolvedData".hashCode()
+        }
 
         val episode = buildResultEpisode(
             headerName = resolvedTitle,
@@ -447,6 +497,26 @@ class TvPlayerScreenViewModel(
                 resolvedEpisodeTitle = resolvedEpisodeTitle,
             )
         )
+    }
+
+    private fun resolvePreferredAnimeDubStatus(
+        loadResponse: AnimeLoadResponse,
+        mainId: Int,
+    ): DubStatus? {
+        val available = loadResponse.episodes.keys
+        if (available.isEmpty()) return null
+
+        val stored = getDub(mainId)
+        if (stored != null && available.contains(stored)) {
+            return stored
+        }
+
+        return when {
+            available.contains(DubStatus.Dubbed) -> DubStatus.Dubbed
+            available.contains(DubStatus.Subbed) -> DubStatus.Subbed
+            available.contains(DubStatus.None) -> DubStatus.None
+            else -> available.firstOrNull()
+        }
     }
 
     private fun resolveMetadata(
@@ -571,7 +641,7 @@ class TvPlayerScreenViewModel(
             orderedSubtitles = synchronized(loadedSubtitlesById) {
                 sortSubs(loadedSubtitlesById.values.toSet())
             }
-            panelsState.onSourceChanged()
+            panelsState.onSourceChanged(candidateLinks.first())
             currentLinkIndex = 0
             hasFinalized = true
             postReadyState(

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicTextField
@@ -59,10 +58,7 @@ import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedSection
-import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
-
-private const val SEARCH_PLACEHOLDER_COUNT = 3
 
 @Composable
 fun SearchScreen(
@@ -76,6 +72,11 @@ fun SearchScreen(
     val listState = rememberLazyListState()
     val searchFieldFocusRequester = remember { FocusRequester() }
     val firstFeedCardFocusRequester = remember { FocusRequester() }
+    val firstInteractiveSectionIndex = remember(uiState.sections) {
+        uiState.sections.indexOfFirst { section ->
+            section.isInteractive
+        }
+    }
     val shouldShowTopBar by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex == 0 &&
@@ -102,27 +103,16 @@ fun SearchScreen(
                 SearchInputField(
                     value = uiState.query,
                     onValueChange = viewModel::onQueryChanged,
+                    onSearchAction = viewModel::onSearchSubmitted,
                     focusRequester = searchFieldFocusRequester,
                     downFocusRequester = when {
-                        uiState.sections.isNotEmpty() -> firstFeedCardFocusRequester
+                        firstInteractiveSectionIndex >= 0 -> firstFeedCardFocusRequester
                         else -> null
                     }
                 )
             }
 
             when {
-                uiState.isLoading -> {
-                    items(SEARCH_PLACEHOLDER_COUNT) {
-                        FeedSection(
-                            title = stringResource(id = R.string.loading),
-                            state = HomeFeedLoadState.Loading,
-                            onMediaClick = {},
-                            onShowMoreClick = {},
-                            isInteractive = false
-                        )
-                    }
-                }
-
                 uiState.sections.isNotEmpty() -> {
                     itemsIndexed(
                         items = uiState.sections,
@@ -130,13 +120,13 @@ fun SearchScreen(
                     ) { index, section ->
                         FeedSection(
                             title = section.title,
-                            state = HomeFeedLoadState.Success(section.items),
+                            state = section.state,
                             onMediaClick = onMediaClick,
                             onShowMoreClick = {
                                 onOpenFeedGrid(section)
                             },
-                            isInteractive = true,
-                            firstItemFocusRequester = if (index == 0) {
+                            isInteractive = section.isInteractive,
+                            firstItemFocusRequester = if (index == firstInteractiveSectionIndex) {
                                 firstFeedCardFocusRequester
                             } else {
                                 null
@@ -171,6 +161,7 @@ fun SearchScreen(
 private fun SearchInputField(
     value: String,
     onValueChange: (String) -> Unit,
+    onSearchAction: () -> Unit,
     focusRequester: FocusRequester,
     downFocusRequester: FocusRequester?,
 ) {
@@ -217,7 +208,10 @@ private fun SearchInputField(
             ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(
-                onSearch = { focusManager.moveFocus(FocusDirection.Down) }
+                onSearch = {
+                    onSearchAction()
+                    focusManager.moveFocus(FocusDirection.Down)
+                }
             ),
             cursorBrush = Brush.verticalGradient(
                 colors = listOf(LocalContentColor.current, LocalContentColor.current)
@@ -257,6 +251,13 @@ private fun SearchInputField(
 
                         Key.DirectionUp -> {
                             focusManager.moveFocus(FocusDirection.Up)
+                            true
+                        }
+
+                        Key.Enter,
+                        Key.NumPadEnter -> {
+                            onSearchAction()
+                            focusManager.moveFocus(FocusDirection.Down)
                             true
                         }
 
