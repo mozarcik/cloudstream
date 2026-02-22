@@ -14,6 +14,9 @@ import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -103,50 +106,12 @@ class ExtensionsViewModel : ViewModel() {
     /**
      * Load plugins for a specific repository
      */
-    fun loadPluginsForRepo(repoUrl: String) {
+    fun loadPluginsForRepo(repoUrl: String, forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            val currentState = _uiState.value
-            if (currentState !is ExtensionsUiState.Ready) {
-                return@launch
-            }
-            
-            // Skip if already loaded (has non-null value in map)
-            val existingPlugins = currentState.pluginsByRepo[repoUrl]
-            if (existingPlugins != null) {
-                return@launch
-            }
-            
-            // Skip if currently loading (has null value but key exists)
-            if (currentState.pluginsByRepo.containsKey(repoUrl)) {
-                return@launch
-            }
-            
-            // Mark as loading (null value)
-            _uiState.value = currentState.copy(
-                pluginsByRepo = currentState.pluginsByRepo + (repoUrl to null)
+            loadPluginsForRepoInternal(
+                repoUrl = repoUrl,
+                forceRefresh = forceRefresh
             )
-            
-            // Load plugins
-            val pluginsResult = ExtensionsCompat.getPluginsFromRepository(repoUrl)
-            if (pluginsResult.isSuccess) {
-                val plugins = pluginsResult.getOrNull() ?: emptyList()
-                
-                // Get fresh state in case it changed during loading
-                val freshState = _uiState.value
-                if (freshState is ExtensionsUiState.Ready) {
-                    val updatedMap = freshState.pluginsByRepo + (repoUrl to plugins)
-                    _uiState.value = freshState.copy(pluginsByRepo = updatedMap)
-                }
-            } else {
-                
-                // Get fresh state in case it changed during loading
-                val freshState = _uiState.value
-                if (freshState is ExtensionsUiState.Ready) {
-                    // On error, set empty list (not null) to indicate loaded but failed
-                    val updatedMap = freshState.pluginsByRepo + (repoUrl to emptyList())
-                    _uiState.value = freshState.copy(pluginsByRepo = updatedMap)
-                }
-            }
         }
     }
     
@@ -158,6 +123,55 @@ class ExtensionsViewModel : ViewModel() {
         if (currentState !is ExtensionsUiState.Ready) return emptyList()
         
         return currentState.pluginsByRepo[repoUrl] ?: emptyList()
+    }
+
+    /**
+     * Await plugins load completion for repository.
+     */
+    suspend fun awaitPluginsForRepo(
+        repoUrl: String
+    ): List<PluginItem> {
+        val currentState = _uiState.value as? ExtensionsUiState.Ready
+        val currentPlugins = currentState?.pluginsByRepo?.get(repoUrl)
+        if (currentPlugins != null) {
+            return currentPlugins
+        }
+
+        return uiState
+            .filterIsInstance<ExtensionsUiState.Ready>()
+            .map { state -> state.pluginsByRepo[repoUrl] }
+            .first { plugins -> plugins != null }
+            ?: emptyList()
+    }
+
+    private suspend fun loadPluginsForRepoInternal(
+        repoUrl: String,
+        forceRefresh: Boolean
+    ): List<PluginItem>? {
+        val currentState = _uiState.value as? ExtensionsUiState.Ready ?: return null
+
+        val existingPlugins = currentState.pluginsByRepo[repoUrl]
+        val hasCachedPlugins = existingPlugins != null
+        if (!forceRefresh && existingPlugins != null) {
+            return existingPlugins
+        }
+
+        if (!forceRefresh && currentState.pluginsByRepo.containsKey(repoUrl)) {
+            return null
+        }
+
+        if (!forceRefresh || !hasCachedPlugins) {
+            _uiState.value = currentState.copy(
+                pluginsByRepo = currentState.pluginsByRepo + (repoUrl to null)
+            )
+        }
+
+        val plugins = ExtensionsCompat.getPluginsFromRepository(repoUrl).getOrElse { emptyList() }
+        val freshState = _uiState.value as? ExtensionsUiState.Ready ?: return plugins
+        _uiState.value = freshState.copy(
+            pluginsByRepo = freshState.pluginsByRepo + (repoUrl to plugins)
+        )
+        return plugins
     }
     
     /**
@@ -206,30 +220,14 @@ class ExtensionsViewModel : ViewModel() {
             val result = ExtensionsCompat.downloadPlugin(activity, plugin)
             
             if (result.isSuccess) {
-                // Note: loadData() will be called automatically by SharedPreferences listener
-                // when plugin adds new repositories
-                
-                // Update plugin status in current list (change status from NOT_DOWNLOADED to DOWNLOADED)
-                val currentState = _uiState.value
-                if (currentState is ExtensionsUiState.Ready) {
-                    val pluginsList = currentState.pluginsByRepo[plugin.repositoryUrl]
-                    if (pluginsList != null) {
-                        val updatedPlugins = pluginsList.map { p ->
-                            if (p.internalName == plugin.internalName) {
-                                p.copy(status = com.lagradost.cloudstream3.tv.compat.PluginStatus.DOWNLOADED)
-                            } else {
-                                p
-                            }
-                        }
-                        _uiState.value = currentState.copy(
-                            pluginsByRepo = currentState.pluginsByRepo + (plugin.repositoryUrl to updatedPlugins)
-                        )
-                    }
-                }
-            } else {
+                // Refresh stats/repositories and force refresh plugins list for repo.
+                loadData()
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
             }
             
-            // Call onResult after reload so UI shows updated state
             onResult(result)
         }
     }
@@ -242,10 +240,11 @@ class ExtensionsViewModel : ViewModel() {
             val result = ExtensionsCompat.deletePlugin(plugin.internalName)
             
             if (result.isSuccess) {
-                // Reload all data first
                 loadData()
-                // Then reload plugins for this repo
-                loadPluginsForRepo(plugin.repositoryUrl)
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
             }
             
             onResult(result)
@@ -260,10 +259,11 @@ class ExtensionsViewModel : ViewModel() {
             val result = ExtensionsCompat.updatePlugin(activity, plugin)
             
             if (result.isSuccess) {
-                // Reload all data first
                 loadData()
-                // Then reload plugins for this repo
-                loadPluginsForRepo(plugin.repositoryUrl)
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
             }
             
             onResult(result)

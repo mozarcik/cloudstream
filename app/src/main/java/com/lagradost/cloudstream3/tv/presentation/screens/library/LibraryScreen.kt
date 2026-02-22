@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.library
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,6 +22,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedSection
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 
@@ -48,65 +48,67 @@ fun LibraryScreen(
         onScroll(true)
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0C1016))
+    HaloHost(
+        modifier = modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            modifier = Modifier.fillMaxSize(),
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            when {
-                uiState.isLoading -> {
-                    items(count = LIBRARY_PLACEHOLDER_COUNT) {
-                        FeedSection(
-                            title = loadingLabel,
-                            state = HomeFeedLoadState.Loading,
-                            onMediaClick = {},
-                            onShowMoreClick = {},
-                            isInteractive = false,
-                        )
-                    }
-                }
-
-                uiState.sections.isEmpty() -> {
-                    item {
-                        val message = when {
-                            !uiState.isAnySyncApiAvailable -> noLibraryAccountsLabel
-                            !uiState.errorMessage.isNullOrBlank() -> uiState.errorMessage
-                            else -> emptyLibraryLabel
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                when {
+                    uiState.isLoading -> {
+                        items(count = LIBRARY_PLACEHOLDER_COUNT) {
+                            FeedSection(
+                                title = loadingLabel,
+                                state = HomeFeedLoadState.Loading,
+                                onMediaClick = {},
+                                onShowMoreClick = {},
+                                isInteractive = false,
+                            )
                         }
-
-                        Text(
-                            text = message.orEmpty(),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.78f)
-                        )
                     }
-                }
 
-                else -> {
-                    itemsIndexed(
-                        items = uiState.sections,
-                        key = { _, section -> section.id }
-                    ) { index, section ->
-                        FeedSection(
-                            title = section.title,
-                            state = HomeFeedLoadState.Success(section.items),
-                            onMediaClick = onMediaClick,
-                            onShowMoreClick = {
-                                onOpenFeedGrid(section)
-                            },
-                            isInteractive = true,
-                            firstItemFocusRequester = if (index == 0) {
-                                firstFeedCardFocusRequester
-                            } else {
-                                null
+                    uiState.sections.isEmpty() -> {
+                        item {
+                            val message = when {
+                                !uiState.isAnySyncApiAvailable -> noLibraryAccountsLabel
+                                !uiState.errorMessage.isNullOrBlank() -> uiState.errorMessage
+                                else -> emptyLibraryLabel
                             }
-                        )
+
+                            Text(
+                                text = message.orEmpty(),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White.copy(alpha = 0.78f)
+                            )
+                        }
+                    }
+
+                    else -> {
+                        itemsIndexed(
+                            items = uiState.sections,
+                            key = { _, section -> section.id }
+                        ) { index, section ->
+                            FeedSection(
+                                title = section.title,
+                                state = HomeFeedLoadState.Success(section.items),
+                                onMediaClick = onMediaClick,
+                                onShowMoreClick = {
+                                    onOpenFeedGrid(section)
+                                },
+                                isInteractive = true,
+                                firstItemFocusRequester = if (index == 0) {
+                                    firstFeedCardFocusRequester
+                                } else {
+                                    null
+                                }
+                            )
+                        }
                     }
                 }
             }

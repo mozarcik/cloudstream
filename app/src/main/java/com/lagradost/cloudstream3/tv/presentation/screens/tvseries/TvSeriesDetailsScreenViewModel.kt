@@ -4,9 +4,12 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -27,6 +30,10 @@ class TvSeriesDetailsScreenViewModel(
 
     private val favoriteOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val bookmarkOverrides = MutableStateFlow<Map<String, WatchType>>(emptyMap())
+    private val sourceUrl: String?
+        get() = savedStateHandle.get(TvSeriesDetailsScreen.UrlBundleKey)
+    private val sourceApiName: String?
+        get() = savedStateHandle.get(TvSeriesDetailsScreen.ApiNameBundleKey)
     private val initialLoadingPreview = DetailsLoadingPreview(
         title = savedStateHandle.get<String>(TvSeriesDetailsScreen.LoadingTitleBundleKey)
             ?.takeIf { it.isNotBlank() },
@@ -35,6 +42,51 @@ class TvSeriesDetailsScreenViewModel(
         backdropUri = savedStateHandle.get<String>(TvSeriesDetailsScreen.LoadingBackdropBundleKey)
             ?.takeIf { it.isNotBlank() },
     )
+    val unavailableDetails: UnavailableDetailsUiModel
+        get() {
+            val title = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingTitleBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                .orEmpty()
+            val posterUrl = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingPosterBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val backdropUrl = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingBackdropBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val description = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingDescriptionBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val type = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingTypeBundleKey)
+                .toTvTypeOrNull()
+                ?: TvType.TvSeries
+            val year = savedStateHandle.get<Int>(TvSeriesDetailsScreen.LoadingYearBundleKey)
+            val providerName = savedStateHandle
+                .get<String>(TvSeriesDetailsScreen.LoadingProviderBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                ?: sourceApiName
+
+            return UnavailableDetailsUiModel(
+                title = title,
+                posterUrl = posterUrl,
+                backdropUrl = backdropUrl,
+                description = description,
+                type = type,
+                year = year,
+                providerName = providerName
+            )
+        }
+    val shouldShowUnavailableState: Boolean
+        get() = !sourceUrl.isNullOrBlank() && !sourceApiName.isNullOrBlank()
+    val canRemoveFromLibrary: Boolean by lazy {
+        val url = sourceUrl ?: return@lazy false
+        val apiName = sourceApiName ?: return@lazy false
+        UnavailableDetailsCompat.isInLocalLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 
     private val baseUiState = savedStateHandle
         .getStateFlow<String?>(TvSeriesDetailsScreen.UrlBundleKey, null)
@@ -155,6 +207,15 @@ class TvSeriesDetailsScreenViewModel(
             }
         }
     }
+
+    fun removeUnavailableItemFromLibrary(): Boolean {
+        val url = sourceUrl ?: return false
+        val apiName = sourceApiName ?: return false
+        return UnavailableDetailsCompat.removeFromLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 }
 
 private fun MovieDetails.withLibraryOverride(
@@ -187,4 +248,11 @@ sealed class TvSeriesDetailsScreenUiState {
         val sourceUrl: String,
         val apiName: String,
     ) : TvSeriesDetailsScreenUiState()
+}
+
+private fun String?.toTvTypeOrNull(): TvType? {
+    if (this.isNullOrBlank()) return null
+    return TvType.entries.firstOrNull { type ->
+        type.name == this
+    }
 }

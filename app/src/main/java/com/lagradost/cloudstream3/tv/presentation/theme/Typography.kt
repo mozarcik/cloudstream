@@ -103,8 +103,8 @@ val Typography = Typography(
     labelMedium = TextStyle(
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        fontWeight = CtaWeight,
-        letterSpacing = 0.25.sp,
+        fontWeight = MetaWeight,
+        letterSpacing = 0.1.sp,
         fontFamily = InterFontFamily,
         textMotion = TextMotion.Animated
     ),

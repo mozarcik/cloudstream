@@ -4,8 +4,11 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +29,10 @@ class MovieDetailsScreenViewModel(
 
     private val favoriteOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val bookmarkOverrides = MutableStateFlow<Map<String, WatchType>>(emptyMap())
+    private val sourceUrl: String?
+        get() = savedStateHandle.get(MovieDetailsScreen.UrlBundleKey)
+    private val sourceApiName: String?
+        get() = savedStateHandle.get(MovieDetailsScreen.ApiNameBundleKey)
 
     private val initialLoadingPreview = DetailsLoadingPreview(
         title = savedStateHandle.get<String>(MovieDetailsScreen.LoadingTitleBundleKey)
@@ -35,6 +42,51 @@ class MovieDetailsScreenViewModel(
         backdropUri = savedStateHandle.get<String>(MovieDetailsScreen.LoadingBackdropBundleKey)
             ?.takeIf { it.isNotBlank() },
     )
+    val unavailableDetails: UnavailableDetailsUiModel
+        get() {
+            val title = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingTitleBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                .orEmpty()
+            val posterUrl = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingPosterBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val backdropUrl = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingBackdropBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val description = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingDescriptionBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val type = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingTypeBundleKey)
+                .toTvTypeOrNull()
+                ?: TvType.Movie
+            val year = savedStateHandle.get<Int>(MovieDetailsScreen.LoadingYearBundleKey)
+            val providerName = savedStateHandle
+                .get<String>(MovieDetailsScreen.LoadingProviderBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                ?: sourceApiName
+
+            return UnavailableDetailsUiModel(
+                title = title,
+                posterUrl = posterUrl,
+                backdropUrl = backdropUrl,
+                description = description,
+                type = type,
+                year = year,
+                providerName = providerName
+            )
+        }
+    val shouldShowUnavailableState: Boolean
+        get() = !sourceUrl.isNullOrBlank() && !sourceApiName.isNullOrBlank()
+    val canRemoveFromLibrary: Boolean by lazy {
+        val url = sourceUrl ?: return@lazy false
+        val apiName = sourceApiName ?: return@lazy false
+        UnavailableDetailsCompat.isInLocalLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 
     private val baseUiState = savedStateHandle
         .getStateFlow<String?>(MovieDetailsScreen.UrlBundleKey, null)
@@ -156,6 +208,15 @@ class MovieDetailsScreenViewModel(
             }
         }
     }
+
+    fun removeUnavailableItemFromLibrary(): Boolean {
+        val url = sourceUrl ?: return false
+        val apiName = sourceApiName ?: return false
+        return UnavailableDetailsCompat.removeFromLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 }
 
 private fun MovieDetails.withLibraryOverride(
@@ -188,4 +249,11 @@ sealed class MovieDetailsScreenUiState {
         val sourceUrl: String,
         val apiName: String,
     ) : MovieDetailsScreenUiState()
+}
+
+private fun String?.toTvTypeOrNull(): TvType? {
+    if (this.isNullOrBlank()) return null
+    return TvType.entries.firstOrNull { type ->
+        type.name == this
+    }
 }

@@ -218,6 +218,10 @@
     <string name="nsfw_singular">NSFW</string>
     <string name="other_singular">Inne</string>
     <string name="source_error">Błąd żródła</string>
+    <string name="tv_player_source_failed_to_load_with_code" formatted="true">Nie udało się załadować (%1$d)</string>
+    <string name="tv_player_source_unavailable">Niedostępne</string>
+    <string name="tv_player_source_error_dialog_http_code" formatted="true">Nie udało się załadować tego źródła (HTTP %1$d).</string>
+    <string name="tv_player_source_error_dialog_unavailable">To źródło jest obecnie niedostępne.</string>
     <string name="remote_error">Zdalny błąd</string>
     <string name="render_error">Błąd renderowania</string>
     <string name="unexpected_error">Nieoczekiwany błąd odtwarzacza</string>

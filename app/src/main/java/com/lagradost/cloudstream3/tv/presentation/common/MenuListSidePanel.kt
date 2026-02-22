@@ -1,23 +1,32 @@
 package com.lagradost.cloudstream3.tv.presentation.common
 
 import android.view.KeyEvent as AndroidKeyEvent
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,19 +43,43 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.tv.material3.ListItem
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Text
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
 import kotlinx.coroutines.delay
+
+enum class SidePanelTitleStyle {
+    Default,
+    SubtitleGroupHeader,
+    SubtitleItem,
+}
+
+enum class SidePanelSupportingStyle {
+    Default,
+    SourceOption,
+    SourceError,
+}
+
+enum class SidePanelContentNavigationDirection {
+    Forward,
+    Backward,
+}
 
 data class SidePanelMenuItem(
     val id: String,
     val title: String,
     val titleMaxLines: Int = 1,
+    val titleStyle: SidePanelTitleStyle = SidePanelTitleStyle.Default,
     val titleTextStyle: TextStyle? = null,
     val selected: Boolean = false,
     val enabled: Boolean = true,
@@ -58,7 +91,17 @@ data class SidePanelMenuItem(
     val itemBackgroundShape: Shape? = null,
     val focusedItemShape: Shape? = null,
     val testTag: String? = null,
-    val onClick: () -> Unit,
+    val supportingTexts: List<String> = emptyList(),
+    val supportingStyle: SidePanelSupportingStyle = SidePanelSupportingStyle.Default,
+    val showChevron: Boolean = false,
+    val chevronExpanded: Boolean = false,
+    val expandableGroupKey: String? = null,
+    val parentGroupKey: String? = null,
+    val showTrailingRadio: Boolean = false,
+    val actionToken: Any? = null,
+    val onRightActionToken: Any? = null,
+    val onLeftActionToken: Any? = null,
+    val onClick: () -> Unit = {},
     val onMenuClick: (() -> Unit)? = null,
     val onKeyUp: ((Int) -> Boolean)? = null,
     val supportingContent: (@Composable () -> Unit)? = null,
@@ -79,45 +122,101 @@ fun MenuListSidePanel(
     headerContent: (@Composable ColumnScope.() -> Unit)? = null,
     emptyContent: (@Composable () -> Unit)? = null,
     closeOnLeftPress: Boolean = true,
+    closeOnFocusExit: Boolean = true,
     initialFocusedItemId: String? = null,
     showSelectionRadio: Boolean = false,
+    contentAnimationKey: Any? = null,
+    contentNavigationDirection: SidePanelContentNavigationDirection = SidePanelContentNavigationDirection.Forward,
+    onActionTokenClick: ((Any) -> Unit)? = null,
+    onDirectionalActionToken: ((Any) -> Unit)? = null,
 ) {
-    val focusableItemIds = remember(items) {
-        items.filter { menuItem ->
-            !menuItem.isSectionHeader && menuItem.enabled && menuItem.isVisible
+    val resolvedContentKey = contentAnimationKey ?: Unit
+    val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(items) {
+        val currentKeys = buildSet {
+            items.forEach { menuItem ->
+                menuItem.expandableGroupKey?.let { key ->
+                    add(key)
+                    if (expandedGroups.containsKey(key).not()) {
+                        expandedGroups[key] = menuItem.chevronExpanded
+                    }
+                }
+            }
         }
-            .map { menuItem -> menuItem.id }
+
+        expandedGroups.keys
+            .toList()
+            .filterNot(currentKeys::contains)
+            .forEach(expandedGroups::remove)
     }
+
+    fun isItemVisible(menuItem: SidePanelMenuItem): Boolean {
+        if (!menuItem.isVisible) return false
+        val parentGroupKey = menuItem.parentGroupKey ?: return true
+        return expandedGroups[parentGroupKey] ?: true
+    }
+
+    val focusableItemIds = items.filter { menuItem ->
+        !menuItem.isSectionHeader && menuItem.enabled && isItemVisible(menuItem)
+    }
+        .map { menuItem -> menuItem.id }
     val focusRequesters = remember(focusableItemIds) {
         focusableItemIds.associateWith { FocusRequester() }
     }
+    val listState = remember(resolvedContentKey) {
+        LazyListState()
+    }
     var hasRequestedInitialFocus by remember { mutableStateOf(false) }
+    var focusedItemId by remember(resolvedContentKey) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(visible) {
-        if (!visible) {
-            hasRequestedInitialFocus = false
-        }
+    LaunchedEffect(visible, resolvedContentKey) {
+        hasRequestedInitialFocus = false
+        focusedItemId = null
     }
 
-    LaunchedEffect(visible, initialFocusedItemId, focusableItemIds, hasRequestedInitialFocus) {
-        if (!visible || hasRequestedInitialFocus || focusableItemIds.isEmpty()) {
-            return@LaunchedEffect
+    suspend fun requestItemFocus(targetItemId: String): Boolean {
+        val focusRequester = focusRequesters[targetItemId] ?: return false
+        val focusItemListIndex = items.indexOfFirst { menuItem ->
+            menuItem.id == targetItemId && isItemVisible(menuItem)
         }
 
-        delay(100)
-        val focusItemId = initialFocusedItemId?.takeIf { focusRequesters.containsKey(it) }
-            ?: focusableItemIds.first()
-        val focusRequester = focusRequesters[focusItemId] ?: return@LaunchedEffect
+        if (focusItemListIndex >= 0) {
+            listState.scrollToItem(index = focusItemListIndex)
+        }
 
-        repeat(20) {
+        repeat(2) {
             if (focusRequester.requestFocus()) {
-                hasRequestedInitialFocus = true
-                return@LaunchedEffect
+                return true
             }
             delay(16)
         }
+        return false
+    }
 
-        hasRequestedInitialFocus = true
+    LaunchedEffect(visible, resolvedContentKey, initialFocusedItemId, focusableItemIds, focusedItemId) {
+        if (!visible || focusableItemIds.isEmpty()) {
+            return@LaunchedEffect
+        }
+
+        if (focusedItemId?.let(focusableItemIds::contains) == true) {
+            return@LaunchedEffect
+        }
+
+        val focusItemId = initialFocusedItemId?.takeIf(focusRequesters::containsKey)
+            ?: focusableItemIds.first()
+        repeat(40) {
+            if (!visible) return@LaunchedEffect
+            if (focusedItemId?.let(focusableItemIds::contains) == true) {
+                return@LaunchedEffect
+            }
+            if (requestItemFocus(focusItemId)) {
+                hasRequestedInitialFocus = true
+                focusedItemId = focusItemId
+                return@LaunchedEffect
+            }
+            delay(50)
+        }
     }
 
     SlidingSidePanel(
@@ -127,165 +226,329 @@ fun MenuListSidePanel(
         panelTestTag = panelTestTag,
         modifier = modifier
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(
-                text = title,
-                modifier = Modifier.padding(20.dp),
-                fontSize = 20.sp,
-            )
-
-            headerContent?.invoke(this)
-
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectableGroup()
-                    .focusProperties {
-                        onExit = {
-                            onCloseRequested()
-                            FocusRequester.Default
-                        }
-                    }
+        val panelContent: @Composable () -> Unit = {
+            Column(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                if (items.isEmpty()) {
-                    item {
-                        emptyContent?.invoke()
-                    }
-                } else {
-                    items(
-                        items = items,
-                        key = { menuItem -> menuItem.id }
-                    ) { menuItem ->
-                        if (!menuItem.isVisible && !menuItem.animateVisibility) {
-                            return@items
-                        }
+                Text(
+                    text = title,
+                    modifier = Modifier.padding(20.dp),
+                    fontSize = 20.sp,
+                )
 
-                        if (menuItem.isSectionHeader) {
-                            Text(
-                                text = menuItem.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                            )
-                        } else {
-                            var isFocused by remember(menuItem.id) { mutableStateOf(false) }
+                headerContent?.invoke(this)
 
-                            val rowContent: @Composable () -> Unit = {
-                                ListItem(
-                                    selected = menuItem.selected,
-                                    onClick = menuItem.onClick,
-                                    enabled = menuItem.enabled,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = menuItem.itemStartPadding)
-                                        .then(
-                                            menuItem.itemBackgroundColor?.let { color ->
-                                                menuItem.itemBackgroundShape?.let { shape ->
-                                                    Modifier.background(color = color, shape = shape)
-                                                } ?: Modifier.background(color)
-                                            } ?: Modifier
-                                        )
-                                        .then(
-                                            if (isFocused) {
-                                                menuItem.focusedItemShape?.let { shape ->
-                                                    Modifier.clip(shape)
-                                                } ?: Modifier
-                                            } else {
-                                                Modifier
-                                            }
-                                        )
-                                        .then(
-                                            focusRequesters[menuItem.id]?.let { focusRequester ->
-                                                Modifier.focusRequester(focusRequester)
-                                            } ?: Modifier
-                                        )
-                                        .onFocusChanged { focusState ->
-                                            isFocused = focusState.isFocused
-                                        }
-                                        .semantics(mergeDescendants = true) { }
-                                        .then(
-                                            if (menuItem.testTag.isNullOrBlank()) {
-                                                Modifier
-                                            } else {
-                                                Modifier.testTag(menuItem.testTag)
-                                            }
-                                        )
-                                        .onPreviewKeyEvent { keyEvent ->
-                                            val nativeEvent = keyEvent.nativeKeyEvent
-                                            if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
-                                                return@onPreviewKeyEvent false
-                                            }
-
-                                            if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
-                                                return@onPreviewKeyEvent true
-                                            }
-
-                                            when (nativeEvent.keyCode) {
-                                                AndroidKeyEvent.KEYCODE_MENU -> {
-                                                    val onMenuClick = menuItem.onMenuClick ?: return@onPreviewKeyEvent false
-                                                    onMenuClick()
-                                                    true
-                                                }
-
-                                                AndroidKeyEvent.KEYCODE_DPAD_LEFT,
-                                                AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
-                                                    if (!closeOnLeftPress) {
-                                                        return@onPreviewKeyEvent false
-                                                    }
-                                                    onCloseRequested()
-                                                    true
-                                                }
-
-                                                else -> false
-                                            }
-                                        },
-                                    headlineContent = {
-                                        Column {
-                                            Text(
-                                                text = menuItem.title,
-                                                style = menuItem.titleTextStyle ?: MaterialTheme.typography.titleMedium,
-                                                maxLines = menuItem.titleMaxLines,
-                                            )
-                                            menuItem.supportingContent?.invoke()
-                                        }
-                                    },
-                                    leadingContent = menuItem.leadingContent?.let { leading ->
-                                        {
-                                            leading()
-                                        }
-                                    },
-                                    trailingContent = {
-                                        when {
-                                            menuItem.trailingContent != null -> menuItem.trailingContent.invoke()
-                                            showSelectionRadio -> RadioButton(
-                                                selected = menuItem.selected,
-                                                onClick = { }
-                                            )
-                                        }
-                                    }
-                                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectableGroup()
+                        .onPreviewKeyEvent { keyEvent ->
+                            val nativeEvent = keyEvent.nativeKeyEvent
+                            if (nativeEvent.keyCode != AndroidKeyEvent.KEYCODE_BACK &&
+                                nativeEvent.keyCode != AndroidKeyEvent.KEYCODE_ESCAPE
+                            ) {
+                                return@onPreviewKeyEvent false
                             }
 
-                            if (menuItem.animateVisibility) {
-                                AnimatedVisibility(
-                                    visible = menuItem.isVisible,
-                                    enter = expandVertically(animationSpec = tween(durationMillis = 220)),
-                                    exit = shrinkVertically(animationSpec = tween(durationMillis = 220)),
-                                ) {
-                                    Box(modifier = Modifier.animateContentSize()) {
-                                        rowContent()
-                                    }
+                            if (nativeEvent.action == AndroidKeyEvent.ACTION_UP) {
+                                onCloseRequested()
+                            }
+                            true
+                        }
+                        .focusProperties {
+                            onExit = {
+                                if (closeOnFocusExit) {
+                                    onCloseRequested()
+                                    FocusRequester.Default
+                                } else {
+                                    FocusRequester.Cancel
                                 }
-                            } else if (menuItem.isVisible) {
-                                rowContent()
+                            }
+                        },
+                    state = listState,
+                ) {
+                    if (items.isEmpty()) {
+                        item {
+                            emptyContent?.invoke()
+                        }
+                    } else {
+                        items(
+                            items = items,
+                            key = { menuItem -> menuItem.id }
+                        ) { menuItem ->
+                            val runtimeVisible = isItemVisible(menuItem)
+                            if (!runtimeVisible && !menuItem.animateVisibility) {
+                                return@items
+                            }
+
+                            if (menuItem.isSectionHeader) {
+                                Text(
+                                    text = menuItem.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                                )
+                            } else {
+                                var isFocused by remember(menuItem.id) { mutableStateOf(false) }
+                                val groupKey = menuItem.expandableGroupKey
+                                val isGroupExpanded = groupKey?.let { key ->
+                                    expandedGroups[key] ?: menuItem.chevronExpanded
+                                } ?: menuItem.chevronExpanded
+
+                                fun toggleGroup(expanded: Boolean? = null): Boolean {
+                                    val key = groupKey ?: return false
+                                    val current = expandedGroups[key] ?: menuItem.chevronExpanded
+                                    val next = expanded ?: !current
+                                    if (next == current) return false
+                                    expandedGroups[key] = next
+                                    return true
+                                }
+
+                                val rowContent: @Composable () -> Unit = {
+                                    val titleTextStyle = menuItem.titleTextStyle ?: when (menuItem.titleStyle) {
+                                        SidePanelTitleStyle.SubtitleGroupHeader -> MaterialTheme.typography.titleMedium
+                                        SidePanelTitleStyle.SubtitleItem -> MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                        SidePanelTitleStyle.Default -> MaterialTheme.typography.titleMedium
+                                    }
+                                    val supportingTextStyle = when (menuItem.supportingStyle) {
+                                        SidePanelSupportingStyle.SourceOption -> MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                        SidePanelSupportingStyle.SourceError -> MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Normal,
+                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.88f),
+                                        )
+                                        SidePanelSupportingStyle.Default -> MaterialTheme.typography.bodySmall.copy(
+                                            fontWeight = FontWeight.Normal
+                                        )
+                                    }
+
+                                    ListItem(
+                                        selected = menuItem.selected,
+                                        onClick = {
+                                            if (groupKey != null) {
+                                                toggleGroup()
+                                                return@ListItem
+                                            }
+                                            val token = menuItem.actionToken
+                                            if (token != null && onActionTokenClick != null) {
+                                                onActionTokenClick(token)
+                                            } else {
+                                                menuItem.onClick()
+                                            }
+                                        },
+                                        enabled = menuItem.enabled,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = menuItem.itemStartPadding)
+                                            .then(
+                                                menuItem.itemBackgroundColor?.let { color ->
+                                                    menuItem.itemBackgroundShape?.let { shape ->
+                                                        Modifier.background(color = color, shape = shape)
+                                                    } ?: Modifier.background(color)
+                                                } ?: Modifier
+                                            )
+                                            .then(
+                                                if (isFocused) {
+                                                    menuItem.focusedItemShape?.let { shape ->
+                                                        Modifier.clip(shape)
+                                                    } ?: Modifier
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                            .then(
+                                                focusRequesters[menuItem.id]?.let { focusRequester ->
+                                                    Modifier.focusRequester(focusRequester)
+                                                } ?: Modifier
+                                            )
+                                            .onFocusChanged { focusState ->
+                                                isFocused = focusState.isFocused
+                                                if (focusState.isFocused) {
+                                                    focusedItemId = menuItem.id
+                                                } else if (focusedItemId == menuItem.id && !focusState.hasFocus) {
+                                                    focusedItemId = null
+                                                }
+                                            }
+                                            .semantics(mergeDescendants = true) { }
+                                            .then(
+                                                if (menuItem.testTag.isNullOrBlank()) {
+                                                    Modifier
+                                                } else {
+                                                    Modifier.testTag(menuItem.testTag)
+                                                }
+                                            )
+                                            .onPreviewKeyEvent { keyEvent ->
+                                                val nativeEvent = keyEvent.nativeKeyEvent
+                                                if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
+                                                    return@onPreviewKeyEvent false
+                                                }
+
+                                                if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
+                                                    return@onPreviewKeyEvent true
+                                                }
+
+                                                when (nativeEvent.keyCode) {
+                                                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
+                                                        if (toggleGroup(expanded = true)) {
+                                                            return@onPreviewKeyEvent true
+                                                        }
+                                                    }
+
+                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                        if (toggleGroup(expanded = false)) {
+                                                            return@onPreviewKeyEvent true
+                                                        }
+                                                    }
+                                                }
+
+                                                when (nativeEvent.keyCode) {
+                                                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
+                                                        val token = menuItem.onRightActionToken
+                                                        if (token != null && onDirectionalActionToken != null) {
+                                                            onDirectionalActionToken(token)
+                                                            return@onPreviewKeyEvent true
+                                                        }
+                                                    }
+
+                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                        val token = menuItem.onLeftActionToken
+                                                        if (token != null && onDirectionalActionToken != null) {
+                                                            onDirectionalActionToken(token)
+                                                            return@onPreviewKeyEvent true
+                                                        }
+                                                    }
+                                                }
+
+                                                when (nativeEvent.keyCode) {
+                                                    AndroidKeyEvent.KEYCODE_MENU -> {
+                                                        val onMenuClick = menuItem.onMenuClick ?: return@onPreviewKeyEvent false
+                                                        onMenuClick()
+                                                        true
+                                                    }
+
+                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                        if (!closeOnLeftPress) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+                                                        onCloseRequested()
+                                                        true
+                                                    }
+
+                                                    else -> false
+                                                }
+                                            },
+                                        headlineContent = {
+                                            Column {
+                                                Text(
+                                                    text = menuItem.title,
+                                                    style = titleTextStyle,
+                                                    maxLines = menuItem.titleMaxLines,
+                                                )
+                                                if (menuItem.supportingContent != null) {
+                                                    menuItem.supportingContent.invoke()
+                                                } else if (menuItem.supportingTexts.isNotEmpty()) {
+                                                    DotSeparatedRow(
+                                                        texts = menuItem.supportingTexts,
+                                                        textStyle = supportingTextStyle,
+                                                        modifier = Modifier.padding(top = 2.dp),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        leadingContent = menuItem.leadingContent?.let { leading ->
+                                            {
+                                                leading()
+                                            }
+                                        },
+                                        trailingContent = {
+                                            when {
+                                                menuItem.trailingContent != null -> menuItem.trailingContent.invoke()
+                                                menuItem.showChevron -> {
+                                                    Icon(
+                                                        imageVector = if (isGroupExpanded) {
+                                                            Icons.Default.KeyboardArrowDown
+                                                        } else {
+                                                            Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                                        },
+                                                        contentDescription = null,
+                                                    )
+                                                }
+                                                (menuItem.showTrailingRadio || showSelectionRadio) && menuItem.selected -> {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = null,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+
+                                if (menuItem.animateVisibility) {
+                                    AnimatedVisibility(
+                                        visible = runtimeVisible,
+                                        enter = expandVertically(animationSpec = tween(durationMillis = 220)),
+                                        exit = shrinkVertically(animationSpec = tween(durationMillis = 220)),
+                                    ) {
+                                        Box(modifier = Modifier.animateContentSize()) {
+                                            rowContent()
+                                        }
+                                    }
+                                } else if (runtimeVisible) {
+                                    rowContent()
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+
+        if (contentAnimationKey == null) {
+            panelContent()
+        } else {
+            AnimatedContent(
+                targetState = resolvedContentKey,
+                modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    val isForward = contentNavigationDirection == SidePanelContentNavigationDirection.Forward
+                    if (isForward) {
+                        (slideInHorizontally(
+                            animationSpec = tween(durationMillis = 220),
+                            initialOffsetX = { fullWidth -> fullWidth / 3 },
+                        ) + fadeIn(animationSpec = tween(durationMillis = 220)))
+                            .togetherWith(
+                                slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 220),
+                                    targetOffsetX = { fullWidth -> -fullWidth / 4 },
+                                ) + fadeOut(animationSpec = tween(durationMillis = 220))
+                            )
+                    } else {
+                        (slideInHorizontally(
+                            animationSpec = tween(durationMillis = 220),
+                            initialOffsetX = { fullWidth -> -fullWidth / 3 },
+                        ) + fadeIn(animationSpec = tween(durationMillis = 220)))
+                            .togetherWith(
+                                slideOutHorizontally(
+                                    animationSpec = tween(durationMillis = 220),
+                                    targetOffsetX = { fullWidth -> fullWidth / 4 },
+                                ) + fadeOut(animationSpec = tween(durationMillis = 220))
+                            )
+                    }
+                },
+                label = "menu_side_panel_content",
+            ) {
+                panelContent()
             }
         }
     }

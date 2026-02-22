@@ -58,6 +58,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsLoa
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieActionsSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsScreen
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
 import kotlinx.coroutines.delay
@@ -74,12 +75,17 @@ object TvSeriesDetailsScreen {
     const val LoadingTitleBundleKey = "tvSeriesLoadingTitle"
     const val LoadingPosterBundleKey = "tvSeriesLoadingPoster"
     const val LoadingBackdropBundleKey = "tvSeriesLoadingBackdrop"
+    const val LoadingDescriptionBundleKey = "tvSeriesLoadingDescription"
+    const val LoadingYearBundleKey = "tvSeriesLoadingYear"
+    const val LoadingTypeBundleKey = "tvSeriesLoadingType"
+    const val LoadingProviderBundleKey = "tvSeriesLoadingProvider"
 }
 
 @Composable
 fun TvSeriesDetailsScreen(
     goToPlayer: (String?) -> Unit,
     onBackPressed: () -> Unit,
+    onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     tvSeriesDetailsScreenViewModel: TvSeriesDetailsScreenViewModel
 ) {
@@ -96,7 +102,24 @@ fun TvSeriesDetailsScreen(
         }
 
         is TvSeriesDetailsScreenUiState.Error -> {
-            Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            if (tvSeriesDetailsScreenViewModel.shouldShowUnavailableState) {
+                val unavailableDetails = tvSeriesDetailsScreenViewModel.unavailableDetails
+                UnavailableDetailsScreen(
+                    state = unavailableDetails,
+                    showRemoveFromLibraryAction = tvSeriesDetailsScreenViewModel.canRemoveFromLibrary,
+                    onRemoveFromLibrary = {
+                        tvSeriesDetailsScreenViewModel.removeUnavailableItemFromLibrary()
+                        onBackPressed()
+                    },
+                    onManualSearch = { query ->
+                        onManualSearchRequested(query)
+                    },
+                    onBackPressed = onBackPressed,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            }
         }
 
         is TvSeriesDetailsScreenUiState.Done -> {

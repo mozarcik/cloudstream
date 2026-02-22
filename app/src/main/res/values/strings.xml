@@ -482,6 +482,11 @@
     <string name="tv_home_no_sources_found">No sources found</string>
     <string name="tv_home_show_more">Show more</string>
     <string name="tv_home_failed_to_load">Failed to load</string>
+    <string name="tv_player_source_failed_to_load_with_code" formatted="true">Failed to load (%1$d)</string>
+    <string name="tv_player_source_unavailable">Unavailable</string>
+    <string name="tv_player_source_error_dialog_http_code" formatted="true">This source couldn\'t be loaded (HTTP %1$d).</string>
+    <string name="tv_player_source_error_dialog_unavailable">This source is currently unavailable.</string>
+    <string name="tv_search_failed_to_load">Couldn\'t load results from this source</string>
     <string name="tv_home_back">Back</string>
     <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>
     <string name="tv_home_no_feeds">No feeds available for this source</string>
@@ -650,6 +655,11 @@
     <string name="empty_library_no_accounts_message">Your library is empty :(
 \nLog in on a library account or add shows to your local library.</string>
     <string name="empty_library_logged_in_message">This list is empty. Try switching to another one.</string>
+    <string name="tv_unavailable_details_title">Ten tytuł jest obecnie niedostępny</string>
+    <string name="tv_unavailable_details_message">Źródło zostało usunięte lub materiał nie istnieje.</string>
+    <string name="tv_unavailable_details_message_with_provider" formatted="true">Źródło &quot;%1$s&quot; zostało usunięte lub materiał nie istnieje.</string>
+    <string name="tv_unavailable_details_remove_button">Usuń z biblioteki</string>
+    <string name="tv_unavailable_details_search_button">Wyszukaj ręcznie</string>
     <string name="safe_mode_file">Safe mode file found!\nNot loading any extensions on startup until file is removed.</string>
     <string name="revert">Revert</string>
     <string name="subscription_in_progress_notification">Updating subscribed shows</string>

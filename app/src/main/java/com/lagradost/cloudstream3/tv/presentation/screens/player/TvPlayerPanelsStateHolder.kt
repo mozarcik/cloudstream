@@ -1,12 +1,33 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Icon
+import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelSupportingStyle
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelTitleStyle
 import com.lagradost.cloudstream3.ui.player.SubtitleData
+import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.getAutoSelectLanguageTagIETF
 import com.lagradost.cloudstream3.utils.DrmExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import java.util.Locale
 
 private const val UnknownQualityLabel = "Unknown"
+private val SubtitleItemBackgroundColor = Color(0xFF0A0A0B)
+private val SubtitleItemShapeSingle = RoundedCornerShape(10.dp)
+private val SubtitleItemShapeTop = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
+private val SubtitleItemShapeBottom = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp)
+private val SubtitleItemShapeMiddle = RoundedCornerShape(0.dp)
+private val SubtitleItemFocusedShape = RoundedCornerShape(10.dp)
 
 internal data class TvPlayerPanelsSelection(
     val activePanel: TvPlayerSidePanel,
@@ -21,22 +42,28 @@ internal data class TvPlayerPanelActionOutcome(
 
 internal class TvPlayerPanelsStateHolder {
     private var activePanel: TvPlayerSidePanel = TvPlayerSidePanel.None
+    private var selectedSubtitleId: String? = null
     private var selectedSubtitleIndex: Int = -1
     private var selectedAudioTrackIndex: Int = -1
-    private val expandedSubtitleGroups = linkedMapOf<String, Boolean>()
+    private var subtitleSelectionOverriddenByUser: Boolean = false
+    private val preferredSubtitleLanguageTag: String = getAutoSelectLanguageTagIETF().trim()
+    private val preferredSubtitleLanguageKey: String = preferredSubtitleLanguageTag.lowercase(Locale.ROOT)
+    private val preferredSubtitleBaseLanguageKey: String = preferredSubtitleLanguageKey.substringBefore('-')
 
     fun reset() {
         activePanel = TvPlayerSidePanel.None
+        selectedSubtitleId = null
         selectedSubtitleIndex = -1
         selectedAudioTrackIndex = -1
-        expandedSubtitleGroups.clear()
+        subtitleSelectionOverriddenByUser = false
     }
 
     fun onSourceChanged(newLink: ExtractorLink?) {
         activePanel = TvPlayerSidePanel.None
+        selectedSubtitleId = null
         selectedSubtitleIndex = -1
         selectedAudioTrackIndex = defaultAudioTrackIndex(newLink)
-        expandedSubtitleGroups.clear()
+        subtitleSelectionOverriddenByUser = false
     }
 
     fun openPanel(panel: TvPlayerSidePanel): Boolean {
@@ -54,11 +81,44 @@ internal class TvPlayerPanelsStateHolder {
     }
 
     fun disableSubtitlesFromPlaybackError(): Boolean {
-        if (selectedSubtitleIndex < 0) return false
-
+        if (selectedSubtitleId == null && selectedSubtitleIndex < 0) return false
+        selectedSubtitleId = null
         selectedSubtitleIndex = -1
-        expandedSubtitleGroups.clear()
+        subtitleSelectionOverriddenByUser = true
         return true
+    }
+
+    fun selectSubtitleById(subtitleId: String?): Boolean {
+        if (subtitleId == null) {
+            return disableSubtitlesFromPlaybackError()
+        }
+
+        val changed = selectedSubtitleId != subtitleId || activePanel != TvPlayerSidePanel.None
+        selectedSubtitleId = subtitleId
+        selectedSubtitleIndex = -1
+        subtitleSelectionOverriddenByUser = true
+        activePanel = TvPlayerSidePanel.None
+        return changed
+    }
+
+    fun applyPreferredSubtitleAutoSelection(subtitles: List<SubtitleData>) {
+        if (subtitleSelectionOverriddenByUser) return
+        if (preferredSubtitleLanguageTag.isBlank()) return
+
+        normalizeSelectedSubtitleIndex(subtitles)
+
+        val currentSubtitle = subtitles.getOrNull(selectedSubtitleIndex)
+        if (currentSubtitle != null && currentSubtitle.matchesLanguageCode(preferredSubtitleLanguageTag)) {
+            return
+        }
+
+        val targetIndex = subtitles.indexOfFirst { subtitle ->
+            subtitle.matchesLanguageCode(preferredSubtitleLanguageTag)
+        }
+        if (targetIndex < 0) return
+
+        selectedSubtitleIndex = targetIndex
+        selectedSubtitleId = subtitles[targetIndex].getId()
     }
 
     fun selection(
@@ -89,21 +149,24 @@ internal class TvPlayerPanelsStateHolder {
                     stateChanged = false,
                 )
             }
+            is TvPlayerPanelItemAction.InspectSourceError -> {
+                TvPlayerPanelActionOutcome()
+            }
             TvPlayerPanelItemAction.DisableSubtitles -> {
-                val changed = selectedSubtitleIndex != -1 || activePanel != TvPlayerSidePanel.None
+                val changed = selectedSubtitleId != null || selectedSubtitleIndex != -1 || activePanel != TvPlayerSidePanel.None
+                selectedSubtitleId = null
                 selectedSubtitleIndex = -1
-                expandedSubtitleGroups.clear()
+                subtitleSelectionOverriddenByUser = true
                 activePanel = TvPlayerSidePanel.None
                 TvPlayerPanelActionOutcome(stateChanged = changed)
             }
             is TvPlayerPanelItemAction.SelectSubtitle -> {
-                val targetIndex = if (action.index in subtitles.indices) {
-                    action.index
-                } else {
-                    -1
-                }
-                val changed = targetIndex != selectedSubtitleIndex || activePanel != TvPlayerSidePanel.None
-                selectedSubtitleIndex = targetIndex
+                val targetSubtitle = subtitles.getOrNull(action.index)
+                val targetSubtitleId = targetSubtitle?.getId()
+                val changed = targetSubtitleId != selectedSubtitleId || activePanel != TvPlayerSidePanel.None
+                selectedSubtitleId = targetSubtitleId
+                selectedSubtitleIndex = if (targetSubtitle == null) -1 else action.index
+                subtitleSelectionOverriddenByUser = true
                 activePanel = TvPlayerSidePanel.None
                 TvPlayerPanelActionOutcome(stateChanged = changed)
             }
@@ -126,25 +189,23 @@ internal class TvPlayerPanelsStateHolder {
                 TvPlayerPanelActionOutcome(stateChanged = changed)
             }
             is TvPlayerPanelItemAction.ToggleSubtitleGroup -> {
-                val currentValue = expandedSubtitleGroups[action.groupKey] ?: false
-                expandedSubtitleGroups[action.groupKey] = !currentValue
-                TvPlayerPanelActionOutcome(stateChanged = true)
+                TvPlayerPanelActionOutcome()
             }
             is TvPlayerPanelItemAction.ExpandSubtitleGroup -> {
-                if (expandedSubtitleGroups[action.groupKey] == true) {
-                    TvPlayerPanelActionOutcome()
-                } else {
-                    expandedSubtitleGroups[action.groupKey] = true
-                    TvPlayerPanelActionOutcome(stateChanged = true)
-                }
+                TvPlayerPanelActionOutcome()
             }
             is TvPlayerPanelItemAction.CollapseSubtitleGroup -> {
-                if (expandedSubtitleGroups[action.groupKey] == false) {
-                    TvPlayerPanelActionOutcome()
-                } else {
-                    expandedSubtitleGroups[action.groupKey] = false
-                    TvPlayerPanelActionOutcome(stateChanged = true)
-                }
+                TvPlayerPanelActionOutcome()
+            }
+            TvPlayerPanelItemAction.LoadSubtitleFromFile,
+            TvPlayerPanelItemAction.OpenOnlineSubtitles,
+            TvPlayerPanelItemAction.LoadFirstAvailableSubtitle,
+            TvPlayerPanelItemAction.BackFromOnlineSubtitles,
+            TvPlayerPanelItemAction.EditOnlineSubtitlesQuery,
+            TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguage,
+            TvPlayerPanelItemAction.RetryOnlineSubtitlesSearch,
+            is TvPlayerPanelItemAction.SelectOnlineSubtitleResult -> {
+                TvPlayerPanelActionOutcome()
             }
         }
     }
@@ -152,175 +213,272 @@ internal class TvPlayerPanelsStateHolder {
     fun buildPanelsUiState(
         orderedLinks: List<ExtractorLink>,
         currentSourceIndex: Int,
+        sourceStates: Map<String, TvPlayerSourceState>,
         currentLink: ExtractorLink,
         subtitles: List<SubtitleData>,
+        showOnlineSubtitleActions: Boolean,
+        showFirstAvailableSubtitleAction: Boolean,
     ): TvPlayerPanelsUiState {
         normalizeSelectionIndexes(
             currentLink = currentLink,
             subtitles = subtitles,
         )
 
-        return when (activePanel) {
-            TvPlayerSidePanel.None -> TvPlayerPanelsUiState(activePanel = TvPlayerSidePanel.None)
-            TvPlayerSidePanel.Sources -> {
-                val sourceItems = buildList {
-                    orderedLinks
-                        .withIndex()
-                        .groupBy { indexedLink ->
-                            sourceQualityHeaderLabel(
-                                link = indexedLink.value,
-                                unknownQualityLabel = UnknownQualityLabel,
-                            )
-                        }
-                        .forEach { (qualityHeader, indexedLinks) ->
-                            add(
-                                TvPlayerPanelItemUi(
-                                    id = "source_header_${qualityHeader.replace(" ", "_")}",
-                                    title = qualityHeader,
-                                    isSectionHeader = true,
-                                    enabled = false,
-                                )
-                            )
+        val sourceItems = buildList {
+            orderedLinks
+                .withIndex()
+                .groupBy { indexedLink ->
+                    sourceQualityHeaderLabel(
+                        link = indexedLink.value,
+                        unknownQualityLabel = UnknownQualityLabel,
+                    )
+                }
+                .forEach { (qualityHeader, indexedLinks) ->
+                    add(
+                        SidePanelMenuItem(
+                            id = "source_header_${qualityHeader.replace(" ", "_")}",
+                            title = qualityHeader,
+                            isSectionHeader = true,
+                            enabled = false,
+                        )
+                    )
 
-                            indexedLinks.forEach { indexedLink ->
-                                val index = indexedLink.index
-                                val link = indexedLink.value
-                                add(
-                                    TvPlayerPanelItemUi(
-                                        id = "source_$index",
-                                        title = link.name.ifBlank { formatSourceMenuLabel(link) },
-                                        titleMaxLines = 2,
-                                        selected = index == currentSourceIndex,
-                                        detailTexts = formatSourceDetailsTexts(
-                                            link = link,
-                                            unknownQualityLabel = UnknownQualityLabel,
-                                        ),
-                                        style = TvPlayerPanelItemStyle.SourceOption,
-                                        action = TvPlayerPanelItemAction.SelectSource(index = index),
+                    indexedLinks.forEach { indexedLink ->
+                        val index = indexedLink.index
+                        val link = indexedLink.value
+                        val sourceState = sourceStates[link.url]
+                        val isErroredSource = sourceState?.status == TvPlayerSourceStatus.Error
+                        add(
+                            SidePanelMenuItem(
+                                id = "source_$index",
+                                title = link.name.ifBlank { formatSourceMenuLabel(link) },
+                                titleMaxLines = 2,
+                                selected = index == currentSourceIndex,
+                                supportingTexts = if (isErroredSource) {
+                                    listOf(sourceErrorSupportingText(sourceState = sourceState))
+                                } else {
+                                    formatSourceDetailsTexts(
+                                        link = link,
+                                        unknownQualityLabel = UnknownQualityLabel,
                                     )
-                                )
-                            }
-                        }
-                }
-                TvPlayerPanelsUiState(
-                    activePanel = TvPlayerSidePanel.Sources,
-                    sourceItems = sourceItems,
-                    sourceInitialFocusedItemId = sourceItems.firstOrNull { item ->
-                        item.id == "source_${currentSourceIndex}" && !item.isSectionHeader
-                    }?.id ?: sourceItems.firstOrNull { !it.isSectionHeader }?.id,
-                )
-            }
-            TvPlayerSidePanel.Subtitles -> {
-                val selectedSubtitleGroupKey = subtitles.getOrNull(selectedSubtitleIndex)?.let(::subtitleLanguageKey)
-                val subtitleLanguageGroups = buildSubtitleLanguageGroups(
-                    subtitles = subtitles,
-                    selectedSubtitleIndex = selectedSubtitleIndex,
-                )
-                val subtitleItems = buildList {
-                    add(
-                        TvPlayerPanelItemUi(
-                            id = "subtitle_none",
-                            titleResId = R.string.no_subtitles,
-                            selected = selectedSubtitleIndex == -1,
-                            action = TvPlayerPanelItemAction.DisableSubtitles,
-                        )
-                    )
-
-                    subtitleLanguageGroups.forEach { group ->
-                        val groupItemId = subtitleGroupItemId(group.key)
-                        val headerId = "subtitle_lang_$groupItemId"
-                        val isExpanded = expandedSubtitleGroups[group.key] ?: (group.key == selectedSubtitleGroupKey)
-
-                        add(
-                            TvPlayerPanelItemUi(
-                                id = headerId,
-                                title = group.displayName,
-                                selected = !isExpanded && group.items.any { indexedSubtitle ->
-                                    indexedSubtitle.index == selectedSubtitleIndex
                                 },
-                                style = TvPlayerPanelItemStyle.SubtitleGroupHeader,
-                                showChevron = true,
-                                chevronExpanded = isExpanded,
-                                action = TvPlayerPanelItemAction.ToggleSubtitleGroup(group.key),
-                                onRightAction = if (isExpanded) {
-                                    null
+                                supportingStyle = if (isErroredSource) {
+                                    SidePanelSupportingStyle.SourceError
                                 } else {
-                                    TvPlayerPanelItemAction.ExpandSubtitleGroup(group.key)
+                                    SidePanelSupportingStyle.SourceOption
                                 },
-                                onLeftAction = if (isExpanded) {
-                                    TvPlayerPanelItemAction.CollapseSubtitleGroup(group.key)
+                                actionToken = if (isErroredSource) {
+                                    TvPlayerPanelItemAction.InspectSourceError(index = index)
+                                } else {
+                                    TvPlayerPanelItemAction.SelectSource(index = index)
+                                },
+                                trailingContent = if (isErroredSource) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Outlined.ErrorOutline,
+                                            contentDescription = null,
+                                        )
+                                    }
                                 } else {
                                     null
                                 },
                             )
                         )
+                    }
+                }
+        }
+        val sourceInitialFocusedItemId = sourceItems.firstOrNull { item ->
+            item.id == "source_${currentSourceIndex}" && !item.isSectionHeader
+        }?.id ?: sourceItems.firstOrNull { !it.isSectionHeader }?.id
 
-                        group.items.forEachIndexed { itemIndex, indexedSubtitle ->
-                            val index = indexedSubtitle.index
-                            val subtitle = indexedSubtitle.value
-                            add(
-                                TvPlayerPanelItemUi(
-                                    id = "subtitle_$index",
-                                    title = subtitle.name,
-                                    titleMaxLines = 2,
-                                    selected = selectedSubtitleIndex == index,
-                                    isVisible = isExpanded,
-                                    detailTexts = formatSubtitleDetailsTexts(subtitle),
-                                    style = subtitleItemStyle(itemIndex = itemIndex, groupSize = group.items.size),
-                                    showTrailingRadio = true,
-                                    action = TvPlayerPanelItemAction.SelectSubtitle(index),
-                                )
+        val selectedSubtitleGroupKey = subtitles.getOrNull(selectedSubtitleIndex)?.let(::subtitleLanguageKey)
+        val subtitleLanguageGroups = buildSubtitleLanguageGroups(
+            subtitles = subtitles,
+        )
+        val subtitleItems = buildList {
+            add(
+                SidePanelMenuItem(
+                    id = "subtitle_none",
+                    title = stringFromAppContext(
+                        resId = R.string.no_subtitles,
+                        fallback = "No subtitles",
+                    ),
+                    selected = selectedSubtitleIndex == -1,
+                    actionToken = TvPlayerPanelItemAction.DisableSubtitles,
+                )
+            )
+            add(
+                SidePanelMenuItem(
+                    id = SubtitleLoadFromFileItemId,
+                    title = stringFromAppContext(
+                        resId = R.string.player_load_subtitles,
+                        fallback = "Load from file",
+                    ),
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Download,
+                            contentDescription = null,
+                        )
+                    },
+                    actionToken = TvPlayerPanelItemAction.LoadSubtitleFromFile,
+                )
+            )
+
+            if (showOnlineSubtitleActions) {
+                add(
+                    SidePanelMenuItem(
+                        id = SubtitleLoadFromInternetItemId,
+                        title = stringFromAppContext(
+                            resId = R.string.player_load_subtitles_online,
+                            fallback = "Load from Internet",
+                        ),
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
                             )
-                        }
-                    }
-                }
-                val initialSubtitleFocusedItemId = when {
-                    selectedSubtitleIndex == -1 -> "subtitle_none"
-                    selectedSubtitleGroupKey == null -> subtitleItems.firstOrNull { it.isVisible && !it.isSectionHeader }?.id
-                    else -> {
-                        val selectedGroupExpanded = expandedSubtitleGroups[selectedSubtitleGroupKey] ?: true
-                        if (selectedGroupExpanded) {
-                            "subtitle_$selectedSubtitleIndex"
-                        } else {
-                            "subtitle_lang_${subtitleGroupItemId(selectedSubtitleGroupKey)}"
-                        }
-                    }
-                }
-                TvPlayerPanelsUiState(
-                    activePanel = TvPlayerSidePanel.Subtitles,
-                    subtitleItems = subtitleItems,
-                    subtitleInitialFocusedItemId = initialSubtitleFocusedItemId
-                        ?: subtitleItems.firstOrNull { it.isVisible && !it.isSectionHeader }?.id,
+                        },
+                        actionToken = TvPlayerPanelItemAction.OpenOnlineSubtitles,
+                    )
                 )
             }
-            TvPlayerSidePanel.Tracks -> {
-                val trackItems = buildList {
+
+            if (showFirstAvailableSubtitleAction) {
+                add(
+                    SidePanelMenuItem(
+                        id = SubtitleLoadFirstAvailableItemId,
+                        title = stringFromAppContext(
+                            resId = R.string.player_load_one_subtitle_online,
+                            fallback = "Load first available",
+                        ),
+                        leadingContent = {
+                            Icon(
+                                imageVector = Icons.Default.DoneAll,
+                                contentDescription = null,
+                            )
+                        },
+                        actionToken = TvPlayerPanelItemAction.LoadFirstAvailableSubtitle,
+                    )
+                )
+            }
+
+            /*
+             * Keep language groups below utility actions in fixed order:
+             * none -> file -> internet -> first available.
+             */
+            subtitleLanguageGroups.forEach { group ->
+                val groupItemId = subtitleGroupItemId(group.key)
+                val headerId = "subtitle_lang_$groupItemId"
+                val isExpanded = group.key == selectedSubtitleGroupKey
+
+                add(
+                    SidePanelMenuItem(
+                        id = headerId,
+                        title = group.displayName,
+                        selected = group.items.any { indexedSubtitle ->
+                            indexedSubtitle.index == selectedSubtitleIndex
+                        },
+                        titleStyle = SidePanelTitleStyle.SubtitleGroupHeader,
+                        showChevron = true,
+                        chevronExpanded = isExpanded,
+                        expandableGroupKey = group.key,
+                    )
+                )
+
+                group.items.forEachIndexed { itemIndex, indexedSubtitle ->
+                    val index = indexedSubtitle.index
+                    val subtitle = indexedSubtitle.value
+                    val subtitleStyle = subtitleItemStyle(itemIndex = itemIndex, groupSize = group.items.size)
                     add(
-                        TvPlayerPanelItemUi(
-                            id = "track_default",
-                            titleResId = R.string.action_default,
-                            selected = selectedAudioTrackIndex == -1,
-                            action = TvPlayerPanelItemAction.SelectDefaultTrack,
+                        SidePanelMenuItem(
+                            id = "subtitle_$index",
+                            title = subtitle.name,
+                            titleMaxLines = 2,
+                            titleStyle = SidePanelTitleStyle.SubtitleItem,
+                            selected = selectedSubtitleIndex == index,
+                            parentGroupKey = group.key,
+                            supportingTexts = formatSubtitleDetailsTexts(subtitle),
+                            showTrailingRadio = true,
+                            actionToken = TvPlayerPanelItemAction.SelectSubtitle(index),
+                            itemBackgroundColor = subtitleItemBackgroundColor(subtitleStyle),
+                            itemBackgroundShape = subtitleItemBackgroundShape(subtitleStyle),
+                            focusedItemShape = subtitleItemFocusedShape(subtitleStyle),
                         )
                     )
-                    currentLink.audioTracks.forEachIndexed { index, audioTrack ->
-                        add(
-                            TvPlayerPanelItemUi(
-                                id = "track_$index",
-                                title = formatAudioTrackLabel(index = index, track = audioTrack),
-                                selected = selectedAudioTrackIndex == index,
-                                action = TvPlayerPanelItemAction.SelectTrack(index),
-                            )
-                        )
-                    }
                 }
-                TvPlayerPanelsUiState(
-                    activePanel = TvPlayerSidePanel.Tracks,
-                    trackItems = trackItems,
-                    trackInitialFocusedItemId = trackItems.firstOrNull { it.selected }?.id
-                        ?: trackItems.firstOrNull()?.id,
+            }
+        }
+        val initialSubtitleFocusedItemId = when {
+            selectedSubtitleIndex == -1 -> "subtitle_none"
+            selectedSubtitleGroupKey == null -> subtitleItems.firstOrNull { !it.isSectionHeader }?.id
+            else -> "subtitle_$selectedSubtitleIndex"
+        }
+
+        val trackItems = buildList {
+            add(
+                SidePanelMenuItem(
+                    id = "track_default",
+                    title = stringFromAppContext(
+                        resId = R.string.action_default,
+                        fallback = "Default",
+                    ),
+                    selected = selectedAudioTrackIndex == -1,
+                    actionToken = TvPlayerPanelItemAction.SelectDefaultTrack,
+                )
+            )
+            currentLink.audioTracks.forEachIndexed { index, audioTrack ->
+                add(
+                    SidePanelMenuItem(
+                        id = "track_$index",
+                        title = formatAudioTrackLabel(index = index, track = audioTrack),
+                        selected = selectedAudioTrackIndex == index,
+                        actionToken = TvPlayerPanelItemAction.SelectTrack(index),
+                    )
                 )
             }
+        }
+        val trackInitialFocusedItemId = trackItems.firstOrNull { it.selected }?.id
+            ?: trackItems.firstOrNull()?.id
+
+        return TvPlayerPanelsUiState(
+            activePanel = activePanel,
+            sourceItems = sourceItems,
+            subtitleItems = subtitleItems,
+            trackItems = trackItems,
+            sourceInitialFocusedItemId = sourceInitialFocusedItemId,
+            subtitleInitialFocusedItemId = initialSubtitleFocusedItemId
+                ?: subtitleItems.firstOrNull { !it.isSectionHeader }?.id,
+            trackInitialFocusedItemId = trackInitialFocusedItemId,
+        )
+    }
+
+    private fun subtitleItemBackgroundColor(style: TvPlayerPanelItemStyle): Color? {
+        return when (style) {
+            TvPlayerPanelItemStyle.SubtitleItemSingle,
+            TvPlayerPanelItemStyle.SubtitleItemTop,
+            TvPlayerPanelItemStyle.SubtitleItemMiddle,
+            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemBackgroundColor
+            else -> null
+        }
+    }
+
+    private fun subtitleItemBackgroundShape(style: TvPlayerPanelItemStyle): Shape? {
+        return when (style) {
+            TvPlayerPanelItemStyle.SubtitleItemSingle -> SubtitleItemShapeSingle
+            TvPlayerPanelItemStyle.SubtitleItemTop -> SubtitleItemShapeTop
+            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemShapeBottom
+            TvPlayerPanelItemStyle.SubtitleItemMiddle -> SubtitleItemShapeMiddle
+            else -> null
+        }
+    }
+
+    private fun subtitleItemFocusedShape(style: TvPlayerPanelItemStyle): Shape? {
+        return when (style) {
+            TvPlayerPanelItemStyle.SubtitleItemSingle,
+            TvPlayerPanelItemStyle.SubtitleItemTop,
+            TvPlayerPanelItemStyle.SubtitleItemMiddle,
+            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemFocusedShape
+            else -> null
         }
     }
 
@@ -328,11 +486,23 @@ internal class TvPlayerPanelsStateHolder {
         currentLink: ExtractorLink,
         subtitles: List<SubtitleData>,
     ) {
-        if (selectedSubtitleIndex !in subtitles.indices) {
-            selectedSubtitleIndex = -1
-        }
+        normalizeSelectedSubtitleIndex(subtitles)
         if (selectedAudioTrackIndex !in currentLink.audioTracks.indices) {
             selectedAudioTrackIndex = -1
+        }
+    }
+
+    private fun normalizeSelectedSubtitleIndex(subtitles: List<SubtitleData>) {
+        selectedSubtitleIndex = selectedSubtitleId?.let { subtitleId ->
+            subtitles.indexOfFirst { subtitle ->
+                subtitle.getId() == subtitleId
+            }.takeIf { index -> index >= 0 }
+        } ?: -1
+        if (selectedSubtitleIndex == -1) {
+            selectedSubtitleId = null
+        }
+        if (selectedSubtitleIndex !in subtitles.indices) {
+            selectedSubtitleIndex = -1
         }
     }
 
@@ -396,12 +566,30 @@ internal class TvPlayerPanelsStateHolder {
         }.distinct()
     }
 
+    private fun sourceErrorSupportingText(sourceState: TvPlayerSourceState?): String {
+        val httpCode = sourceState?.httpCode
+        return if (httpCode != null) {
+            val template = stringFromAppContext(
+                resId = R.string.tv_player_source_failed_to_load_with_code,
+                fallback = "Failed to load (%1\$d)",
+            )
+            runCatching {
+                template.format(httpCode)
+            }.getOrElse {
+                "Failed to load ($httpCode)"
+            }
+        } else {
+            stringFromAppContext(
+                resId = R.string.tv_player_source_unavailable,
+                fallback = "Unavailable",
+            )
+        }
+    }
+
     private fun buildSubtitleLanguageGroups(
         subtitles: List<SubtitleData>,
-        selectedSubtitleIndex: Int,
     ): List<SubtitleLanguageGroup> {
         val indexedSubtitles = subtitles.withIndex().toList()
-        val selectedGroupKey = indexedSubtitles.getOrNull(selectedSubtitleIndex)?.value?.let(::subtitleLanguageKey)
         val grouped = indexedSubtitles.groupBy { indexedSubtitle ->
             subtitleLanguageKey(indexedSubtitle.value)
         }
@@ -419,9 +607,7 @@ internal class TvPlayerPanelsStateHolder {
                 ),
             )
         }.sortedWith(
-            compareByDescending<SubtitleLanguageGroup> { group ->
-                group.key == selectedGroupKey
-            }.thenBy { group ->
+            compareBy<SubtitleLanguageGroup> { group ->
                 subtitleLanguagePreferredRank(group.key)
             }.thenBy { group ->
                 group.displayName.lowercase(Locale.getDefault())
@@ -434,11 +620,11 @@ internal class TvPlayerPanelsStateHolder {
     }
 
     private fun subtitleLanguagePreferredRank(languageKey: String): Int {
-        return when (languageKey.substringBefore('-')) {
-            "pl" -> 0
-            "en" -> 1
-            else -> 2
-        }
+        if (preferredSubtitleLanguageKey.isBlank()) return 1
+        val normalizedLanguageKey = languageKey.lowercase(Locale.ROOT)
+        if (normalizedLanguageKey == preferredSubtitleLanguageKey) return 0
+        if (normalizedLanguageKey.substringBefore('-') == preferredSubtitleBaseLanguageKey) return 0
+        return 1
     }
 
     private fun subtitleLanguageKey(subtitle: SubtitleData): String {
@@ -515,5 +701,12 @@ internal class TvPlayerPanelsStateHolder {
         } else {
             "Track ${index + 1} ($host)"
         }
+    }
+
+    private fun stringFromAppContext(
+        resId: Int,
+        fallback: String,
+    ): String {
+        return CloudStreamApp.context?.getString(resId) ?: fallback
     }
 }

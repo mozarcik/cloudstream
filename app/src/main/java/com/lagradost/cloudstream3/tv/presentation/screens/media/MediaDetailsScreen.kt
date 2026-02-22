@@ -62,6 +62,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.tvseries.NoEpisodesRow
 import com.lagradost.cloudstream3.tv.presentation.screens.tvseries.SeasonSelectorRow
 import com.lagradost.cloudstream3.tv.presentation.screens.tvseries.SeasonsSectionHeader
 import com.lagradost.cloudstream3.tv.presentation.screens.tvseries.resolveInitialSeasonId
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsScreen
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -74,12 +75,20 @@ private const val DownloadLinksPrefetchDelayMs = 500L
 object MediaDetailsScreen {
     const val UrlBundleKey = "url"
     const val ApiNameBundleKey = "apiName"
+    const val LoadingTitleBundleKey = "mediaLoadingTitle"
+    const val LoadingPosterBundleKey = "mediaLoadingPoster"
+    const val LoadingBackdropBundleKey = "mediaLoadingBackdrop"
+    const val LoadingDescriptionBundleKey = "mediaLoadingDescription"
+    const val LoadingYearBundleKey = "mediaLoadingYear"
+    const val LoadingTypeBundleKey = "mediaLoadingType"
+    const val LoadingProviderBundleKey = "mediaLoadingProvider"
 }
 
 @Composable
 fun MediaDetailsScreen(
     goToPlayer: (String?) -> Unit,
     onBackPressed: () -> Unit,
+    onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     mediaDetailsScreenViewModel: MediaDetailsScreenViewModel
 ) {
@@ -91,7 +100,24 @@ fun MediaDetailsScreen(
         }
 
         is MediaDetailsScreenUiState.Error -> {
-            Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            if (mediaDetailsScreenViewModel.shouldShowUnavailableState) {
+                val unavailableDetails = mediaDetailsScreenViewModel.unavailableDetails
+                UnavailableDetailsScreen(
+                    state = unavailableDetails,
+                    showRemoveFromLibraryAction = mediaDetailsScreenViewModel.canRemoveFromLibrary,
+                    onRemoveFromLibrary = {
+                        mediaDetailsScreenViewModel.removeUnavailableItemFromLibrary()
+                        onBackPressed()
+                    },
+                    onManualSearch = { query ->
+                        onManualSearchRequested(query)
+                    },
+                    onBackPressed = onBackPressed,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            }
         }
 
         is MediaDetailsScreenUiState.Done -> {

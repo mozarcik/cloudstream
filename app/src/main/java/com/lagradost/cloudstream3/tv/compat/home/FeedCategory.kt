@@ -1,9 +1,12 @@
 package com.lagradost.cloudstream3.tv.compat.home
 
+import androidx.compose.runtime.Immutable
+
 /**
  * Reprezentuje jedną kategorię feedu (np. "Trending", "Top 10").
  * Mapowane z HomePageList.
  */
+@Immutable
 data class FeedCategory(
     val id: String,                    // Unique ID dla kategorii
     val name: String,                  // Display name
@@ -23,6 +26,7 @@ data class FeedCategory(
     }
 }
 
+@Immutable
 data class MainPageRequest(
     val data: String,
     val name: String,

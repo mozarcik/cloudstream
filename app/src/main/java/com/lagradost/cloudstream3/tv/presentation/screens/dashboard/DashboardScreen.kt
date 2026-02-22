@@ -53,8 +53,9 @@ import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGri
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchScreen
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.SettingsScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.MasterDetailSettingsScreen
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
@@ -78,10 +79,12 @@ fun DashboardScreen(
     openCategoryMovieList: (categoryId: String) -> Unit,
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
-    openMediaDetailsScreen: (mediaId: String) -> Unit,
+    openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
     openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     isComingBackFromDifferentScreen: Boolean,
     resetIsComingBackFromDifferentScreen: () -> Unit,
+    searchPrefillQuery: String?,
+    onSearchPrefillConsumed: () -> Unit,
     onBackPressed: () -> Unit
 ) {
     val density = LocalDensity.current
@@ -210,6 +213,8 @@ fun DashboardScreen(
             openVideoPlayer = openVideoPlayer,
             updateTopBarVisibility = { isTopBarVisible = it },
             updateTopBarFocusable = { isTopBarFocusable = it },
+            searchPrefillQuery = searchPrefillQuery,
+            onSearchPrefillConsumed = onSearchPrefillConsumed,
             navController = navController,
             modifier = Modifier.padding(top = navHostTopPaddingDp),
         )
@@ -240,13 +245,26 @@ private fun BackPressHandledArea(
 private fun Body(
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
-    openMediaDetailsScreen: (mediaId: String) -> Unit,
+    openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
     openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
+    searchPrefillQuery: String?,
+    onSearchPrefillConsumed: () -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
-) =
+) {
+    LaunchedEffect(searchPrefillQuery) {
+        val query = searchPrefillQuery?.trim().orEmpty()
+        if (query.isBlank()) return@LaunchedEffect
+
+        SearchPrefillStore.setPendingQuery(query)
+        navController.navigate(Screens.Search()) {
+            launchSingleTop = true
+        }
+        onSearchPrefillConsumed()
+    }
+
     NavHost(
         modifier = modifier,
         navController = navController,
@@ -269,7 +287,7 @@ private fun Body(
                             openTvSeriesDetailsScreen(item)
                         }
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -296,7 +314,7 @@ private fun Body(
                         }
 
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -317,7 +335,7 @@ private fun Body(
                             openTvSeriesDetailsScreen(item)
                         }
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -339,7 +357,7 @@ private fun Body(
                             openTvSeriesDetailsScreen(item)
                         }
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -363,7 +381,9 @@ private fun Body(
                                         name = item.title,
                                         posterUri = item.posterUrl.orEmpty(),
                                         type = null,
-                                        score = null
+                                        score = null,
+                                        backdropUri = item.backdropUrl,
+                                        description = item.description
                                     )
                                 )
                             }
@@ -377,13 +397,27 @@ private fun Body(
                                         name = item.title,
                                         posterUri = item.posterUrl.orEmpty(),
                                         type = null,
-                                        score = null
+                                        score = null,
+                                        backdropUri = item.backdropUrl,
+                                        description = item.description
                                     )
                                 )
                             }
 
                             DownloadMediaType.Media -> {
-                                openMediaDetailsScreen("${item.sourceUrl}|${item.apiName}")
+                                openMediaDetailsScreen(
+                                    MediaItemCompat.Other(
+                                        id = item.id,
+                                        url = item.sourceUrl,
+                                        apiName = item.apiName,
+                                        name = item.title,
+                                        posterUri = item.posterUrl.orEmpty(),
+                                        type = null,
+                                        score = null,
+                                        backdropUri = item.backdropUrl,
+                                        description = item.description
+                                    )
+                                )
                             }
                         }
                     }
@@ -402,7 +436,7 @@ private fun Body(
                             openTvSeriesDetailsScreen(item)
                         }
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -424,7 +458,7 @@ private fun Body(
                             openTvSeriesDetailsScreen(item)
                         }
                         is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen("${item.url}|${item.apiName}")
+                            openMediaDetailsScreen(item)
                         }
                     }
                 },
@@ -435,7 +469,7 @@ private fun Body(
             )
         }
         composable(Screens.Settings()) {
-            SettingsScreen(
+            MasterDetailSettingsScreen(
                 onExitSettings = {
                     updateTopBarVisibility(true)
                     updateTopBarFocusable(true)
@@ -446,6 +480,7 @@ private fun Body(
             )
         }
     }
+}
 
 @Composable
 private fun PlaceholderScreen(name: String) {

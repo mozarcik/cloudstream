@@ -1,7 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -31,6 +30,7 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
 import com.lagradost.cloudstream3.tv.compat.home.FeedRepositoryImpl
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -97,140 +97,142 @@ fun HomeScreenV2(
         viewModel.setMorePanelOpen(false)
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0C1016))
+    HaloHost(
+        modifier = modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(end = if (isMorePanelOpen) 0.dp else 2.dp)
+        Box(
+            modifier = Modifier.fillMaxSize()
         ) {
-            item {
-                ContinueWatchingHeroSection(
-                    state = uiState.continueWatchingState,
-                    resumeFocusRequester = resumeFocusRequester,
-                    sourceButtonFocusRequester = quickSourcesEntryFocusRequester,
-                    isInteractive = !isMorePanelOpen,
-                    modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
-                    onResumeClick = onContinueWatchingPlay,
-                    onDetailsClick = onMediaClick,
-                    onCardClick = onMediaClick,
-                    onMoveDownFromCards = {
-                        if (isMovingDownFromCards) return@ContinueWatchingHeroSection
-                        coroutineScope.launch {
-                            isMovingDownFromCards = true
-                            if (listState.firstVisibleItemIndex < 1) {
-                                listState.animateScrollToItem(1)
-                            }
-                            shouldRestoreHeroOnFocus = true
-                            repeat(16) {
-                                if (quickSourcesEntryFocusRequester.requestFocus()) {
-                                    isMovingDownFromCards = false
-                                    return@launch
-                                }
-                                delay(16)
-                            }
-                            isMovingDownFromCards = false
-                        }
-                    },
-                    onHeroContentFocused = {
-                        if (!shouldRestoreHeroOnFocus) return@ContinueWatchingHeroSection
-                        coroutineScope.launch {
-                            listState.scrollToItem(0)
-                            shouldRestoreHeroOnFocus = false
-                        }
-                    }
-                )
-            }
-
-            item {
-                QuickSourcesRow(
-                    quickSources = uiState.quickSources,
-                    allSourcesCount = uiState.allSources.size,
-                    selectedSource = uiState.selectedSource,
-                    pinnedSourceIds = uiState.pinnedSourceIds,
-                    rowEntryFocusRequester = quickSourcesEntryFocusRequester,
-                    moreButtonFocusRequester = moreButtonFocusRequester,
-                    isInteractive = !isMorePanelOpen,
-                    downFocusRequester = if (uiState.feedSections.isNotEmpty()) {
-                        firstFeedCardFocusRequester
-                    } else {
-                        null
-                    },
-                    onSourceSelected = { source ->
-                        viewModel.selectSource(source)
-                    },
-                    onMoreClick = {
-                        viewModel.setMorePanelOpen(true)
-                    }
-                )
-            }
-
-            if (uiState.feedSections.isEmpty() && uiState.isFeedListLoading) {
-                items(count = 4) {
-                    FeedSection(
-                        title = loadingLabel,
-                        state = HomeFeedLoadState.Loading,
-                        onMediaClick = {},
-                        onShowMoreClick = {},
-                        isInteractive = false,
-                    )
-                }
-            } else if (uiState.feedSections.isEmpty()) {
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = if (isMorePanelOpen) 0.dp else 2.dp)
+            ) {
                 item {
-                    Text(
-                        text = noFeedsLabel,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.78f),
-                        modifier = Modifier.padding(top = 8.dp)
+                    ContinueWatchingHeroSection(
+                        state = uiState.continueWatchingState,
+                        resumeFocusRequester = resumeFocusRequester,
+                        sourceButtonFocusRequester = quickSourcesEntryFocusRequester,
+                        isInteractive = !isMorePanelOpen,
+                        modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
+                        onResumeClick = onContinueWatchingPlay,
+                        onDetailsClick = onMediaClick,
+                        onCardClick = onMediaClick,
+                        onMoveDownFromCards = {
+                            if (isMovingDownFromCards) return@ContinueWatchingHeroSection
+                            coroutineScope.launch {
+                                isMovingDownFromCards = true
+                                if (listState.firstVisibleItemIndex < 1) {
+                                    listState.animateScrollToItem(1)
+                                }
+                                shouldRestoreHeroOnFocus = true
+                                repeat(16) {
+                                    if (quickSourcesEntryFocusRequester.requestFocus()) {
+                                        isMovingDownFromCards = false
+                                        return@launch
+                                    }
+                                    delay(16)
+                                }
+                                isMovingDownFromCards = false
+                            }
+                        },
+                        onHeroContentFocused = {
+                            if (!shouldRestoreHeroOnFocus) return@ContinueWatchingHeroSection
+                            coroutineScope.launch {
+                                listState.scrollToItem(0)
+                                shouldRestoreHeroOnFocus = false
+                            }
+                        }
                     )
                 }
-            } else {
-                itemsIndexed(
-                    items = uiState.feedSections,
-                    key = { _, section -> section.feed.id }
-                ) { index, section ->
-                    FeedSection(
-                        title = section.feed.name,
-                        state = section.state,
-                        onMediaClick = onMediaClick,
-                        onShowMoreClick = {
-                            onOpenFeedGrid(section.feed)
-                        },
+
+                item {
+                    QuickSourcesRow(
+                        quickSources = uiState.quickSources,
+                        allSourcesCount = uiState.allSources.size,
+                        selectedSource = uiState.selectedSource,
+                        pinnedSourceIds = uiState.pinnedSourceIds,
+                        rowEntryFocusRequester = quickSourcesEntryFocusRequester,
+                        moreButtonFocusRequester = moreButtonFocusRequester,
                         isInteractive = !isMorePanelOpen,
-                        firstItemFocusRequester = if (index == 0) {
+                        downFocusRequester = if (uiState.feedSections.isNotEmpty()) {
                             firstFeedCardFocusRequester
                         } else {
                             null
+                        },
+                        onSourceSelected = { source ->
+                            viewModel.selectSource(source)
+                        },
+                        onMoreClick = {
+                            viewModel.setMorePanelOpen(true)
                         }
                     )
                 }
-            }
-        }
 
-        SourcesMorePanel(
-            visible = isMorePanelOpen,
-            sources = uiState.morePanelSources,
-            selectedSource = uiState.selectedSource,
-            pinnedSourceIds = uiState.pinnedSourceIds,
-            usageCountBySourceId = uiState.usageCountBySourceId,
-            sortMode = uiState.sortMode,
-            searchQuery = uiState.searchQuery,
-            onSearchQueryChange = viewModel::setSearchQuery,
-            onSortModeChange = viewModel::setSortMode,
-            onSourceSelected = { source ->
-                viewModel.selectSource(source)
-                viewModel.setMorePanelOpen(false)
-            },
-            onTogglePin = viewModel::togglePinned,
-            onCloseRequested = {
-                viewModel.setMorePanelOpen(false)
+                if (uiState.feedSections.isEmpty() && uiState.isFeedListLoading) {
+                    items(count = 4) {
+                        FeedSection(
+                            title = loadingLabel,
+                            state = HomeFeedLoadState.Loading,
+                            onMediaClick = {},
+                            onShowMoreClick = {},
+                            isInteractive = false,
+                        )
+                    }
+                } else if (uiState.feedSections.isEmpty()) {
+                    item {
+                        Text(
+                            text = noFeedsLabel,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color.White.copy(alpha = 0.78f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                } else {
+                    itemsIndexed(
+                        items = uiState.feedSections,
+                        key = { _, section -> section.feed.id }
+                    ) { index, section ->
+                        FeedSection(
+                            title = section.feed.name,
+                            state = section.state,
+                            onMediaClick = onMediaClick,
+                            onShowMoreClick = {
+                                onOpenFeedGrid(section.feed)
+                            },
+                            isInteractive = !isMorePanelOpen,
+                            firstItemFocusRequester = if (index == 0) {
+                                firstFeedCardFocusRequester
+                            } else {
+                                null
+                            }
+                        )
+                    }
+                }
             }
-        )
+
+            SourcesMorePanel(
+                visible = isMorePanelOpen,
+                sources = uiState.morePanelSources,
+                selectedSource = uiState.selectedSource,
+                pinnedSourceIds = uiState.pinnedSourceIds,
+                usageCountBySourceId = uiState.usageCountBySourceId,
+                sortMode = uiState.sortMode,
+                searchQuery = uiState.searchQuery,
+                onSearchQueryChange = viewModel::setSearchQuery,
+                onSortModeChange = viewModel::setSortMode,
+                onSourceSelected = { source ->
+                    viewModel.selectSource(source)
+                    viewModel.setMorePanelOpen(false)
+                },
+                onTogglePin = viewModel::togglePinned,
+                onCloseRequested = {
+                    viewModel.setMorePanelOpen(false)
+                }
+            )
+        }
     }
 }

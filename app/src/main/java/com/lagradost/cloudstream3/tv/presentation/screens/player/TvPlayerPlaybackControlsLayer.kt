@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +17,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,13 +35,19 @@ import androidx.compose.material.icons.filled.Source
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -51,6 +58,8 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,10 +72,13 @@ import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
+import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 internal sealed interface TvPlayerControlsEvent {
     data object PlayPause : TvPlayerControlsEvent
@@ -81,13 +93,60 @@ internal sealed interface TvPlayerControlsEvent {
     data object SeekForward : TvPlayerControlsEvent
 }
 
+private object PlayerControlsTokens {
+    val OverlayHorizontalPadding = 48.dp
+    val OverlayVerticalPadding = 20.dp
+    val MetadataToTimelineSpacing = 16.dp
+    val TimelineToControlsSpacing = 18.dp
+
+    val PlayButtonSize = 64.dp
+    val PlayIconSize = 28.dp
+    const val PlayFocusScale = 1.05f
+
+    val SecondaryButtonSize = 42.dp
+    val SecondaryIconSize = 17.dp
+    const val SecondaryFocusScale = 1.05f
+    const val SecondaryContainerAlpha = 0.2f
+
+    val ButtonsSpacing = 8.dp
+
+    val TooltipShape = RoundedCornerShape(12.dp)
+    val TooltipHorizontalPadding = 16.dp
+    val TooltipVerticalPadding = 6.dp
+    val TooltipTonalElevation = 5.dp
+    const val TooltipAlpha = 0.95f
+    val TooltipVerticalOffset = 16.dp
+    val TooltipMaxWidth = 220.dp
+    const val TooltipFadeInMs = 150
+    const val TooltipFadeOutMs = 0
+}
+
+private data class PlayerControlTooltipState(
+    val text: String,
+    val anchorCenterXPx: Float,
+    val anchorTopYPx: Float,
+)
+
+private enum class PlayerControlFocusTarget {
+    Restart,
+    Sources,
+    PlayPause,
+    NextEpisode,
+    Subtitles,
+    Sync,
+    Audio,
+    AspectRatio,
+}
+
 @Composable
 internal fun PlaybackControlsLayer(
     visible: Boolean,
+    controlsEnabled: Boolean,
     metadata: TvPlayerMetadata,
     link: ExtractorLink,
     isPlaying: Boolean,
     showTracksButton: Boolean,
+    showSyncButton: Boolean,
     showNextEpisodeButton: Boolean,
     playPauseFocusRequester: FocusRequester,
     timelineFocusRequester: FocusRequester,
@@ -128,7 +187,9 @@ internal fun PlaybackControlsLayer(
                 metadata = metadata,
                 link = link,
                 isPlaying = isPlaying,
+                controlsEnabled = controlsEnabled,
                 showTracksButton = showTracksButton,
+                showSyncButton = showSyncButton,
                 showNextEpisodeButton = showNextEpisodeButton,
                 playPauseFocusRequester = playPauseFocusRequester,
                 timelineFocusRequester = timelineFocusRequester,
@@ -174,7 +235,9 @@ private fun PlayerOverlay(
     metadata: TvPlayerMetadata,
     link: ExtractorLink,
     isPlaying: Boolean,
+    controlsEnabled: Boolean,
     showTracksButton: Boolean,
+    showSyncButton: Boolean,
     showNextEpisodeButton: Boolean,
     playPauseFocusRequester: FocusRequester,
     timelineFocusRequester: FocusRequester,
@@ -186,9 +249,11 @@ private fun PlayerOverlay(
         metadata.season != null && metadata.episode != null -> {
             "S${metadata.season}:E${metadata.episode}"
         }
+
         metadata.episode != null -> {
             "E${metadata.episode}"
         }
+
         else -> null
     }
     val episodeTitle = metadata.episodeTitle
@@ -213,7 +278,10 @@ private fun PlayerOverlay(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 48.dp, vertical = 20.dp),
+            .padding(
+                horizontal = PlayerControlsTokens.OverlayHorizontalPadding,
+                vertical = PlayerControlsTokens.OverlayVerticalPadding,
+            ),
         verticalArrangement = Arrangement.Bottom,
     ) {
         if (metadata.title.isNotBlank()) {
@@ -247,79 +315,34 @@ private fun PlayerOverlay(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(PlayerControlsTokens.MetadataToTimelineSpacing))
 
         PlaybackTimelineSection(
             exoPlayer = exoPlayer,
+            controlsEnabled = controlsEnabled,
             timelineFocusRequester = timelineFocusRequester,
             onPlaybackProgress = onPlaybackProgress,
             onControlsEvent = onControlsEvent,
         )
 
-        Spacer(modifier = Modifier.height(18.dp))
+        Spacer(modifier = Modifier.height(PlayerControlsTokens.TimelineToControlsSpacing))
 
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            PlayerPrimaryControlButton(
-                icon = if (isPlaying) {
-                    Icons.Default.Pause
-                } else {
-                    Icons.Default.PlayArrow
-                },
-                onClick = { onControlsEvent(TvPlayerControlsEvent.PlayPause) },
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .focusRequester(playPauseFocusRequester),
-                buttonSize = 64.dp,
-                iconSize = 28.dp,
-            )
-
-            Row(
-                modifier = Modifier.align(Alignment.CenterEnd),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                PlayerSecondaryControlButton(
-                    icon = Icons.Default.Source,
-                    onClick = { onControlsEvent(TvPlayerControlsEvent.OpenSources) },
-                )
-                PlayerSecondaryControlButton(
-                    icon = Icons.Default.Subtitles,
-                    onClick = { onControlsEvent(TvPlayerControlsEvent.OpenSubtitles) },
-                )
-                if (showTracksButton) {
-                    PlayerSecondaryControlButton(
-                        icon = Icons.Default.Audiotrack,
-                        onClick = { onControlsEvent(TvPlayerControlsEvent.OpenTracks) },
-                    )
-                }
-                PlayerSecondaryControlButton(
-                    icon = Icons.Default.Sync,
-                    onClick = { onControlsEvent(TvPlayerControlsEvent.SyncSubtitles) },
-                )
-                PlayerSecondaryControlButton(
-                    icon = Icons.Default.AspectRatio,
-                    onClick = { onControlsEvent(TvPlayerControlsEvent.ToggleResizeMode) },
-                )
-                PlayerSecondaryControlButton(
-                    icon = Icons.Default.Replay,
-                    onClick = { onControlsEvent(TvPlayerControlsEvent.Restart) },
-                )
-                if (showNextEpisodeButton) {
-                    PlayerSecondaryControlButton(
-                        icon = Icons.Default.SkipNext,
-                        onClick = { onControlsEvent(TvPlayerControlsEvent.NextEpisode) },
-                    )
-                }
-            }
-        }
+        PlayerBottomControlBar(
+            isPlaying = isPlaying,
+            controlsEnabled = controlsEnabled,
+            showTracksButton = showTracksButton,
+            showSyncButton = showSyncButton,
+            showNextEpisodeButton = showNextEpisodeButton,
+            playPauseFocusRequester = playPauseFocusRequester,
+            onControlsEvent = onControlsEvent,
+        )
     }
 }
 
 @Composable
 private fun PlaybackTimelineSection(
     exoPlayer: ExoPlayer,
+    controlsEnabled: Boolean,
     timelineFocusRequester: FocusRequester,
     onPlaybackProgress: (Long, Long) -> Unit,
     onControlsEvent: (TvPlayerControlsEvent) -> Unit,
@@ -351,6 +374,7 @@ private fun PlaybackTimelineSection(
         Spacer(modifier = Modifier.width(14.dp))
         PlaybackTimeline(
             progressFraction = progressFraction,
+            controlsEnabled = controlsEnabled,
             focusRequester = timelineFocusRequester,
             onControlsEvent = onControlsEvent,
             modifier = Modifier.weight(1f),
@@ -364,91 +388,723 @@ private fun PlaybackTimelineSection(
 }
 
 @Composable
-private fun PlayerPrimaryControlButton(
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    buttonSize: Dp = 48.dp,
-    iconSize: Dp = 20.dp,
+private fun PlayerBottomControlBar(
+    isPlaying: Boolean,
+    controlsEnabled: Boolean,
+    showTracksButton: Boolean,
+    showSyncButton: Boolean,
+    showNextEpisodeButton: Boolean,
+    playPauseFocusRequester: FocusRequester,
+    onControlsEvent: (TvPlayerControlsEvent) -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.size(buttonSize),
-        shape = ClickableSurfaceDefaults.shape(CircleShape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White,
-            contentColor = Color.Black,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
+    val restartFocusRequester = remember { FocusRequester() }
+    val sourcesFocusRequester = remember { FocusRequester() }
+    val nextEpisodeFocusRequester = remember { FocusRequester() }
+    val subtitlesFocusRequester = remember { FocusRequester() }
+    val syncFocusRequester = remember { FocusRequester() }
+    val audioFocusRequester = remember { FocusRequester() }
+    val aspectRatioFocusRequester = remember { FocusRequester() }
+
+    val playRightFocusRequester = if (showNextEpisodeButton) {
+        nextEpisodeFocusRequester
+    } else {
+        subtitlesFocusRequester
+    }
+    val subtitlesLeftFocusRequester = if (showNextEpisodeButton) {
+        nextEpisodeFocusRequester
+    } else {
+        playPauseFocusRequester
+    }
+    val subtitlesRightFocusRequester = when {
+        showSyncButton -> syncFocusRequester
+        showTracksButton -> audioFocusRequester
+        else -> aspectRatioFocusRequester
+    }
+    val syncRightFocusRequester = if (showTracksButton) {
+        audioFocusRequester
+    } else {
+        aspectRatioFocusRequester
+    }
+    val audioLeftFocusRequester = if (showSyncButton) {
+        syncFocusRequester
+    } else {
+        subtitlesFocusRequester
+    }
+    val aspectLeftFocusRequester = when {
+        showTracksButton -> audioFocusRequester
+        showSyncButton -> syncFocusRequester
+        else -> subtitlesFocusRequester
+    }
+    var controlsBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+    var tooltipState by remember { mutableStateOf<PlayerControlTooltipState?>(null) }
+    var lastFocusedControl by remember { mutableStateOf(PlayerControlFocusTarget.PlayPause) }
+    var wasControlsEnabled by remember { mutableStateOf(controlsEnabled) }
+
+    fun resolveFocusRequester(target: PlayerControlFocusTarget): FocusRequester {
+        return when (target) {
+            PlayerControlFocusTarget.Restart -> restartFocusRequester
+            PlayerControlFocusTarget.Sources -> sourcesFocusRequester
+            PlayerControlFocusTarget.PlayPause -> playPauseFocusRequester
+            PlayerControlFocusTarget.NextEpisode -> {
+                if (showNextEpisodeButton) {
+                    nextEpisodeFocusRequester
+                } else {
+                    playPauseFocusRequester
+                }
+            }
+            PlayerControlFocusTarget.Subtitles -> subtitlesFocusRequester
+            PlayerControlFocusTarget.Sync -> {
+                when {
+                    showSyncButton -> syncFocusRequester
+                    showTracksButton -> audioFocusRequester
+                    else -> aspectRatioFocusRequester
+                }
+            }
+            PlayerControlFocusTarget.Audio -> {
+                when {
+                    showTracksButton -> audioFocusRequester
+                    showSyncButton -> syncFocusRequester
+                    else -> aspectRatioFocusRequester
+                }
+            }
+            PlayerControlFocusTarget.AspectRatio -> aspectRatioFocusRequester
+        }
+    }
+
+    fun onControlFocused(tooltipText: String, boundsInRoot: Rect) {
+        val parentBounds = controlsBoundsInRoot ?: return
+        tooltipState = PlayerControlTooltipState(
+            text = tooltipText,
+            anchorCenterXPx = boundsInRoot.center.x - parentBounds.left,
+            anchorTopYPx = boundsInRoot.top - parentBounds.top,
+        )
+    }
+
+    fun onControlFocusLost() {
+        tooltipState = null
+    }
+
+    LaunchedEffect(controlsEnabled, showNextEpisodeButton, showSyncButton, showTracksButton) {
+        val shouldRestoreFocus = controlsEnabled && !wasControlsEnabled
+        wasControlsEnabled = controlsEnabled
+        if (!shouldRestoreFocus) return@LaunchedEffect
+
+        val restoreFocusRequester = resolveFocusRequester(lastFocusedControl)
+        repeat(12) {
+            if (restoreFocusRequester.requestFocus()) {
+                return@LaunchedEffect
+            }
+            delay(16)
+        }
+    }
+
+    LaunchedEffect(controlsEnabled) {
+        if (!controlsEnabled) {
+            tooltipState = null
+        }
+    }
+
+    val playToNearButtonOffset = (PlayerControlsTokens.PlayButtonSize / 2) +
+        PlayerControlsTokens.ButtonsSpacing +
+        (PlayerControlsTokens.SecondaryButtonSize / 2)
+    val sourceOffsetX = -playToNearButtonOffset
+    val restartOffsetX = sourceOffsetX - PlayerControlsTokens.SecondaryButtonSize - PlayerControlsTokens.ButtonsSpacing
+    val nextOffsetX = playToNearButtonOffset
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                controlsBoundsInRoot = coordinates.boundsInRoot()
+            },
     ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            horizontalArrangement = Arrangement.spacedBy(PlayerControlsTokens.ButtonsSpacing),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(iconSize),
+            SubtitlesControlButton(
+                controlsEnabled = controlsEnabled,
+                focusRequester = subtitlesFocusRequester,
+                leftFocusRequester = subtitlesLeftFocusRequester,
+                rightFocusRequester = subtitlesRightFocusRequester,
+                onClick = { onControlsEvent(TvPlayerControlsEvent.OpenSubtitles) },
+                onTooltipVisible = ::onControlFocused,
+                onTooltipHidden = ::onControlFocusLost,
+                onFocused = { lastFocusedControl = PlayerControlFocusTarget.Subtitles },
             )
+            if (showSyncButton) {
+                SyncControlButton(
+                    controlsEnabled = controlsEnabled,
+                    focusRequester = syncFocusRequester,
+                    leftFocusRequester = subtitlesFocusRequester,
+                    rightFocusRequester = syncRightFocusRequester,
+                    onClick = { onControlsEvent(TvPlayerControlsEvent.SyncSubtitles) },
+                    onTooltipVisible = ::onControlFocused,
+                    onTooltipHidden = ::onControlFocusLost,
+                    onFocused = { lastFocusedControl = PlayerControlFocusTarget.Sync },
+                )
+            }
+            if (showTracksButton) {
+                AudioTracksControlButton(
+                    controlsEnabled = controlsEnabled,
+                    focusRequester = audioFocusRequester,
+                    leftFocusRequester = audioLeftFocusRequester,
+                    rightFocusRequester = aspectRatioFocusRequester,
+                    onClick = { onControlsEvent(TvPlayerControlsEvent.OpenTracks) },
+                    onTooltipVisible = ::onControlFocused,
+                    onTooltipHidden = ::onControlFocusLost,
+                    onFocused = { lastFocusedControl = PlayerControlFocusTarget.Audio },
+                )
+            }
+            AspectRatioControlButton(
+                controlsEnabled = controlsEnabled,
+                focusRequester = aspectRatioFocusRequester,
+                leftFocusRequester = aspectLeftFocusRequester,
+                rightFocusRequester = null,
+                onClick = { onControlsEvent(TvPlayerControlsEvent.ToggleResizeMode) },
+                onTooltipVisible = ::onControlFocused,
+                onTooltipHidden = ::onControlFocusLost,
+                onFocused = { lastFocusedControl = PlayerControlFocusTarget.AspectRatio },
+            )
+        }
+
+        if (showNextEpisodeButton) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(x = nextOffsetX),
+            ) {
+                NextEpisodeControlButton(
+                    controlsEnabled = controlsEnabled,
+                    focusRequester = nextEpisodeFocusRequester,
+                    leftFocusRequester = playPauseFocusRequester,
+                    rightFocusRequester = subtitlesFocusRequester,
+                    onClick = { onControlsEvent(TvPlayerControlsEvent.NextEpisode) },
+                    onTooltipVisible = ::onControlFocused,
+                    onTooltipHidden = ::onControlFocusLost,
+                    onFocused = { lastFocusedControl = PlayerControlFocusTarget.NextEpisode },
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(x = sourceOffsetX),
+        ) {
+            SourcesControlButton(
+                controlsEnabled = controlsEnabled,
+                focusRequester = sourcesFocusRequester,
+                leftFocusRequester = restartFocusRequester,
+                rightFocusRequester = playPauseFocusRequester,
+                onClick = { onControlsEvent(TvPlayerControlsEvent.OpenSources) },
+                onTooltipVisible = ::onControlFocused,
+                onTooltipHidden = ::onControlFocusLost,
+                onFocused = { lastFocusedControl = PlayerControlFocusTarget.Sources },
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(x = restartOffsetX),
+        ) {
+            RestartControlButton(
+                controlsEnabled = controlsEnabled,
+                focusRequester = restartFocusRequester,
+                leftFocusRequester = null,
+                rightFocusRequester = sourcesFocusRequester,
+                onClick = { onControlsEvent(TvPlayerControlsEvent.Restart) },
+                onTooltipVisible = ::onControlFocused,
+                onTooltipHidden = ::onControlFocusLost,
+                onFocused = { lastFocusedControl = PlayerControlFocusTarget.Restart },
+            )
+        }
+
+        Box(modifier = Modifier.align(Alignment.Center)) {
+            PlayPauseControlButton(
+                isPlaying = isPlaying,
+                controlsEnabled = controlsEnabled,
+                focusRequester = playPauseFocusRequester,
+                leftFocusRequester = sourcesFocusRequester,
+                rightFocusRequester = playRightFocusRequester,
+                onClick = { onControlsEvent(TvPlayerControlsEvent.PlayPause) },
+                onTooltipVisible = ::onControlFocused,
+                onTooltipHidden = ::onControlFocusLost,
+                onFocused = { lastFocusedControl = PlayerControlFocusTarget.PlayPause },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = tooltipState != null,
+            enter = fadeIn(animationSpec = tween(durationMillis = PlayerControlsTokens.TooltipFadeInMs)),
+            exit = fadeOut(animationSpec = tween(durationMillis = PlayerControlsTokens.TooltipFadeOutMs)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(PlayerControlsTokens.PlayButtonSize),
+        ) {
+            tooltipState?.let { activeTooltip ->
+                PlayerGlobalTooltip(
+                    tooltipState = activeTooltip,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun PlayerSecondaryControlButton(
-    icon: ImageVector,
-    onClick: () -> Unit,
+private fun PlayerGlobalTooltip(
+    tooltipState: PlayerControlTooltipState,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.size(42.dp),
-        shape = ClickableSurfaceDefaults.shape(CircleShape),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.2f),
-            contentColor = Color.White,
-            focusedContainerColor = Color.White,
-            focusedContentColor = Color.Black,
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(
-                border = BorderStroke(width = 2.dp, color = Color.White),
-                shape = CircleShape,
-            ),
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f),
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(17.dp),
-            )
+    val verticalOffsetPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        PlayerControlsTokens.TooltipVerticalOffset.toPx()
+    }
+
+    androidx.compose.ui.layout.Layout(
+        content = {
+            Surface(
+                shape = PlayerControlsTokens.TooltipShape,
+                tonalElevation = PlayerControlsTokens.TooltipTonalElevation,
+                colors = SurfaceDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = PlayerControlsTokens.TooltipAlpha),
+                ),
+                modifier = Modifier
+                    .alpha(PlayerControlsTokens.TooltipAlpha)
+                    .widthIn(max = PlayerControlsTokens.TooltipMaxWidth),
+            ) {
+                Text(
+                    text = tooltipState.text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(
+                        horizontal = PlayerControlsTokens.TooltipHorizontalPadding,
+                        vertical = PlayerControlsTokens.TooltipVerticalPadding,
+                    ),
+                )
+            }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val tooltipPlaceable = measurables.first().measure(
+            constraints.copy(minWidth = 0, minHeight = 0),
+        )
+
+        val maxX = (constraints.maxWidth - tooltipPlaceable.width).coerceAtLeast(0)
+        val targetX = (tooltipState.anchorCenterXPx - (tooltipPlaceable.width / 2f))
+            .roundToInt()
+            .coerceIn(0, maxX)
+        val targetY = (tooltipState.anchorTopYPx - verticalOffsetPx - tooltipPlaceable.height).roundToInt()
+
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            tooltipPlaceable.placeRelative(x = targetX, y = targetY)
         }
+    }
+}
+
+@Composable
+private fun RestartControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.Replay,
+        tooltipText = stringResource(R.string.restart),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun SourcesControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.Source,
+        tooltipText = stringResource(R.string.sources),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun PlayPauseControlButton(
+    isPlaying: Boolean,
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerPrimaryControlButton(
+        icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+        tooltipText = if (isPlaying) stringResource(R.string.pause) else stringResource(R.string.home_play),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun NextEpisodeControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.SkipNext,
+        tooltipText = stringResource(R.string.next_episode),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun SubtitlesControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.Subtitles,
+        tooltipText = stringResource(R.string.player_subtitles_settings),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun SyncControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.Sync,
+        tooltipText = stringResource(R.string.subtitle_offset),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun AudioTracksControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.Audiotrack,
+        tooltipText = stringResource(R.string.audio_tracks),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun AspectRatioControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.AspectRatio,
+        tooltipText = stringResource(R.string.video_aspect_ratio_resize),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun PlayerPrimaryControlButton(
+    icon: ImageVector,
+    tooltipText: String,
+    onClick: () -> Unit,
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerControlButton(
+        icon = icon,
+        tooltipText = tooltipText,
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        buttonSize = PlayerControlsTokens.PlayButtonSize,
+        iconSize = PlayerControlsTokens.PlayIconSize,
+        focusedScale = PlayerControlsTokens.PlayFocusScale,
+        containerColor = Color.White,
+        contentColor = Color.Black,
+        focusedContainerColor = Color.White,
+        focusedContentColor = Color.Black,
+        focusedBorder = Border.None,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun PlayerSecondaryControlButton(
+    icon: ImageVector,
+    tooltipText: String,
+    onClick: () -> Unit,
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    buttonSize: Dp = PlayerControlsTokens.SecondaryButtonSize,
+    iconSize: Dp = PlayerControlsTokens.SecondaryIconSize,
+    focusedScale: Float = PlayerControlsTokens.SecondaryFocusScale,
+    containerColor: Color = Color.White.copy(alpha = PlayerControlsTokens.SecondaryContainerAlpha),
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerControlButton(
+        icon = icon,
+        tooltipText = tooltipText,
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        focusedScale = focusedScale,
+        containerColor = containerColor,
+        contentColor = Color.White,
+        focusedContainerColor = Color.White,
+        focusedContentColor = Color.Black,
+        focusedBorder = Border.None,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun PlayerControlButton(
+    icon: ImageVector,
+    tooltipText: String,
+    onClick: () -> Unit,
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    buttonSize: Dp,
+    iconSize: Dp,
+    focusedScale: Float,
+    containerColor: Color,
+    contentColor: Color,
+    focusedContainerColor: Color,
+    focusedContentColor: Color,
+    focusedBorder: Border,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    var isFocused by remember { mutableStateOf(false) }
+    var buttonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+
+    Box(
+        modifier = Modifier.size(buttonSize),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            onClick = onClick,
+            enabled = controlsEnabled,
+            modifier = Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .onGloballyPositioned { coordinates ->
+                    buttonBoundsInRoot = coordinates.boundsInRoot()
+                    if (isFocused) {
+                        buttonBoundsInRoot?.let { bounds ->
+                            onTooltipVisible(tooltipText, bounds)
+                        }
+                    }
+                }
+                .onFocusChanged { focusState ->
+                    val nowFocused = focusState.isFocused
+                    if (isFocused == nowFocused) return@onFocusChanged
+
+                    isFocused = nowFocused
+                    if (nowFocused) {
+                        onFocused()
+                        buttonBoundsInRoot?.let { bounds ->
+                            onTooltipVisible(tooltipText, bounds)
+                        }
+                    } else {
+                        onTooltipHidden()
+                    }
+                }
+                .horizontalFocusLink(
+                    canFocus = controlsEnabled,
+                    leftFocusRequester = leftFocusRequester,
+                    rightFocusRequester = rightFocusRequester,
+                ),
+            shape = ClickableSurfaceDefaults.shape(CircleShape),
+            colors = ClickableSurfaceDefaults.colors(
+                containerColor = containerColor,
+                contentColor = contentColor,
+                focusedContainerColor = focusedContainerColor,
+                focusedContentColor = focusedContentColor,
+            ),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = focusedBorder,
+                pressedBorder = Border.None,
+            ),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = focusedScale),
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = tooltipText,
+                    modifier = Modifier.size(iconSize),
+                )
+            }
+        }
+    }
+}
+
+private fun Modifier.horizontalFocusLink(
+    canFocus: Boolean,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+): Modifier {
+    if (canFocus && leftFocusRequester == null && rightFocusRequester == null) {
+        return this
+    }
+
+    return focusProperties {
+        this.canFocus = canFocus
+        leftFocusRequester?.let { left = it }
+        rightFocusRequester?.let { right = it }
     }
 }
 
 @Composable
 private fun PlaybackTimeline(
     progressFraction: Float,
+    controlsEnabled: Boolean,
     focusRequester: FocusRequester,
     onControlsEvent: (TvPlayerControlsEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safeProgress = progressFraction.coerceIn(0f, 1f)
-    val isFocused = remember { androidx.compose.runtime.mutableStateOf(false) }
+    var isFocused by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
             .height(24.dp)
             .focusRequester(focusRequester)
+            .focusProperties {
+                canFocus = controlsEnabled
+            }
             .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (!controlsEnabled || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionLeft -> {
                         onControlsEvent(TvPlayerControlsEvent.SeekBackward)
@@ -464,12 +1120,12 @@ private fun PlaybackTimeline(
                 }
             }
             .onFocusChanged { focusState ->
-                isFocused.value = focusState.isFocused
+                isFocused = focusState.isFocused
             }
-            .focusable()
+            .focusable(enabled = controlsEnabled)
             .padding(vertical = 8.dp)
             .clip(RoundedCornerShape(percent = 50))
-            .background(if (isFocused.value) Color.White.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.25f)),
+            .background(if (isFocused) Color.White.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.25f)),
     ) {
         Box(
             modifier = Modifier

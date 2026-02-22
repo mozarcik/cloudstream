@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.library
 
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.CloudStreamApp
@@ -21,6 +22,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import java.util.Locale
 
 private const val LAST_SYNC_API_KEY = "last_sync_api"
@@ -30,10 +34,11 @@ private const val PRIORITY_WATCHING = 1
 private const val PRIORITY_PLAN_TO_WATCH = 2
 private const val PRIORITY_DEFAULT = 3
 
+@Immutable
 data class LibraryScreenUiState(
     val isLoading: Boolean = true,
     val currentApiName: String = "",
-    val sections: List<LibrarySectionUiState> = emptyList(),
+    val sections: PersistentList<LibrarySectionUiState> = persistentListOf(),
     val errorMessage: String? = null,
     val isAnySyncApiAvailable: Boolean = true,
 )
@@ -90,7 +95,7 @@ class LibraryViewModel : ViewModel() {
                 state.copy(
                     isLoading = false,
                     currentApiName = "",
-                    sections = emptyList(),
+                    sections = persistentListOf(),
                     errorMessage = null,
                     isAnySyncApiAvailable = false
                 )
@@ -116,7 +121,7 @@ class LibraryViewModel : ViewModel() {
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
-                        sections = emptyList(),
+                        sections = persistentListOf(),
                         errorMessage = error.message ?: DEFAULT_LIBRARY_ERROR_MESSAGE,
                         isAnySyncApiAvailable = true
                     )
@@ -129,7 +134,7 @@ class LibraryViewModel : ViewModel() {
                 _uiState.update { state ->
                     state.copy(
                         isLoading = false,
-                        sections = emptyList(),
+                        sections = persistentListOf(),
                         errorMessage = DEFAULT_LIBRARY_ERROR_MESSAGE,
                         isAnySyncApiAvailable = true
                     )
@@ -173,9 +178,9 @@ class LibraryViewModel : ViewModel() {
                 LibrarySectionUiState(
                     id = "${resolvedTitle}_${index}",
                     title = resolvedTitle,
-                    items = page.items.map { item -> item.toMediaItemCompat() }
+                    items = page.items.map { item -> item.toMediaItemCompat() }.toPersistentList()
                 )
-            }
+            }.toPersistentList()
 
             _uiState.update { state ->
                 state.copy(

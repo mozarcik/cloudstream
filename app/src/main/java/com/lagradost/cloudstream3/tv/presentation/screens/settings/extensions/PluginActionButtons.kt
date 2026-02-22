@@ -29,6 +29,7 @@ import android.app.Activity
 fun PluginActionButtons(
     plugin: PluginItem,
     viewModel: ExtensionsViewModel,
+    onPluginChanged: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -83,7 +84,11 @@ fun PluginActionButtons(
                         error = null
                         viewModel.downloadPlugin(activity, plugin) { result ->
                             isLoading = false
-                            result.onFailure { error = it.message ?: "Błąd pobierania" }
+                            result.onSuccess {
+                                onPluginChanged()
+                            }.onFailure {
+                                error = it.message ?: "Błąd pobierania"
+                            }
                         }
                     } else {
                         error = "Activity not available"
@@ -148,4 +153,3 @@ fun PluginActionButtons(
 //                    Text(if (isLoading) "Usuwanie..." else "Usuń")
 //                }
 //            }
-

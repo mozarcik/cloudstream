@@ -68,7 +68,7 @@ class MediaGridViewModel(
         return Pager(
             config = PagingConfig(
                 pageSize = 40,
-                prefetchDistance = 8,
+                prefetchDistance = 24,
                 enablePlaceholders = false,
                 initialLoadSize = 40
             ),

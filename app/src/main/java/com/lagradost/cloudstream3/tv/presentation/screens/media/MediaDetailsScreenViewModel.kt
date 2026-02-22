@@ -4,8 +4,11 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -23,6 +26,55 @@ class MediaDetailsScreenViewModel(
         const val DebugTag = "TvMediaDetailsVM"
     }
     private val favoriteOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
+    private val sourceUrl: String?
+        get() = savedStateHandle.get(MediaDetailsScreen.UrlBundleKey)
+    private val sourceApiName: String?
+        get() = savedStateHandle.get(MediaDetailsScreen.ApiNameBundleKey)
+    val unavailableDetails: UnavailableDetailsUiModel
+        get() {
+            val title = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingTitleBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                .orEmpty()
+            val posterUrl = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingPosterBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val backdropUrl = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingBackdropBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val description = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingDescriptionBundleKey)
+                ?.takeIf { it.isNotBlank() }
+            val type = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingTypeBundleKey)
+                .toTvTypeOrNull()
+                ?: TvType.Movie
+            val year = savedStateHandle.get<Int>(MediaDetailsScreen.LoadingYearBundleKey)
+            val providerName = savedStateHandle
+                .get<String>(MediaDetailsScreen.LoadingProviderBundleKey)
+                ?.takeIf { it.isNotBlank() }
+                ?: sourceApiName
+
+            return UnavailableDetailsUiModel(
+                title = title,
+                posterUrl = posterUrl,
+                backdropUrl = backdropUrl,
+                description = description,
+                type = type,
+                year = year,
+                providerName = providerName
+            )
+        }
+    val shouldShowUnavailableState: Boolean
+        get() = !sourceUrl.isNullOrBlank() && !sourceApiName.isNullOrBlank()
+    val canRemoveFromLibrary: Boolean by lazy {
+        val url = sourceUrl ?: return@lazy false
+        val apiName = sourceApiName ?: return@lazy false
+        UnavailableDetailsCompat.isInLocalLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 
     private val baseUiState = savedStateHandle
         .getStateFlow<String?>(MediaDetailsScreen.UrlBundleKey, null)
@@ -109,6 +161,15 @@ class MediaDetailsScreenViewModel(
             }
         }
     }
+
+    fun removeUnavailableItemFromLibrary(): Boolean {
+        val url = sourceUrl ?: return false
+        val apiName = sourceApiName ?: return false
+        return UnavailableDetailsCompat.removeFromLibrary(
+            sourceUrl = url,
+            apiName = apiName
+        )
+    }
 }
 
 sealed class MediaDetailsScreenUiState {
@@ -119,4 +180,11 @@ sealed class MediaDetailsScreenUiState {
         val sourceUrl: String,
         val apiName: String,
     ) : MediaDetailsScreenUiState()
+}
+
+private fun String?.toTvTypeOrNull(): TvType? {
+    if (this.isNullOrBlank()) return null
+    return TvType.entries.firstOrNull { type ->
+        type.name == this
+    }
 }

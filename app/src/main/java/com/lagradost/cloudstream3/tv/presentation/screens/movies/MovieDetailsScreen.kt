@@ -56,6 +56,7 @@ import com.lagradost.cloudstream3.tv.presentation.common.ItemDirection
 import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
 import com.lagradost.cloudstream3.tv.presentation.common.MoviesRow
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
+import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsScreen
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
 import kotlinx.coroutines.delay
@@ -72,12 +73,17 @@ object MovieDetailsScreen {
     const val LoadingTitleBundleKey = "movieLoadingTitle"
     const val LoadingPosterBundleKey = "movieLoadingPoster"
     const val LoadingBackdropBundleKey = "movieLoadingBackdrop"
+    const val LoadingDescriptionBundleKey = "movieLoadingDescription"
+    const val LoadingYearBundleKey = "movieLoadingYear"
+    const val LoadingTypeBundleKey = "movieLoadingType"
+    const val LoadingProviderBundleKey = "movieLoadingProvider"
 }
 
 @Composable
 fun MovieDetailsScreen(
     goToMoviePlayer: () -> Unit,
     onBackPressed: () -> Unit,
+    onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewMovie: (Movie) -> Unit,
     movieDetailsScreenViewModel: MovieDetailsScreenViewModel
 ) {
@@ -94,7 +100,24 @@ fun MovieDetailsScreen(
         }
 
         is MovieDetailsScreenUiState.Error -> {
-            Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            if (movieDetailsScreenViewModel.shouldShowUnavailableState) {
+                val unavailableDetails = movieDetailsScreenViewModel.unavailableDetails
+                UnavailableDetailsScreen(
+                    state = unavailableDetails,
+                    showRemoveFromLibraryAction = movieDetailsScreenViewModel.canRemoveFromLibrary,
+                    onRemoveFromLibrary = {
+                        movieDetailsScreenViewModel.removeUnavailableItemFromLibrary()
+                        onBackPressed()
+                    },
+                    onManualSearch = { query ->
+                        onManualSearchRequested(query)
+                    },
+                    onBackPressed = onBackPressed,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Error(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+            }
         }
 
         is MovieDetailsScreenUiState.Done -> {

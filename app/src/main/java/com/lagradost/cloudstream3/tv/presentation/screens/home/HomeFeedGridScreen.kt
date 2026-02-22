@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,6 +18,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.compat.home.FeedRepositoryImpl
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
 
 @Composable
 fun HomeFeedGridScreen(
@@ -50,27 +50,29 @@ fun HomeFeedGridScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0B0F16))
+    HaloHost(
+        modifier = Modifier.fillMaxSize()
     ) {
-        Text(
-            text = selectedFeed?.name.orEmpty(),
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 24.dp, top = 12.dp, end = 24.dp)
-        )
+        Box(
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text(
+                text = selectedFeed?.name.orEmpty(),
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 24.dp, top = 12.dp, end = 24.dp)
+            )
 
-        MediaGrid(
-            pagingItems = pagingItems,
-            onMediaClick = onMediaClick,
-            gridState = gridState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 56.dp)
-        )
+            MediaGrid(
+                pagingItems = pagingItems,
+                onMediaClick = onMediaClick,
+                gridState = gridState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 56.dp)
+            )
+        }
     }
 }

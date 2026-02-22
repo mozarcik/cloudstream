@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.MainAPI
@@ -19,16 +20,27 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.PersistentMap
+import kotlinx.collections.immutable.PersistentSet
+import kotlinx.collections.immutable.persistentHashMapOf
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.collections.immutable.toPersistentSet
 import java.util.Locale
 
 private const val FEED_PRELOAD_SIZE = 20
 private const val CONTINUE_WATCHING_FALLBACK_NAME = "Continue Watching"
 private const val QUICK_SOURCES_LIMIT = 10
 
+@Immutable
 sealed interface HomeFeedLoadState {
     data object Loading : HomeFeedLoadState
     data object Error : HomeFeedLoadState
-    data class Success(val items: List<MediaItemCompat>) : HomeFeedLoadState
+    @Immutable
+    data class Success(val items: PersistentList<MediaItemCompat>) : HomeFeedLoadState
 }
 
 enum class SourceSortMode {
@@ -36,24 +48,26 @@ enum class SourceSortMode {
     AZ,
 }
 
+@Immutable
 data class HomeFeedSectionUiState(
     val feed: FeedCategory,
     val state: HomeFeedLoadState = HomeFeedLoadState.Loading,
 )
 
+@Immutable
 data class HomeScreenV2UiState(
     val selectedSource: MainAPI? = null,
-    val allSources: List<MainAPI> = emptyList(),
-    val quickSources: List<MainAPI> = emptyList(),
-    val morePanelSources: List<MainAPI> = emptyList(),
-    val pinnedSourceIds: Set<String> = emptySet(),
-    val usageCountBySourceId: Map<String, Int> = emptyMap(),
+    val allSources: PersistentList<MainAPI> = persistentListOf(),
+    val quickSources: PersistentList<MainAPI> = persistentListOf(),
+    val morePanelSources: PersistentList<MainAPI> = persistentListOf(),
+    val pinnedSourceIds: PersistentSet<String> = persistentSetOf(),
+    val usageCountBySourceId: PersistentMap<String, Int> = persistentHashMapOf(),
     val lastSelectedSourceId: String? = null,
     val sortMode: SourceSortMode = SourceSortMode.MOST_USED,
     val searchQuery: String = "",
     val isMorePanelOpen: Boolean = false,
     val continueWatchingState: HomeFeedLoadState = HomeFeedLoadState.Loading,
-    val feedSections: List<HomeFeedSectionUiState> = emptyList(),
+    val feedSections: PersistentList<HomeFeedSectionUiState> = persistentListOf(),
     val isFeedListLoading: Boolean = true,
 )
 
@@ -151,7 +165,7 @@ class HomeScreenV2ViewModel(
             }
 
             state.copy(
-                allSources = availableSources,
+                allSources = availableSources.toPersistentList(),
                 selectedSource = resolvedSelection,
                 quickSources = quickSources,
                 morePanelSources = buildMorePanelSources(
@@ -279,8 +293,8 @@ class HomeScreenV2ViewModel(
 
             state.copy(
                 selectedSource = resolvedSelection,
-                pinnedSourceIds = preferences.pinnedSourceIds,
-                usageCountBySourceId = preferences.usageCountBySourceId,
+                pinnedSourceIds = preferences.pinnedSourceIds.toPersistentSet(),
+                usageCountBySourceId = preferences.usageCountBySourceId.toPersistentMap(),
                 lastSelectedSourceId = preferences.lastSelectedSourceId,
                 quickSources = quickSources,
                 morePanelSources = buildMorePanelSources(
@@ -328,9 +342,9 @@ class HomeScreenV2ViewModel(
                 state.copy(
                     continueWatchingState = HomeFeedLoadState.Loading,
                     isFeedListLoading = true,
-                    feedSections = state.feedSections.map {
-                        it.copy(state = HomeFeedLoadState.Loading)
-                    }
+                    feedSections = state.feedSections.map { section ->
+                        section.copy(state = HomeFeedLoadState.Loading)
+                    }.toPersistentList()
                 )
             }
 
@@ -351,7 +365,7 @@ class HomeScreenV2ViewModel(
                         feed = category,
                         state = HomeFeedLoadState.Loading
                     )
-                }
+                }.toPersistentList()
 
             _uiState.update { state ->
                 state.copy(
@@ -374,7 +388,7 @@ class HomeScreenV2ViewModel(
             .getMediaForFeed(api, FeedCategory.continueWatching(CONTINUE_WATCHING_FALLBACK_NAME), page = 1)
             .fold(
                 onSuccess = { items ->
-                    HomeFeedLoadState.Success(items.take(FEED_PRELOAD_SIZE))
+                    HomeFeedLoadState.Success(items.take(FEED_PRELOAD_SIZE).toPersistentList())
                 },
                 onFailure = { throwable ->
                     Log.e(TAG, "Failed to load continue watching", throwable)
@@ -395,7 +409,7 @@ class HomeScreenV2ViewModel(
             .getMediaForFeed(api, feed, page = 1)
             .fold(
                 onSuccess = { items ->
-                    HomeFeedLoadState.Success(items.take(FEED_PRELOAD_SIZE))
+                    HomeFeedLoadState.Success(items.take(FEED_PRELOAD_SIZE).toPersistentList())
                 },
                 onFailure = { throwable ->
                     Log.e(TAG, "Failed to load feed section '${feed.name}'", throwable)
@@ -404,14 +418,23 @@ class HomeScreenV2ViewModel(
             )
 
         _uiState.update { state ->
+            val sectionIndex = state.feedSections.indexOfFirst { section ->
+                section.feed.id == feed.id
+            }
+            if (sectionIndex == -1) {
+                return@update state
+            }
+
+            val currentSection = state.feedSections[sectionIndex]
+            if (currentSection.state == sectionState) {
+                return@update state
+            }
+
             state.copy(
-                feedSections = state.feedSections.map { section ->
-                    if (section.feed.id == feed.id) {
-                        section.copy(state = sectionState)
-                    } else {
-                        section
-                    }
-                }
+                feedSections = state.feedSections.set(
+                    index = sectionIndex,
+                    element = currentSection.copy(state = sectionState)
+                )
             )
         }
     }
@@ -443,8 +466,8 @@ class HomeScreenV2ViewModel(
         pinnedSourceIds: Set<String>,
         usageCountBySourceId: Map<String, Int>,
         selectedSource: MainAPI?,
-    ): List<MainAPI> {
-        if (sources.isEmpty()) return emptyList()
+    ): PersistentList<MainAPI> {
+        if (sources.isEmpty()) return persistentListOf()
 
         val pinned = sources
             .filter { source -> pinnedSourceIds.contains(source.sourceId()) }
@@ -460,6 +483,7 @@ class HomeScreenV2ViewModel(
         val combined = (pinned + byUsage)
             .distinctBy { source -> source.sourceId() }
             .take(QUICK_SOURCES_LIMIT)
+            .toPersistentList()
 
         return ensureSelectedInQuickSources(
             currentQuick = combined,
@@ -474,14 +498,14 @@ class HomeScreenV2ViewModel(
         pinnedSourceIds: Set<String>,
         usageCountBySourceId: Map<String, Int>,
         selectedSource: MainAPI?,
-    ): List<MainAPI> {
-        if (allSources.isEmpty()) return emptyList()
+    ): PersistentList<MainAPI> {
+        if (allSources.isEmpty()) return persistentListOf()
 
         val sourceById = allSources.associateBy { source -> source.sourceId() }
-        val keptQuick = currentQuick
+        var keptQuick = currentQuick
             .mapNotNull { quick -> sourceById[quick.sourceId()] }
             .distinctBy { source -> source.sourceId() }
-            .toMutableList()
+            .toPersistentList()
 
         if (keptQuick.size < QUICK_SOURCES_LIMIT) {
             val ranked = rankQuickSources(
@@ -494,7 +518,7 @@ class HomeScreenV2ViewModel(
             ranked.forEach { candidate ->
                 if (keptQuick.size >= QUICK_SOURCES_LIMIT) return@forEach
                 if (keptQuick.none { quick -> quick.sourceId() == candidate.sourceId() }) {
-                    keptQuick += candidate
+                    keptQuick = keptQuick.add(candidate)
                 }
             }
         }
@@ -510,30 +534,31 @@ class HomeScreenV2ViewModel(
         currentQuick: List<MainAPI>,
         allSources: List<MainAPI>,
         selectedSource: MainAPI?,
-    ): List<MainAPI> {
-        if (allSources.isEmpty()) return emptyList()
+    ): PersistentList<MainAPI> {
+        if (allSources.isEmpty()) return persistentListOf()
 
         val sourceById = allSources.associateBy { source -> source.sourceId() }
-        val quickSources = currentQuick
+        var quickSources = currentQuick
             .mapNotNull { quick -> sourceById[quick.sourceId()] }
             .distinctBy { source -> source.sourceId() }
             .take(QUICK_SOURCES_LIMIT)
-            .toMutableList()
+            .toPersistentList()
 
         val selected = selectedSource?.let { sourceById[it.sourceId()] ?: it }
         if (selected != null && quickSources.none { source -> source.sourceId() == selected.sourceId() }) {
             if (quickSources.size < QUICK_SOURCES_LIMIT) {
-                quickSources += selected
+                quickSources = quickSources.add(selected)
             } else if (quickSources.isNotEmpty()) {
-                quickSources[quickSources.lastIndex] = selected
+                quickSources = quickSources.set(quickSources.lastIndex, selected)
             } else {
-                quickSources += selected
+                quickSources = quickSources.add(selected)
             }
         }
 
         return quickSources
             .distinctBy { source -> source.sourceId() }
             .take(QUICK_SOURCES_LIMIT)
+            .toPersistentList()
     }
 
     private fun buildMorePanelSources(
@@ -542,7 +567,7 @@ class HomeScreenV2ViewModel(
         usageCountBySourceId: Map<String, Int>,
         sortMode: SourceSortMode,
         searchQuery: String,
-    ): List<MainAPI> {
+    ): PersistentList<MainAPI> {
         val normalizedQuery = searchQuery.trim()
 
         val filtered = if (normalizedQuery.isBlank()) {
@@ -567,7 +592,7 @@ class HomeScreenV2ViewModel(
             }
         }
 
-        return filtered.sortedWith(comparator)
+        return filtered.sortedWith(comparator).toPersistentList()
     }
 
     private companion object {

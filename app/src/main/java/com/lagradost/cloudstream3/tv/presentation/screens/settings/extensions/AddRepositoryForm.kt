@@ -36,6 +36,7 @@ import androidx.tv.material3.Text
 fun AddRepositoryForm(
     viewModel: ExtensionsViewModel,
     onBack: () -> Unit,
+    onRepositoryAdded: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var name by remember { mutableStateOf("") }
@@ -47,8 +48,7 @@ fun AddRepositoryForm(
     
     Column(
         modifier = modifier
-            .fillMaxSize()
-            .padding(24.dp),
+            .fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         // TextField dla nazwy (opcjonalne)
@@ -116,6 +116,7 @@ fun AddRepositoryForm(
                             // Successfully added, go back immediately
                             // The list will update automatically via ViewModel
                             android.util.Log.d("AddRepositoryForm", "Calling onBack() after successful add")
+                            onRepositoryAdded()
                             onBack()
                         },
                         onFailure = { e ->

@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -45,6 +47,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import com.lagradost.cloudstream3.tv.presentation.theme.IconSize
 import com.lagradost.cloudstream3.tv.presentation.utils.occupyScreenSize
+import kotlinx.coroutines.delay
 
 val TopBarTabs = Screens.entries.toList().filter { it.isTabItem && it != Screens.Sources }
 
@@ -52,6 +55,7 @@ val TopBarTabs = Screens.entries.toList().filter { it.isTabItem && it != Screens
 val TopBarFocusRequesters = List(size = TopBarTabs.size + 1) { FocusRequester() }
 
 private const val PROFILE_SCREEN_INDEX = -1
+private const val TopBarFocusNavigationDelayMs = 300L
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -64,6 +68,20 @@ fun DashboardTopBar(
     onScreenSelection: (screen: Screens) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
+    val onScreenSelectionState by rememberUpdatedState(onScreenSelection)
+    var pendingFocusedScreen by remember { mutableStateOf<Screens?>(null) }
+    val selectedScreen = screens.getOrNull(selectedTabIndex)
+
+    LaunchedEffect(pendingFocusedScreen, selectedScreen) {
+        val targetScreen = pendingFocusedScreen ?: return@LaunchedEffect
+        if (targetScreen == selectedScreen) return@LaunchedEffect
+
+        delay(TopBarFocusNavigationDelayMs)
+        if (pendingFocusedScreen == targetScreen) {
+            onScreenSelectionState(targetScreen)
+        }
+    }
+
     Box(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -117,7 +135,7 @@ fun DashboardTopBar(
                                     .focusRequester(focusRequesters[index + 1])
                                     .focusProperties { canFocus = isFocusable },
                                 selected = index == selectedTabIndex,
-                                onFocus = { onScreenSelection(screen) },
+                                onFocus = { pendingFocusedScreen = screen },
                                 onClick = { focusManager.moveFocus(FocusDirection.Down) },
                             ) {
                                 if (screen.tabIcon != null) {

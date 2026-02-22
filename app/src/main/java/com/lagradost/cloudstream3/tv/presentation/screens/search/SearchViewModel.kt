@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 
 class SearchViewModel : ViewModel() {
     private var searchJob: Job? = null
@@ -43,7 +45,7 @@ class SearchViewModel : ViewModel() {
                     submittedQuery = "",
                     isLoading = false,
                     hasSearched = false,
-                    sections = emptyList(),
+                    sections = persistentListOf(),
                 )
             }
             return
@@ -84,7 +86,7 @@ class SearchViewModel : ViewModel() {
                 title = repository.name,
                 state = HomeFeedLoadState.Loading,
             )
-        }
+        }.toPersistentList()
 
         _uiState.update { state ->
             state.copy(
@@ -150,7 +152,7 @@ class SearchViewModel : ViewModel() {
             is Resource.Success -> HomeFeedLoadState.Success(
                 response.value.items.map { item ->
                     item.toMediaItemCompat()
-                }
+                }.toPersistentList()
             )
 
             is Resource.Failure -> HomeFeedLoadState.Error
@@ -180,8 +182,10 @@ class SearchViewModel : ViewModel() {
                 return@update state
             }
 
-            val updatedSections = state.sections.toMutableList()
-            updatedSections[sectionIndex] = currentSection.copy(state = sectionState)
+            val updatedSections = state.sections.set(
+                index = sectionIndex,
+                element = currentSection.copy(state = sectionState)
+            )
 
             state.copy(
                 sections = updatedSections,

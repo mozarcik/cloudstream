@@ -5,7 +5,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -57,7 +56,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedSection
+import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 
 @Composable
@@ -69,12 +70,15 @@ fun SearchScreen(
     viewModel: SearchViewModel = viewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val pendingPrefillQuery by SearchPrefillStore.pendingQuery.collectAsState()
     val listState = rememberLazyListState()
     val searchFieldFocusRequester = remember { FocusRequester() }
     val firstFeedCardFocusRequester = remember { FocusRequester() }
-    val firstInteractiveSectionIndex = remember(uiState.sections) {
+    val statusCardFocusRequester = remember { FocusRequester() }
+    val searchErrorMessage = stringResource(id = R.string.tv_search_failed_to_load)
+    val firstFocusableSectionIndex = remember(uiState.sections, uiState.hasSearched) {
         uiState.sections.indexOfFirst { section ->
-            section.isInteractive
+            section.isFocusable(hasSearched = uiState.hasSearched)
         }
     }
     val shouldShowTopBar by remember {
@@ -88,72 +92,97 @@ fun SearchScreen(
         onScroll(shouldShowTopBar)
     }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFF0C1016))
+    LaunchedEffect(pendingPrefillQuery) {
+        val query = pendingPrefillQuery?.trim().orEmpty()
+        if (query.isBlank()) return@LaunchedEffect
+
+        viewModel.onQueryChanged(query)
+        SearchPrefillStore.clearPendingQuery()
+    }
+
+    HaloHost(
+        modifier = modifier.fillMaxSize()
     ) {
-        LazyColumn(
-            state = listState,
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+        Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
-                SearchInputField(
-                    value = uiState.query,
-                    onValueChange = viewModel::onQueryChanged,
-                    onSearchAction = viewModel::onSearchSubmitted,
-                    focusRequester = searchFieldFocusRequester,
-                    downFocusRequester = when {
-                        firstInteractiveSectionIndex >= 0 -> firstFeedCardFocusRequester
-                        else -> null
-                    }
-                )
-            }
-
-            when {
-                uiState.sections.isNotEmpty() -> {
-                    itemsIndexed(
-                        items = uiState.sections,
-                        key = { _, section -> section.id }
-                    ) { index, section ->
-                        FeedSection(
-                            title = section.title,
-                            state = section.state,
-                            onMediaClick = onMediaClick,
-                            onShowMoreClick = {
-                                onOpenFeedGrid(section)
-                            },
-                            isInteractive = section.isInteractive,
-                            firstItemFocusRequester = if (index == firstInteractiveSectionIndex) {
-                                firstFeedCardFocusRequester
-                            } else {
-                                null
-                            }
-                        )
-                    }
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    SearchInputField(
+                        value = uiState.query,
+                        onValueChange = viewModel::onQueryChanged,
+                        onSearchAction = viewModel::onSearchSubmitted,
+                        focusRequester = searchFieldFocusRequester,
+                        downFocusRequester = when {
+                            firstFocusableSectionIndex >= 0 -> firstFeedCardFocusRequester
+                            uiState.hasSearched && uiState.sections.isEmpty() -> statusCardFocusRequester
+                            else -> null
+                        }
+                    )
                 }
 
-                uiState.hasSearched -> {
-                    item {
-                        SearchStatusCard(
-                            title = stringResource(id = R.string.title_search),
-                            message = stringResource(id = R.string.tv_feed_empty),
-                        )
+                when {
+                    uiState.sections.isNotEmpty() -> {
+                        itemsIndexed(
+                            items = uiState.sections,
+                            key = { _, section -> section.id }
+                        ) { index, section ->
+                            FeedSection(
+                                title = section.title,
+                                state = section.state,
+                                onMediaClick = onMediaClick,
+                                onShowMoreClick = {
+                                    onOpenFeedGrid(section)
+                                },
+                                isInteractive = section.isFocusable(hasSearched = uiState.hasSearched),
+                                errorMessage = searchErrorMessage,
+                                firstItemFocusRequester = if (index == firstFocusableSectionIndex) {
+                                    firstFeedCardFocusRequester
+                                } else {
+                                    null
+                                }
+                            )
+                        }
                     }
-                }
 
-                else -> {
-                    item {
-                        SearchStatusCard(
-                            title = stringResource(id = R.string.title_search),
-                            message = stringResource(id = R.string.search_hint),
-                        )
+                    uiState.hasSearched -> {
+                        item {
+                            SearchStatusCard(
+                                title = stringResource(id = R.string.title_search),
+                                message = stringResource(id = R.string.tv_feed_empty),
+                                focusRequester = statusCardFocusRequester,
+                                isFocusable = true
+                            )
+                        }
+                    }
+
+                    else -> {
+                        item {
+                            SearchStatusCard(
+                                title = stringResource(id = R.string.title_search),
+                                message = stringResource(id = R.string.search_hint),
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+private fun SearchSectionUiState.isFocusable(hasSearched: Boolean): Boolean {
+    if (isInteractive) return true
+    if (!hasSearched) return false
+
+    return when (state) {
+        HomeFeedLoadState.Error -> true
+        is HomeFeedLoadState.Success -> items.isEmpty()
+        HomeFeedLoadState.Loading -> false
     }
 }
 
@@ -272,40 +301,71 @@ private fun SearchInputField(
 private fun SearchStatusCard(
     title: String,
     message: String,
+    focusRequester: FocusRequester? = null,
+    isFocusable: Boolean = false,
 ) {
-    Box(
-        contentAlignment = Alignment.Center,
+    Surface(
+        onClick = { },
+        enabled = isFocusable,
+        shape = ClickableSurfaceDefaults.shape(shape = CloudStreamCardShape),
+        border = ClickableSurfaceDefaults.border(
+            border = Border(
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.08f)
+                ),
+                shape = CloudStreamCardShape
+            )
+        ),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(alpha = 0.05f),
+            focusedContainerColor = Color.White.copy(alpha = 0.08f),
+            pressedContainerColor = Color.White.copy(alpha = 0.08f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            focusedContentColor = MaterialTheme.colorScheme.onSurface,
+            pressedContentColor = MaterialTheme.colorScheme.onSurface
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
         modifier = Modifier
             .fillMaxWidth()
             .height(220.dp)
-            .background(Color.White.copy(alpha = 0.05f), shape = CloudStreamCardShape)
-            .border(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.08f),
-                shape = CloudStreamCardShape
+            .then(
+                if (focusRequester != null) {
+                    Modifier.focusRequester(focusRequester)
+                } else {
+                    Modifier
+                }
             )
+            .focusProperties { canFocus = isFocusable }
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 16.dp)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.White.copy(alpha = 0.05f), shape = CloudStreamCardShape)
         ) {
-            Icon(
-                imageVector = Icons.Default.Search,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.82f),
-                modifier = Modifier.size(28.dp)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.9f)
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.66f)
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = Color.White.copy(alpha = 0.82f),
+                    modifier = Modifier.size(28.dp)
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White.copy(alpha = 0.9f)
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.66f)
+                )
+            }
         }
     }
 }
