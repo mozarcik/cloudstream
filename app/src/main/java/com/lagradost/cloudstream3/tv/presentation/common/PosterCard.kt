@@ -50,10 +50,12 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
-import coil.memory.MemoryCache
-import coil.request.ImageRequest
-import coil.size.Precision
+import coil3.asDrawable
+import coil3.compose.AsyncImage
+import coil3.memory.MemoryCache
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.size.Precision
 import com.lagradost.cloudstream3.R
 import kotlin.math.abs
 
@@ -163,19 +165,6 @@ fun PosterCard(
         }
     }
 
-    val onPosterImageSuccess = remember(
-        paletteCache,
-        contentKey,
-        fallbackAccentColor
-    ) {
-        { drawable: Drawable? ->
-            layoutState.lastLoadedDrawable = drawable
-            requestAccentResolve(
-                drawable = drawable,
-                highPriority = layoutState.isFocused
-            )
-        }
-    }
     val focusedBoundsReporterModifier = if (isFocused) {
         Modifier.onGloballyPositioned { coordinates ->
             val previousBounds = layoutState.imageBoundsInRoot
@@ -219,7 +208,6 @@ fun PosterCard(
                 PosterImage(
                     model = model,
                     title = title,
-                    onImageSuccess = onPosterImageSuccess,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -328,7 +316,6 @@ fun PosterCard(
 private fun PosterImage(
     model: Any,
     title: String,
-    onImageSuccess: (Drawable?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -339,16 +326,12 @@ private fun PosterImage(
             .crossfade(false)
             .build()
     }
-    val onImageSuccessState by rememberUpdatedState(onImageSuccess)
 
     AsyncImage(
         model = imageRequest,
         contentDescription = title,
         contentScale = ContentScale.Crop,
         modifier = modifier,
-        onSuccess = { imageState ->
-            onImageSuccessState(imageState.result.drawable)
-        }
     )
 }
 

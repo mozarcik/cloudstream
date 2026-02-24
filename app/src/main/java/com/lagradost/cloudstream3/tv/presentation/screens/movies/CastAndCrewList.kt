@@ -28,8 +28,9 @@ import androidx.tv.material3.ClassicCard
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.data.entities.MovieCast
 import com.lagradost.cloudstream3.tv.data.util.StringConstants

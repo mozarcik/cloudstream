@@ -52,9 +52,10 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.OutlinedButtonDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.SubcomposeAsyncImage
-import coil.compose.SubcomposeAsyncImageContent
-import coil.request.ImageRequest
+import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.SubcomposeAsyncImageContent
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
 
 private const val CardFocusAnimationMs = 180
@@ -216,7 +217,7 @@ private fun DownloadPoster(
             .clip(DownloadPosterShape)
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
     ) {
-        if (painter.state is coil.compose.AsyncImagePainter.State.Success) {
+        if (painter.state is coil3.compose.AsyncImagePainter.State.Success) {
             SubcomposeAsyncImageContent()
         } else {
             Box(
