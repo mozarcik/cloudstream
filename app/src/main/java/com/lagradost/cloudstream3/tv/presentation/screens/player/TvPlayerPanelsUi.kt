@@ -8,6 +8,7 @@ internal const val SubtitleLoadFromFileItemId = "subtitle_load_file"
 internal const val SubtitleLoadFirstAvailableItemId = "subtitle_load_first_available"
 internal const val SubtitleOnlineQueryItemId = "subtitle_online_query"
 internal const val SubtitleOnlineLanguageItemId = "subtitle_online_language"
+internal const val SubtitleOnlineLanguageOptionItemPrefix = "subtitle_online_language_option_"
 internal const val SubtitleOnlineLoadingItemId = "subtitle_online_loading"
 internal const val SubtitleOnlineEmptyItemId = "subtitle_online_empty"
 internal const val SubtitleOnlineErrorItemId = "subtitle_online_error"
@@ -23,6 +24,7 @@ enum class TvPlayerSidePanel {
 enum class TvPlayerSubtitlePanelScreen {
     Main,
     OnlineSearch,
+    OnlineLanguageSelection,
 }
 
 enum class TvPlayerSubtitlePanelNavigationDirection {
@@ -86,15 +88,6 @@ data class TvPlayerOnlineSubtitlesState(
 sealed interface TvPlayerPanelEffect {
     data object OpenSubtitleFilePicker : TvPlayerPanelEffect
 
-    data class OpenOnlineSubtitlesQueryEditor(
-        val currentQuery: String,
-    ) : TvPlayerPanelEffect
-
-    data class OpenOnlineSubtitlesLanguagePicker(
-        val options: List<TvPlayerSubtitleLanguageOption>,
-        val selectedIndex: Int,
-    ) : TvPlayerPanelEffect
-
     data class OpenSourceErrorDialog(
         val dialog: TvPlayerSourceErrorDialog,
     ) : TvPlayerPanelEffect
@@ -127,7 +120,9 @@ sealed interface TvPlayerPanelItemAction {
     data object LoadFirstAvailableSubtitle : TvPlayerPanelItemAction
     data object BackFromOnlineSubtitles : TvPlayerPanelItemAction
     data object EditOnlineSubtitlesQuery : TvPlayerPanelItemAction
+    data class UpdateOnlineSubtitlesQuery(val query: String) : TvPlayerPanelItemAction
     data object SelectOnlineSubtitlesLanguage : TvPlayerPanelItemAction
+    data class SelectOnlineSubtitlesLanguageOption(val languageTag: String) : TvPlayerPanelItemAction
     data object RetryOnlineSubtitlesSearch : TvPlayerPanelItemAction
     data class SelectOnlineSubtitleResult(val resultId: String) : TvPlayerPanelItemAction
 }

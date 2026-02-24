@@ -24,6 +24,7 @@ import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities
 import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities.SubtitleSearch
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.subtitleProviders
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelInlineTextField
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
@@ -42,6 +43,7 @@ import com.lagradost.cloudstream3.utils.SubtitleHelper.fromTagToLanguageName
 import com.lagradost.cloudstream3.utils.SubtitleHelper.languages
 import com.lagradost.safefile.SafeFile
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -51,6 +53,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 private const val DebugTag = "TvPlayerVM"
@@ -118,6 +121,7 @@ class TvPlayerScreenViewModel(
         val screen: TvPlayerSubtitlePanelScreen = TvPlayerSubtitlePanelScreen.Main,
         val direction: TvPlayerSubtitlePanelNavigationDirection = TvPlayerSubtitlePanelNavigationDirection.Forward,
         val focusInternetEntryWhenMainVisible: Boolean = false,
+        val focusOnlineSearchItemId: String? = null,
     )
 
     private val _uiState = MutableStateFlow<TvPlayerUiState>(
@@ -315,25 +319,19 @@ class TvPlayerScreenViewModel(
                 return
             }
             TvPlayerPanelItemAction.EditOnlineSubtitlesQuery -> {
-                _panelEffects.tryEmit(
-                    TvPlayerPanelEffect.OpenOnlineSubtitlesQueryEditor(
-                        currentQuery = onlineSubtitlesState.query,
-                    )
-                )
+                return
+            }
+            is TvPlayerPanelItemAction.UpdateOnlineSubtitlesQuery -> {
+                onOnlineSubtitlesQueryUpdated(action.query)
                 return
             }
             TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguage -> {
-                val selectedIndex = subtitleLanguageOptions.indexOfFirst { option ->
-                    option.tag.equals(onlineSubtitlesState.selectedLanguageTag, ignoreCase = true)
-                }.takeIf { index ->
-                    index >= 0
-                } ?: 0
-                _panelEffects.tryEmit(
-                    TvPlayerPanelEffect.OpenOnlineSubtitlesLanguagePicker(
-                        options = subtitleLanguageOptions,
-                        selectedIndex = selectedIndex,
-                    )
-                )
+                openOnlineSubtitlesLanguagePanel()
+                return
+            }
+            is TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguageOption -> {
+                onOnlineSubtitlesLanguageUpdated(action.languageTag)
+                navigateBackFromOnlineSubtitles()
                 return
             }
             TvPlayerPanelItemAction.RetryOnlineSubtitlesSearch -> {
@@ -450,7 +448,9 @@ class TvPlayerScreenViewModel(
             errorMessage = null,
             results = if (onlineSubtitlesState.query.isBlank()) emptyList() else onlineSubtitlesState.results,
         )
-        if (subtitlePanelNavigationState.screen == TvPlayerSubtitlePanelScreen.OnlineSearch) {
+        if (subtitlePanelNavigationState.screen == TvPlayerSubtitlePanelScreen.OnlineSearch ||
+            subtitlePanelNavigationState.screen == TvPlayerSubtitlePanelScreen.OnlineLanguageSelection
+        ) {
             scheduleOnlineSubtitlesSearch(immediate = true)
         }
         refreshReadyStateIfSubtitlesPanelVisible()
@@ -544,12 +544,14 @@ class TvPlayerScreenViewModel(
             }
 
             val repository = APIRepository(api)
-            val target = resolvePlaybackTarget(
-                repository = repository,
-                url = url,
-                apiName = apiName,
-                directEpisodeData = episodeData,
-            )
+            val target = withContext(Dispatchers.IO) {
+                resolvePlaybackTarget(
+                    repository = repository,
+                    url = url,
+                    apiName = apiName,
+                    directEpisodeData = episodeData,
+                )
+            }
 
             if (target == null) {
                 _uiState.value = TvPlayerUiState.Error(
@@ -578,38 +580,48 @@ class TvPlayerScreenViewModel(
             )
 
             try {
-                generator.generateLinks(
-                    clearCache = false,
-                    sourceTypes = LOADTYPE_INAPP,
-                    callback = { (link, _) ->
-                        if (link == null || link.url.isBlank()) return@generateLinks
-                        val inserted = synchronized(loadedLinksByUrl) {
-                            loadedLinksByUrl.putIfAbsent(link.url, link) == null
-                        }
-                        synchronized(sourceStatesByUrl) {
-                            sourceStatesByUrl.putIfAbsent(
-                                link.url,
-                                TvPlayerSourceState(status = TvPlayerSourceStatus.Loading),
-                            )
-                        }
-                        if (inserted) {
-                            if (hasFinalized) {
-                                onBackgroundDataInsertedAfterFinalize()
-                            } else {
-                                postLoadingState()
+                withContext(Dispatchers.IO) {
+                    val loadingScope = this
+                    generator.generateLinks(
+                        clearCache = false,
+                        sourceTypes = LOADTYPE_INAPP,
+                        callback = { (link, _) ->
+                            if (link == null || link.url.isBlank()) return@generateLinks
+                            val inserted = synchronized(loadedLinksByUrl) {
+                                loadedLinksByUrl.putIfAbsent(link.url, link) == null
+                            }
+                            synchronized(sourceStatesByUrl) {
+                                sourceStatesByUrl.putIfAbsent(
+                                    link.url,
+                                    TvPlayerSourceState(status = TvPlayerSourceStatus.Loading),
+                                )
+                            }
+                            if (inserted) {
+                                loadingScope.launch(Dispatchers.Main.immediate) {
+                                    if (hasFinalized) {
+                                        onBackgroundDataInsertedAfterFinalize()
+                                    } else {
+                                        postLoadingState()
+                                    }
+                                }
+                            }
+                        },
+                        subtitleCallback = { subtitle ->
+                            val inserted = synchronized(loadedSubtitlesById) {
+                                loadedSubtitlesById.putIfAbsent(subtitle.getId(), subtitle) == null
+                            }
+                            if (inserted) {
+                                loadingScope.launch(Dispatchers.Main.immediate) {
+                                    if (hasFinalized) {
+                                        onBackgroundDataInsertedAfterFinalize()
+                                    }
+                                }
                             }
                         }
-                    },
-                    subtitleCallback = { subtitle ->
-                        val inserted = synchronized(loadedSubtitlesById) {
-                            loadedSubtitlesById.putIfAbsent(subtitle.getId(), subtitle) == null
-                        }
-                        if (inserted && hasFinalized) {
-                            onBackgroundDataInsertedAfterFinalize()
-                        }
-                    }
-                )
-            } catch (_: CancellationException) {
+                    )
+                }
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (t: Throwable) {
                 logError(t)
             }
@@ -975,24 +987,45 @@ class TvPlayerScreenViewModel(
         link: ExtractorLink,
         currentIndex: Int,
     ) {
-        panelsState.applyPreferredSubtitleAutoSelection(orderedSubtitles)
+        val sourceStatesSnapshot = synchronized(sourceStatesByUrl) {
+            sourceStatesByUrl.toMap()
+        }
+        val isCurrentSourceReady = sourceStatesSnapshot[link.url]?.status == TvPlayerSourceStatus.Success
+        if (isCurrentSourceReady) {
+            panelsState.applyPreferredSubtitleAutoSelection(orderedSubtitles)
+        }
         val panelSelection = panelsState.selection(
             currentLink = link,
             subtitles = orderedSubtitles,
         )
-        val (subtitleOnlineItems, subtitleOnlineInitialFocusedItemId) =
-            buildOnlineSubtitlesPanelItems()
+        // WHY: player powinien wystartować najpierw na samym źródle.
+        // Dopiero po sukcesie odtwarzania udostępniamy/subskrybujemy napisy w UI i playerze.
+        val subtitlesForUi = if (isCurrentSourceReady) orderedSubtitles else emptyList()
+        val selectedSubtitleIndexForUi = if (isCurrentSourceReady) {
+            panelSelection.selectedSubtitleIndex
+        } else {
+            -1
+        }
+        val (subtitleOnlineItems, baseSubtitleOnlineInitialFocusedItemId) = when (
+            subtitlePanelNavigationState.screen
+        ) {
+            TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> buildOnlineSubtitlesLanguagePanelItems()
+            TvPlayerSubtitlePanelScreen.OnlineSearch,
+            TvPlayerSubtitlePanelScreen.Main -> buildOnlineSubtitlesPanelItems()
+        }
+        val subtitleOnlineInitialFocusedItemId = subtitlePanelNavigationState.focusOnlineSearchItemId
+            ?.takeIf { requestedId ->
+                subtitlePanelNavigationState.screen == TvPlayerSubtitlePanelScreen.OnlineSearch &&
+                    subtitleOnlineItems.any { item -> item.id == requestedId && item.enabled }
+            } ?: baseSubtitleOnlineInitialFocusedItemId
         val hasOnlineSubtitleProviders = subtitleProviders.isNotEmpty()
         val canLoadFirstAvailableSubtitle = hasOnlineSubtitleProviders && defaultOnlineSubtitlesQuery().isNotBlank()
-        val sourceStatesSnapshot = synchronized(sourceStatesByUrl) {
-            sourceStatesByUrl.toMap()
-        }
         val basePanelsState = panelsState.buildPanelsUiState(
             orderedLinks = orderedLinks,
             currentSourceIndex = currentIndex,
             sourceStates = sourceStatesSnapshot,
             currentLink = link,
-            subtitles = orderedSubtitles,
+            subtitles = subtitlesForUi,
             showOnlineSubtitleActions = hasOnlineSubtitleProviders,
             showFirstAvailableSubtitleAction = canLoadFirstAvailableSubtitle,
         )
@@ -1016,6 +1049,11 @@ class TvPlayerScreenViewModel(
                 focusInternetEntryWhenMainVisible = false,
             )
         }
+        if (subtitlePanelNavigationState.focusOnlineSearchItemId != null) {
+            subtitlePanelNavigationState = subtitlePanelNavigationState.copy(
+                focusOnlineSearchItemId = null,
+            )
+        }
         val episodeId = currentEpisode?.id ?: -1
         _uiState.value = TvPlayerUiState.Ready(
             metadata = metadata,
@@ -1023,8 +1061,8 @@ class TvPlayerScreenViewModel(
             sourceCount = orderedLinks.size,
             sources = orderedLinks,
             currentSourceIndex = currentIndex,
-            subtitles = orderedSubtitles,
-            selectedSubtitleIndex = panelSelection.selectedSubtitleIndex,
+            subtitles = subtitlesForUi,
+            selectedSubtitleIndex = selectedSubtitleIndexForUi,
             selectedAudioTrackIndex = panelSelection.selectedAudioTrackIndex,
             panels = panelsUiState,
             episodeId = episodeId,
@@ -1047,6 +1085,7 @@ class TvPlayerScreenViewModel(
             screen = TvPlayerSubtitlePanelScreen.OnlineSearch,
             direction = TvPlayerSubtitlePanelNavigationDirection.Forward,
             focusInternetEntryWhenMainVisible = false,
+            focusOnlineSearchItemId = null,
         )
         if (onlineSubtitlesState.query.isBlank()) {
             onlineSubtitlesState = onlineSubtitlesState.copy(
@@ -1060,18 +1099,43 @@ class TvPlayerScreenViewModel(
         postReadyStateForCurrentLink()
     }
 
-    private fun navigateBackFromOnlineSubtitles(): Boolean {
+    private fun openOnlineSubtitlesLanguagePanel() {
         if (subtitlePanelNavigationState.screen != TvPlayerSubtitlePanelScreen.OnlineSearch) {
-            return false
+            return
         }
-
         subtitlePanelNavigationState = SubtitlePanelNavigationState(
-            screen = TvPlayerSubtitlePanelScreen.Main,
-            direction = TvPlayerSubtitlePanelNavigationDirection.Backward,
-            focusInternetEntryWhenMainVisible = true,
+            screen = TvPlayerSubtitlePanelScreen.OnlineLanguageSelection,
+            direction = TvPlayerSubtitlePanelNavigationDirection.Forward,
+            focusInternetEntryWhenMainVisible = false,
+            focusOnlineSearchItemId = null,
         )
         postReadyStateForCurrentLink()
-        return true
+    }
+
+    private fun navigateBackFromOnlineSubtitles(): Boolean {
+        when (subtitlePanelNavigationState.screen) {
+            TvPlayerSubtitlePanelScreen.Main -> return false
+            TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> {
+                subtitlePanelNavigationState = SubtitlePanelNavigationState(
+                    screen = TvPlayerSubtitlePanelScreen.OnlineSearch,
+                    direction = TvPlayerSubtitlePanelNavigationDirection.Backward,
+                    focusInternetEntryWhenMainVisible = false,
+                    focusOnlineSearchItemId = SubtitleOnlineLanguageItemId,
+                )
+                postReadyStateForCurrentLink()
+                return true
+            }
+            TvPlayerSubtitlePanelScreen.OnlineSearch -> {
+                subtitlePanelNavigationState = SubtitlePanelNavigationState(
+                    screen = TvPlayerSubtitlePanelScreen.Main,
+                    direction = TvPlayerSubtitlePanelNavigationDirection.Backward,
+                    focusInternetEntryWhenMainVisible = true,
+                    focusOnlineSearchItemId = null,
+                )
+                postReadyStateForCurrentLink()
+                return true
+            }
+        }
     }
 
     private fun scheduleOnlineSubtitlesSearch(immediate: Boolean) {
@@ -1404,12 +1468,10 @@ class TvPlayerScreenViewModel(
     }
 
     private fun buildOnlineSubtitlesPanelItems(): Pair<List<SidePanelMenuItem>, String?> {
-        val queryPreview = onlineSubtitlesState.query.ifBlank {
-            stringFromAppContext(
-                resId = R.string.search_hint,
-                fallback = "Search…",
-            )
-        }
+        val queryPlaceholder = stringFromAppContext(
+            resId = R.string.search_hint,
+            fallback = "Search…",
+        )
 
         val items = buildList {
             add(
@@ -1419,8 +1481,11 @@ class TvPlayerScreenViewModel(
                         resId = R.string.search,
                         fallback = "Search",
                     ),
-                    supportingTexts = listOf(queryPreview),
-                    actionToken = TvPlayerPanelItemAction.EditOnlineSubtitlesQuery,
+                    inlineTextField = SidePanelInlineTextField(
+                        value = onlineSubtitlesState.query,
+                        placeholder = queryPlaceholder,
+                        valueChangeToken = TvPlayerPanelItemAction.EditOnlineSubtitlesQuery,
+                    ),
                 )
             )
             add(
@@ -1513,6 +1578,25 @@ class TvPlayerScreenViewModel(
             else -> SubtitleOnlineQueryItemId
         }
         return items to initialFocus
+    }
+
+    private fun buildOnlineSubtitlesLanguagePanelItems(): Pair<List<SidePanelMenuItem>, String?> {
+        val languageItems = subtitleLanguageOptions.map { option ->
+            val selected = option.tag.equals(onlineSubtitlesState.selectedLanguageTag, ignoreCase = true)
+            SidePanelMenuItem(
+                id = "$SubtitleOnlineLanguageOptionItemPrefix${option.tag}",
+                title = option.label,
+                selected = selected,
+                showTrailingRadio = true,
+                actionToken = TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguageOption(
+                    languageTag = option.tag,
+                ),
+            )
+        }
+        val initialFocus = languageItems.firstOrNull { item ->
+            item.selected
+        }?.id ?: languageItems.firstOrNull()?.id
+        return languageItems to initialFocus
     }
 
     private fun ensureOnlineSubtitlesQueryInitialized() {

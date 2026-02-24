@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.math.abs
 
-private const val HALO_RENDERING_ENABLED = true
+private const val HALO_RENDERING_ENABLED = false
 private const val HALO_FOCUS_DEBOUNCE_MS = 160L
 private const val HALO_CLEAR_DEBOUNCE_MS = 48L
 private const val HALO_STATE_RECT_EPSILON_PX = 2f

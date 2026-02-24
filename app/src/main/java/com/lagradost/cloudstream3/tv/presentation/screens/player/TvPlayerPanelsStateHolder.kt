@@ -202,7 +202,9 @@ internal class TvPlayerPanelsStateHolder {
             TvPlayerPanelItemAction.LoadFirstAvailableSubtitle,
             TvPlayerPanelItemAction.BackFromOnlineSubtitles,
             TvPlayerPanelItemAction.EditOnlineSubtitlesQuery,
+            is TvPlayerPanelItemAction.UpdateOnlineSubtitlesQuery,
             TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguage,
+            is TvPlayerPanelItemAction.SelectOnlineSubtitlesLanguageOption,
             TvPlayerPanelItemAction.RetryOnlineSubtitlesSearch,
             is TvPlayerPanelItemAction.SelectOnlineSubtitleResult -> {
                 TvPlayerPanelActionOutcome()

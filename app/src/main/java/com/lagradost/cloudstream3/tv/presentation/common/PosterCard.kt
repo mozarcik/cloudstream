@@ -51,7 +51,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import coil.memory.MemoryCache
 import coil.request.ImageRequest
+import coil.size.Precision
 import com.lagradost.cloudstream3.R
 import kotlin.math.abs
 
@@ -333,6 +335,7 @@ private fun PosterImage(
     val imageRequest = remember(context, model) {
         ImageRequest.Builder(context)
             .data(model)
+            .precision(Precision.INEXACT)
             .crossfade(false)
             .build()
     }

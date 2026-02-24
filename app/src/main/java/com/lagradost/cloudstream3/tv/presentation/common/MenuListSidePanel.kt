@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -39,6 +40,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -75,6 +77,13 @@ enum class SidePanelContentNavigationDirection {
     Backward,
 }
 
+data class SidePanelInlineTextField(
+    val value: String,
+    val placeholder: String = "",
+    val valueChangeToken: Any? = null,
+    val submitToken: Any? = null,
+)
+
 data class SidePanelMenuItem(
     val id: String,
     val title: String,
@@ -104,6 +113,7 @@ data class SidePanelMenuItem(
     val onClick: () -> Unit = {},
     val onMenuClick: (() -> Unit)? = null,
     val onKeyUp: ((Int) -> Boolean)? = null,
+    val inlineTextField: SidePanelInlineTextField? = null,
     val supportingContent: (@Composable () -> Unit)? = null,
     val leadingContent: (@Composable () -> Unit)? = null,
     val trailingContent: (@Composable () -> Unit)? = null,
@@ -129,6 +139,8 @@ fun MenuListSidePanel(
     contentNavigationDirection: SidePanelContentNavigationDirection = SidePanelContentNavigationDirection.Forward,
     onActionTokenClick: ((Any) -> Unit)? = null,
     onDirectionalActionToken: ((Any) -> Unit)? = null,
+    onInlineTextFieldValueChanged: ((Any, String) -> Unit)? = null,
+    onInlineTextFieldSubmit: ((Any, String) -> Unit)? = null,
 ) {
     val resolvedContentKey = contentAnimationKey ?: Unit
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
@@ -306,192 +318,339 @@ fun MenuListSidePanel(
                                     return true
                                 }
 
-                                val rowContent: @Composable () -> Unit = {
-                                    val titleTextStyle = menuItem.titleTextStyle ?: when (menuItem.titleStyle) {
-                                        SidePanelTitleStyle.SubtitleGroupHeader -> MaterialTheme.typography.titleMedium
-                                        SidePanelTitleStyle.SubtitleItem -> MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.Normal
-                                        )
-                                        SidePanelTitleStyle.Default -> MaterialTheme.typography.titleMedium
-                                    }
-                                    val supportingTextStyle = when (menuItem.supportingStyle) {
-                                        SidePanelSupportingStyle.SourceOption -> MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.Normal
-                                        )
-                                        SidePanelSupportingStyle.SourceError -> MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.Normal,
-                                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.88f),
-                                        )
-                                        SidePanelSupportingStyle.Default -> MaterialTheme.typography.bodySmall.copy(
-                                            fontWeight = FontWeight.Normal
-                                        )
-                                    }
-
-                                    ListItem(
-                                        selected = menuItem.selected,
-                                        onClick = {
-                                            if (groupKey != null) {
-                                                toggleGroup()
-                                                return@ListItem
-                                            }
-                                            val token = menuItem.actionToken
-                                            if (token != null && onActionTokenClick != null) {
-                                                onActionTokenClick(token)
-                                            } else {
-                                                menuItem.onClick()
-                                            }
-                                        },
-                                        enabled = menuItem.enabled,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(start = menuItem.itemStartPadding)
-                                            .then(
-                                                menuItem.itemBackgroundColor?.let { color ->
-                                                    menuItem.itemBackgroundShape?.let { shape ->
-                                                        Modifier.background(color = color, shape = shape)
-                                                    } ?: Modifier.background(color)
-                                                } ?: Modifier
-                                            )
-                                            .then(
-                                                if (isFocused) {
-                                                    menuItem.focusedItemShape?.let { shape ->
-                                                        Modifier.clip(shape)
-                                                    } ?: Modifier
-                                                } else {
-                                                    Modifier
-                                                }
-                                            )
-                                            .then(
-                                                focusRequesters[menuItem.id]?.let { focusRequester ->
-                                                    Modifier.focusRequester(focusRequester)
-                                                } ?: Modifier
-                                            )
-                                            .onFocusChanged { focusState ->
-                                                isFocused = focusState.isFocused
-                                                if (focusState.isFocused) {
-                                                    focusedItemId = menuItem.id
-                                                } else if (focusedItemId == menuItem.id && !focusState.hasFocus) {
-                                                    focusedItemId = null
-                                                }
-                                            }
-                                            .semantics(mergeDescendants = true) { }
-                                            .then(
-                                                if (menuItem.testTag.isNullOrBlank()) {
-                                                    Modifier
-                                                } else {
-                                                    Modifier.testTag(menuItem.testTag)
-                                                }
-                                            )
-                                            .onPreviewKeyEvent { keyEvent ->
-                                                val nativeEvent = keyEvent.nativeKeyEvent
-                                                if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
-                                                    return@onPreviewKeyEvent false
-                                                }
-
-                                                if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
-                                                    return@onPreviewKeyEvent true
-                                                }
-
-                                                when (nativeEvent.keyCode) {
-                                                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
-                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
-                                                        if (toggleGroup(expanded = true)) {
-                                                            return@onPreviewKeyEvent true
-                                                        }
-                                                    }
-
-                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
-                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
-                                                        if (toggleGroup(expanded = false)) {
-                                                            return@onPreviewKeyEvent true
-                                                        }
-                                                    }
-                                                }
-
-                                                when (nativeEvent.keyCode) {
-                                                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
-                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
-                                                        val token = menuItem.onRightActionToken
-                                                        if (token != null && onDirectionalActionToken != null) {
-                                                            onDirectionalActionToken(token)
-                                                            return@onPreviewKeyEvent true
-                                                        }
-                                                    }
-
-                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
-                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
-                                                        val token = menuItem.onLeftActionToken
-                                                        if (token != null && onDirectionalActionToken != null) {
-                                                            onDirectionalActionToken(token)
-                                                            return@onPreviewKeyEvent true
-                                                        }
-                                                    }
-                                                }
-
-                                                when (nativeEvent.keyCode) {
-                                                    AndroidKeyEvent.KEYCODE_MENU -> {
-                                                        val onMenuClick = menuItem.onMenuClick ?: return@onPreviewKeyEvent false
-                                                        onMenuClick()
-                                                        true
-                                                    }
-
-                                                    AndroidKeyEvent.KEYCODE_DPAD_LEFT,
-                                                    AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
-                                                        if (!closeOnLeftPress) {
-                                                            return@onPreviewKeyEvent false
-                                                        }
-                                                        onCloseRequested()
-                                                        true
-                                                    }
-
-                                                    else -> false
-                                                }
-                                            },
-                                        headlineContent = {
-                                            Column {
-                                                Text(
-                                                    text = menuItem.title,
-                                                    style = titleTextStyle,
-                                                    maxLines = menuItem.titleMaxLines,
-                                                )
-                                                if (menuItem.supportingContent != null) {
-                                                    menuItem.supportingContent.invoke()
-                                                } else if (menuItem.supportingTexts.isNotEmpty()) {
-                                                    DotSeparatedRow(
-                                                        texts = menuItem.supportingTexts,
-                                                        textStyle = supportingTextStyle,
-                                                        modifier = Modifier.padding(top = 2.dp),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        leadingContent = menuItem.leadingContent?.let { leading ->
-                                            {
-                                                leading()
-                                            }
-                                        },
-                                        trailingContent = {
-                                            when {
-                                                menuItem.trailingContent != null -> menuItem.trailingContent.invoke()
-                                                menuItem.showChevron -> {
-                                                    Icon(
-                                                        imageVector = if (isGroupExpanded) {
-                                                            Icons.Default.KeyboardArrowDown
-                                                        } else {
-                                                            Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                                        },
-                                                        contentDescription = null,
-                                                    )
-                                                }
-                                                (menuItem.showTrailingRadio || showSelectionRadio) && menuItem.selected -> {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Check,
-                                                        contentDescription = null,
-                                                    )
-                                                }
-                                            }
+                                val titleTextStyle = menuItem.titleTextStyle ?: when (menuItem.titleStyle) {
+                                    SidePanelTitleStyle.SubtitleGroupHeader -> MaterialTheme.typography.titleMedium
+                                    SidePanelTitleStyle.SubtitleItem -> MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                    SidePanelTitleStyle.Default -> MaterialTheme.typography.titleMedium
+                                }
+                                val supportingTextStyle = when (menuItem.supportingStyle) {
+                                    SidePanelSupportingStyle.SourceOption -> MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                    SidePanelSupportingStyle.SourceError -> MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Normal,
+                                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.88f),
+                                    )
+                                    SidePanelSupportingStyle.Default -> MaterialTheme.typography.bodySmall.copy(
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                }
+                                val baseItemModifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = menuItem.itemStartPadding)
+                                    .then(
+                                        menuItem.itemBackgroundColor?.let { color ->
+                                            menuItem.itemBackgroundShape?.let { shape ->
+                                                Modifier.background(color = color, shape = shape)
+                                            } ?: Modifier.background(color)
+                                        } ?: Modifier
+                                    )
+                                    .then(
+                                        if (isFocused) {
+                                            menuItem.focusedItemShape?.let { shape ->
+                                                Modifier.clip(shape)
+                                            } ?: Modifier
+                                        } else {
+                                            Modifier
                                         }
                                     )
+                                    .then(
+                                        if (menuItem.testTag.isNullOrBlank()) {
+                                            Modifier
+                                        } else {
+                                            Modifier.testTag(menuItem.testTag)
+                                        }
+                                    )
+
+                                val rowContent: @Composable () -> Unit = {
+                                    val inlineTextField = menuItem.inlineTextField
+                                    if (inlineTextField != null) {
+                                        val focusModifier = focusRequesters[menuItem.id]?.let { focusRequester ->
+                                            Modifier.focusRequester(focusRequester)
+                                        } ?: Modifier
+                                        val cursorColor = MaterialTheme.colorScheme.onSurface
+                                        val containerColor = if (isFocused) {
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f)
+                                        } else {
+                                            MaterialTheme.colorScheme.surface.copy(alpha = 0.84f)
+                                        }
+
+                                        Column(
+                                            modifier = baseItemModifier
+                                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        ) {
+                                            Text(
+                                                text = menuItem.title,
+                                                style = titleTextStyle,
+                                                maxLines = menuItem.titleMaxLines,
+                                            )
+
+                                            BasicTextField(
+                                                value = inlineTextField.value,
+                                                onValueChange = { updatedValue ->
+                                                    val token = inlineTextField.valueChangeToken
+                                                    if (token != null && onInlineTextFieldValueChanged != null) {
+                                                        onInlineTextFieldValueChanged(token, updatedValue)
+                                                    }
+                                                },
+                                                singleLine = true,
+                                                enabled = menuItem.enabled,
+                                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                ),
+                                                cursorBrush = SolidColor(cursorColor),
+                                                decorationBox = { innerTextField ->
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(top = 6.dp)
+                                                            .background(
+                                                                color = containerColor,
+                                                                shape = MaterialTheme.shapes.small,
+                                                            )
+                                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                    ) {
+                                                        if (inlineTextField.value.isBlank() &&
+                                                            inlineTextField.placeholder.isNotBlank()
+                                                        ) {
+                                                            Text(
+                                                                text = inlineTextField.placeholder,
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                                                maxLines = 1,
+                                                            )
+                                                        }
+                                                        innerTextField()
+                                                    }
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .then(focusModifier)
+                                                    .onFocusChanged { focusState ->
+                                                        isFocused = focusState.isFocused
+                                                        if (focusState.isFocused) {
+                                                            focusedItemId = menuItem.id
+                                                        } else if (focusedItemId == menuItem.id && !focusState.hasFocus) {
+                                                            focusedItemId = null
+                                                        }
+                                                    }
+                                                    .semantics(mergeDescendants = true) { }
+                                                    .onPreviewKeyEvent { keyEvent ->
+                                                        val nativeEvent = keyEvent.nativeKeyEvent
+                                                        if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
+                                                            return@onPreviewKeyEvent false
+                                                        }
+
+                                                        if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
+                                                            return@onPreviewKeyEvent true
+                                                        }
+
+                                                        when (nativeEvent.keyCode) {
+                                                            AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                                                            AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
+                                                                val token = menuItem.onRightActionToken
+                                                                if (token != null && onDirectionalActionToken != null) {
+                                                                    onDirectionalActionToken(token)
+                                                                    return@onPreviewKeyEvent true
+                                                                }
+                                                            }
+
+                                                            AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                            AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                                val token = menuItem.onLeftActionToken
+                                                                if (token != null && onDirectionalActionToken != null) {
+                                                                    onDirectionalActionToken(token)
+                                                                    return@onPreviewKeyEvent true
+                                                                }
+                                                            }
+                                                        }
+
+                                                        when (nativeEvent.keyCode) {
+                                                            AndroidKeyEvent.KEYCODE_MENU -> {
+                                                                val onMenuClick = menuItem.onMenuClick
+                                                                    ?: return@onPreviewKeyEvent false
+                                                                onMenuClick()
+                                                                true
+                                                            }
+
+                                                            AndroidKeyEvent.KEYCODE_ENTER,
+                                                            AndroidKeyEvent.KEYCODE_NUMPAD_ENTER,
+                                                            AndroidKeyEvent.KEYCODE_DPAD_CENTER -> {
+                                                                val token = inlineTextField.submitToken
+                                                                if (token != null && onInlineTextFieldSubmit != null) {
+                                                                    onInlineTextFieldSubmit(token, inlineTextField.value)
+                                                                    return@onPreviewKeyEvent true
+                                                                }
+                                                                false
+                                                            }
+
+                                                            AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                            AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                                if (!closeOnLeftPress) {
+                                                                    return@onPreviewKeyEvent false
+                                                                }
+                                                                onCloseRequested()
+                                                                true
+                                                            }
+
+                                                            else -> false
+                                                        }
+                                                    },
+                                            )
+
+                                            if (menuItem.supportingTexts.isNotEmpty()) {
+                                                DotSeparatedRow(
+                                                    texts = menuItem.supportingTexts,
+                                                    textStyle = supportingTextStyle,
+                                                    modifier = Modifier.padding(top = 4.dp),
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        ListItem(
+                                            selected = menuItem.selected,
+                                            onClick = {
+                                                if (groupKey != null) {
+                                                    toggleGroup()
+                                                    return@ListItem
+                                                }
+                                                val token = menuItem.actionToken
+                                                if (token != null && onActionTokenClick != null) {
+                                                    onActionTokenClick(token)
+                                                } else {
+                                                    menuItem.onClick()
+                                                }
+                                            },
+                                            enabled = menuItem.enabled,
+                                            modifier = baseItemModifier
+                                                .then(
+                                                    focusRequesters[menuItem.id]?.let { focusRequester ->
+                                                        Modifier.focusRequester(focusRequester)
+                                                    } ?: Modifier
+                                                )
+                                                .onFocusChanged { focusState ->
+                                                    isFocused = focusState.isFocused
+                                                    if (focusState.isFocused) {
+                                                        focusedItemId = menuItem.id
+                                                    } else if (focusedItemId == menuItem.id && !focusState.hasFocus) {
+                                                        focusedItemId = null
+                                                    }
+                                                }
+                                                .semantics(mergeDescendants = true) { }
+                                                .onPreviewKeyEvent { keyEvent ->
+                                                    val nativeEvent = keyEvent.nativeKeyEvent
+                                                    if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
+                                                        return@onPreviewKeyEvent false
+                                                    }
+
+                                                    if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
+                                                        return@onPreviewKeyEvent true
+                                                    }
+
+                                                    when (nativeEvent.keyCode) {
+                                                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                                                        AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
+                                                            if (toggleGroup(expanded = true)) {
+                                                                return@onPreviewKeyEvent true
+                                                            }
+                                                        }
+
+                                                        AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                        AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                            if (toggleGroup(expanded = false)) {
+                                                                return@onPreviewKeyEvent true
+                                                            }
+                                                        }
+                                                    }
+
+                                                    when (nativeEvent.keyCode) {
+                                                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT,
+                                                        AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT -> {
+                                                            val token = menuItem.onRightActionToken
+                                                            if (token != null && onDirectionalActionToken != null) {
+                                                                onDirectionalActionToken(token)
+                                                                return@onPreviewKeyEvent true
+                                                            }
+                                                        }
+
+                                                        AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                        AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                            val token = menuItem.onLeftActionToken
+                                                            if (token != null && onDirectionalActionToken != null) {
+                                                                onDirectionalActionToken(token)
+                                                                return@onPreviewKeyEvent true
+                                                            }
+                                                        }
+                                                    }
+
+                                                    when (nativeEvent.keyCode) {
+                                                        AndroidKeyEvent.KEYCODE_MENU -> {
+                                                            val onMenuClick = menuItem.onMenuClick
+                                                                ?: return@onPreviewKeyEvent false
+                                                            onMenuClick()
+                                                            true
+                                                        }
+
+                                                        AndroidKeyEvent.KEYCODE_DPAD_LEFT,
+                                                        AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT -> {
+                                                            if (!closeOnLeftPress) {
+                                                                return@onPreviewKeyEvent false
+                                                            }
+                                                            onCloseRequested()
+                                                            true
+                                                        }
+
+                                                        else -> false
+                                                    }
+                                                },
+                                            headlineContent = {
+                                                Column {
+                                                    Text(
+                                                        text = menuItem.title,
+                                                        style = titleTextStyle,
+                                                        maxLines = menuItem.titleMaxLines,
+                                                    )
+                                                    if (menuItem.supportingContent != null) {
+                                                        menuItem.supportingContent.invoke()
+                                                    } else if (menuItem.supportingTexts.isNotEmpty()) {
+                                                        DotSeparatedRow(
+                                                            texts = menuItem.supportingTexts,
+                                                            textStyle = supportingTextStyle,
+                                                            modifier = Modifier.padding(top = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                            },
+                                            leadingContent = menuItem.leadingContent?.let { leading ->
+                                                {
+                                                    leading()
+                                                }
+                                            },
+                                            trailingContent = {
+                                                when {
+                                                    menuItem.trailingContent != null -> menuItem.trailingContent.invoke()
+                                                    menuItem.showChevron -> {
+                                                        Icon(
+                                                            imageVector = if (isGroupExpanded) {
+                                                                Icons.Default.KeyboardArrowDown
+                                                            } else {
+                                                                Icons.AutoMirrored.Filled.KeyboardArrowRight
+                                                            },
+                                                            contentDescription = null,
+                                                        )
+                                                    }
+                                                    (menuItem.showTrailingRadio || showSelectionRadio) && menuItem.selected -> {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Check,
+                                                            contentDescription = null,
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
 
                                 if (menuItem.animateVisibility) {

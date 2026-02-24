@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.player
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,7 +13,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,14 +21,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +55,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
@@ -65,9 +64,14 @@ import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.RenderersFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.SingleSampleMediaSource
+import androidx.media3.exoplayer.text.TextRenderer
+import androidx.media3.exoplayer.text.TextOutput
 import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
@@ -86,7 +90,9 @@ import com.lagradost.cloudstream3.tv.presentation.common.SidePanelContentNavigat
 import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
+import com.lagradost.cloudstream3.ui.player.CustomDecoder.Companion.fixSubtitleAlignment
 import com.lagradost.cloudstream3.ui.player.UpdatedDefaultExtractorsFactory
+import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.applyStyle
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.NextRenderersFactory
 import kotlinx.coroutines.channels.BufferOverflow
@@ -100,6 +106,10 @@ object TvPlayerScreen {
     const val ApiNameBundleKey = "apiName"
     const val EpisodeDataBundleKey = "episodeData"
 }
+
+private const val SubtitleSyncDebugTag = "TvSubtitleSync"
+private const val FocusRequestRetryCount = 20
+private const val FocusRequestRetryDelayMs = 16L
 
 @Composable
 fun TvPlayerScreen(
@@ -339,37 +349,52 @@ private fun PlaybackState(
     var playerResizeMode by remember { mutableStateOf(PlayerResizeMode.Fit) }
     var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     var pendingPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
-    var subtitleQueryDialogValue by remember { mutableStateOf<String?>(null) }
-    var subtitleLanguagePickerEffect by remember {
-        mutableStateOf<TvPlayerPanelEffect.OpenOnlineSubtitlesLanguagePicker?>(null)
-    }
     var sourceErrorDialogEffect by remember {
         mutableStateOf<TvPlayerPanelEffect.OpenSourceErrorDialog?>(null)
     }
 
     val selectedSubtitle = state.subtitles.getOrNull(state.selectedSubtitleIndex)
+    val selectedSubtitleId = selectedSubtitle?.getId()
+    val subtitleDelayByTrackId = remember(
+        state.episodeId,
+        state.metadata.title,
+        state.metadata.subtitle,
+        state.metadata.year,
+    ) {
+        mutableStateMapOf<String, Long>()
+    }
+    val initialSubtitleDelayMs = selectedSubtitleId?.let { subtitleId ->
+        subtitleDelayByTrackId[subtitleId]
+    } ?: 0L
+    val initialPlayerPositionMs = pendingSeekPositionMs ?: state.resumePositionMs
+    val initialPlayerPlayWhenReady = pendingPlayWhenReady ?: true
 
-    val exoPlayer = remember(
+    val playerInstance = remember(
         state.link.url,
-        selectedSubtitle?.getId(),
+        selectedSubtitleId,
+        initialPlayerPositionMs,
+        initialPlayerPlayWhenReady,
     ) {
         createPlayer(
             context = context,
             link = state.link,
             subtitle = selectedSubtitle,
             audioTracks = state.link.audioTracks,
+            subtitleDelayMs = initialSubtitleDelayMs,
+            startPositionMs = initialPlayerPositionMs,
+            startPlayWhenReady = initialPlayerPlayWhenReady,
         )
     }
+    val exoPlayer = playerInstance.player
+    val subtitleSyncController = playerInstance.subtitleSyncController
 
     var controlsVisible by remember { mutableStateOf(true) }
     var isPlaying by remember { mutableStateOf(exoPlayer.isPlaying) }
     var playerPlaybackState by remember { mutableStateOf(exoPlayer.playbackState) }
     var playerWantsToPlay by remember { mutableStateOf(exoPlayer.playWhenReady) }
     var errorHandled by remember(state.link.url) { mutableStateOf(false) }
-    var hasAppliedInitialResume by remember(state.episodeId, state.selectedSubtitleIndex) {
-        mutableStateOf(false)
-    }
     var runtimeTrackPanelVisible by remember(state.link.url) { mutableStateOf(false) }
+    var subtitleSyncPanelVisible by remember(state.link.url) { mutableStateOf(false) }
     var runtimeAudioTracks by remember(state.link.url) { mutableStateOf<List<PlayerAudioTrackOption>>(emptyList()) }
     var runtimeSelectedAudioTrackId by remember(state.link.url) { mutableStateOf<String?>(null) }
     var hasAppliedInitialAudioSelection by remember(state.link.url) { mutableStateOf(false) }
@@ -430,8 +455,7 @@ private fun PlaybackState(
     val activePanel = state.panels.activePanel
     val hasSidePanel = activePanel != TvPlayerSidePanel.None ||
         runtimeTrackPanelVisible ||
-        subtitleQueryDialogValue != null ||
-        subtitleLanguagePickerEffect != null ||
+        subtitleSyncPanelVisible ||
         sourceErrorDialogEffect != null
     val showRuntimeTracksButton = runtimeAudioTracks.size > 1
 
@@ -500,6 +524,8 @@ private fun PlaybackState(
             val finalDurationMs = if (rawDuration == C.TIME_UNSET || rawDuration < 0L) 0L else rawDuration
             tvPlayerScreenViewModel.onPlaybackStopped(exoPlayer.currentPosition.coerceAtLeast(0L), finalDurationMs)
             exoPlayer.removeListener(listener)
+            subtitleSyncController.clearSubtitleView()
+            subtitleSyncController.clearTextRenderer()
             exoPlayer.release()
         }
     }
@@ -510,12 +536,7 @@ private fun PlaybackState(
         }
     }
 
-    LaunchedEffect(exoPlayer) {
-        if (!hasAppliedInitialResume && state.resumePositionMs > 0L && pendingSeekPositionMs == null) {
-            seekPlayerTo(exoPlayer, state.resumePositionMs)
-            hasAppliedInitialResume = true
-        }
-
+    LaunchedEffect(exoPlayer, pendingSeekPositionMs, pendingPlayWhenReady) {
         refreshRuntimeAudioTracks()
 
         pendingSeekPositionMs?.let { resumePositionMs ->
@@ -533,11 +554,14 @@ private fun PlaybackState(
         }
     }
 
-    LaunchedEffect(controlsVisible) {
-        if (controlsVisible) {
-            playPauseFocusRequester.requestFocus()
+    LaunchedEffect(controlsVisible, hasSidePanel) {
+        if (controlsVisible && !hasSidePanel) {
+            val focused = requestFocusWithRetry(playPauseFocusRequester)
+            if (!focused) {
+                requestFocusWithRetry(rootFocusRequester)
+            }
         } else if (!controlsVisible) {
-            rootFocusRequester.requestFocus()
+            requestFocusWithRetry(rootFocusRequester)
         }
     }
 
@@ -562,14 +586,6 @@ private fun PlaybackState(
     LaunchedEffect(tvPlayerScreenViewModel) {
         tvPlayerScreenViewModel.panelEffects.collectLatest { effect ->
             when (effect) {
-                is TvPlayerPanelEffect.OpenOnlineSubtitlesQueryEditor -> {
-                    subtitleQueryDialogValue = effect.currentQuery
-                }
-
-                is TvPlayerPanelEffect.OpenOnlineSubtitlesLanguagePicker -> {
-                    subtitleLanguagePickerEffect = effect
-                }
-
                 is TvPlayerPanelEffect.OpenSourceErrorDialog -> {
                     sourceErrorDialogEffect = effect
                 }
@@ -593,13 +609,15 @@ private fun PlaybackState(
         }
     }
 
+    val showBufferingOverlay = playerWantsToPlay &&
+        !isPlaying &&
+        (playerPlaybackState == Player.STATE_BUFFERING || playerPlaybackState == Player.STATE_IDLE)
+
     BackHandler {
         if (sourceErrorDialogEffect != null) {
             sourceErrorDialogEffect = null
-        } else if (subtitleLanguagePickerEffect != null) {
-            subtitleLanguagePickerEffect = null
-        } else if (subtitleQueryDialogValue != null) {
-            subtitleQueryDialogValue = null
+        } else if (subtitleSyncPanelVisible) {
+            subtitleSyncPanelVisible = false
         } else if (runtimeTrackPanelVisible) {
             runtimeTrackPanelVisible = false
         } else if (activePanel == TvPlayerSidePanel.Subtitles &&
@@ -608,15 +626,14 @@ private fun PlaybackState(
             Unit
         } else if (activePanel != TvPlayerSidePanel.None) {
             tvPlayerScreenViewModel.closePanel()
+        } else if (showBufferingOverlay) {
+            onBackPressed()
         } else if (controlsVisible && playerWantsToPlay) {
             controlsVisible = false
         } else {
             onBackPressed()
         }
     }
-
-    val showBufferingOverlay = playerWantsToPlay &&
-        (playerPlaybackState == Player.STATE_BUFFERING || playerPlaybackState == Player.STATE_IDLE)
 
     Box(
         modifier = Modifier
@@ -682,6 +699,7 @@ private fun PlaybackState(
         TvPlayerVideoSurface(
             player = exoPlayer,
             resizeMode = playerResizeMode.resizeMode,
+            subtitleSyncController = subtitleSyncController,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -722,7 +740,24 @@ private fun PlaybackState(
                     TvPlayerControlsEvent.OpenTracks -> {
                         runtimeTrackPanelVisible = runtimeAudioTracks.size > 1
                     }
-                    TvPlayerControlsEvent.SyncSubtitles -> Unit
+                    TvPlayerControlsEvent.SyncSubtitles -> {
+                        subtitleSyncDebugLog(
+                            "open sync panel: selectedSubtitleIndex=${state.selectedSubtitleIndex}" +
+                                " subtitleId=${selectedSubtitleId ?: "null"}" +
+                                " subtitleName=${selectedSubtitle?.name ?: "null"}" +
+                                " mime=${selectedSubtitle?.mimeType ?: "null"}" +
+                                " language=${selectedSubtitle?.languageCode ?: "null"}" +
+                                " playerPosMs=${exoPlayer.currentPosition.coerceAtLeast(0L)}",
+                        )
+                        subtitleSyncController.logDebugSnapshot(
+                            player = exoPlayer,
+                            reason = "open_panel",
+                            subtitleId = selectedSubtitleId,
+                            subtitleLabel = selectedSubtitle?.name,
+                            subtitleMimeType = selectedSubtitle?.mimeType,
+                        )
+                        subtitleSyncPanelVisible = true
+                    }
                     TvPlayerControlsEvent.ToggleResizeMode -> {
                         toggleResizeMode()
                     }
@@ -742,62 +777,55 @@ private fun PlaybackState(
             },
         )
 
-        PlayerSidePanels(
-            panels = state.panels,
-            onCloseRequested = tvPlayerScreenViewModel::closePanel,
-            onSubtitlesBackRequested = tvPlayerScreenViewModel::onSubtitlesSidePanelBackPressed,
-            onItemAction = { action ->
-                registerControlsInteraction()
-                if (action.requiresPlaybackRestore()) {
-                    pendingSeekPositionMs = exoPlayer.currentPosition
-                    pendingPlayWhenReady = exoPlayer.playWhenReady
-                }
-                tvPlayerScreenViewModel.onPanelItemAction(action)
-            },
-        )
-
-        RuntimeAudioTracksSidePanel(
-            visible = runtimeTrackPanelVisible,
-            tracks = runtimeAudioTracks,
-            selectedTrackId = runtimeSelectedAudioTrackId,
-            onCloseRequested = {
-                runtimeTrackPanelVisible = false
-            },
-            onSelectDefault = {
-                registerControlsInteraction()
-                selectRuntimeAudioTrack(null)
-                runtimeTrackPanelVisible = false
-            },
-            onSelectTrack = { track ->
-                registerControlsInteraction()
-                selectRuntimeAudioTrack(track)
-                runtimeTrackPanelVisible = false
-            },
-        )
-
-        subtitleQueryDialogValue?.let { currentQuery ->
-            SubtitleQueryDialog(
-                initialQuery = currentQuery,
-                onDismiss = {
-                    subtitleQueryDialogValue = null
-                },
-                onConfirm = { updatedQuery ->
-                    subtitleQueryDialogValue = null
-                    tvPlayerScreenViewModel.onOnlineSubtitlesQueryUpdated(updatedQuery)
+        if (activePanel != TvPlayerSidePanel.None) {
+            PlayerSidePanels(
+                panels = state.panels,
+                onCloseRequested = tvPlayerScreenViewModel::closePanel,
+                onSubtitlesBackRequested = tvPlayerScreenViewModel::onSubtitlesSidePanelBackPressed,
+                onItemAction = { action ->
+                    registerControlsInteraction()
+                    if (action.requiresPlaybackRestore()) {
+                        pendingSeekPositionMs = exoPlayer.currentPosition
+                        pendingPlayWhenReady = exoPlayer.playWhenReady
+                    }
+                    tvPlayerScreenViewModel.onPanelItemAction(action)
                 },
             )
         }
 
-        subtitleLanguagePickerEffect?.let { effect ->
-            SubtitleLanguagePickerDialog(
-                options = effect.options,
-                selectedIndex = effect.selectedIndex,
-                onDismiss = {
-                    subtitleLanguagePickerEffect = null
+        if (runtimeTrackPanelVisible) {
+            RuntimeAudioTracksSidePanel(
+                tracks = runtimeAudioTracks,
+                selectedTrackId = runtimeSelectedAudioTrackId,
+                onCloseRequested = {
+                    runtimeTrackPanelVisible = false
                 },
-                onSelect = { selectedOption ->
-                    subtitleLanguagePickerEffect = null
-                    tvPlayerScreenViewModel.onOnlineSubtitlesLanguageUpdated(selectedOption.tag)
+                onSelectDefault = {
+                    registerControlsInteraction()
+                    selectRuntimeAudioTrack(null)
+                    runtimeTrackPanelVisible = false
+                },
+                onSelectTrack = { track ->
+                    registerControlsInteraction()
+                    selectRuntimeAudioTrack(track)
+                    runtimeTrackPanelVisible = false
+                },
+            )
+        }
+
+        if (subtitleSyncPanelVisible) {
+            SubtitleSyncSidePanel(
+                visible = true,
+                player = exoPlayer,
+                subtitleSyncController = subtitleSyncController,
+                hasActiveSubtitleTrack = selectedSubtitle != null,
+                onCloseRequested = {
+                    subtitleSyncPanelVisible = false
+                },
+                onSubtitleDelayChanged = { updatedDelayMs ->
+                    selectedSubtitleId?.let { subtitleId ->
+                        subtitleDelayByTrackId[subtitleId] = updatedDelayMs
+                    }
                 },
             )
         }
@@ -815,187 +843,6 @@ private fun PlaybackState(
                     tvPlayerScreenViewModel.retrySource(effect.dialog.sourceIndex)
                 },
             )
-        }
-    }
-}
-
-@Composable
-private fun SubtitleQueryDialog(
-    initialQuery: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
-) {
-    var query by remember(initialQuery) { mutableStateOf(initialQuery) }
-    val inputFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(initialQuery) {
-        repeat(20) {
-            if (inputFocusRequester.requestFocus()) {
-                return@LaunchedEffect
-            }
-            delay(16)
-        }
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = androidx.tv.material3.ShapeDefaults.Large,
-            colors = SurfaceDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-            ),
-            modifier = Modifier
-                .widthIn(max = 700.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp, vertical = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.search),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                Surface(
-                    shape = androidx.tv.material3.ShapeDefaults.Medium,
-                    colors = SurfaceDefaults.colors(
-                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    BasicTextField(
-                        value = query,
-                        onValueChange = { updated ->
-                            query = updated
-                        },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .focusRequester(inputFocusRequester)
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            onConfirm(query.trim())
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.search),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubtitleLanguagePickerDialog(
-    options: List<TvPlayerSubtitleLanguageOption>,
-    selectedIndex: Int,
-    onDismiss: () -> Unit,
-    onSelect: (TvPlayerSubtitleLanguageOption) -> Unit,
-) {
-    val listState = rememberLazyListState()
-    val focusRequesters = remember(options) {
-        options.associate { option ->
-            option.tag to FocusRequester()
-        }
-    }
-    val safeSelectedIndex = selectedIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))
-
-    LaunchedEffect(options, safeSelectedIndex) {
-        if (options.isEmpty()) return@LaunchedEffect
-        listState.scrollToItem(safeSelectedIndex)
-        val focusRequester = focusRequesters[options[safeSelectedIndex].tag] ?: return@LaunchedEffect
-        repeat(20) {
-            if (focusRequester.requestFocus()) {
-                return@LaunchedEffect
-            }
-            delay(16)
-        }
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = androidx.tv.material3.ShapeDefaults.Large,
-            colors = SurfaceDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f),
-            ),
-            modifier = Modifier
-                .widthIn(max = 720.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.subs_subtitle_languages),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 520.dp),
-                    state = listState,
-                ) {
-                    itemsIndexed(
-                        items = options,
-                        key = { _, option -> option.tag },
-                    ) { index, option ->
-                        ListItem(
-                            selected = index == safeSelectedIndex,
-                            onClick = {
-                                onSelect(option)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequesters.getValue(option.tag)),
-                            headlineContent = {
-                                Text(
-                                    text = option.label,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            },
-                        )
-                    }
-                }
-
-                OutlinedButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = stringResource(R.string.cancel),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                }
-            }
         }
     }
 }
@@ -1070,82 +917,97 @@ private fun PlayerSidePanels(
     onSubtitlesBackRequested: () -> Boolean,
     onItemAction: (TvPlayerPanelItemAction) -> Unit,
 ) {
-    MenuListSidePanel(
-        visible = panels.activePanel == TvPlayerSidePanel.Sources,
-        onCloseRequested = onCloseRequested,
-        title = stringResource(R.string.sources),
-        items = panels.sourceItems,
-        showSelectionRadio = true,
-        initialFocusedItemId = panels.sourceInitialFocusedItemId,
-        closeOnLeftPress = false,
-        closeOnFocusExit = false,
-        onActionTokenClick = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-        onDirectionalActionToken = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-    )
-
-    MenuListSidePanel(
-        visible = panels.activePanel == TvPlayerSidePanel.Subtitles,
-        onCloseRequested = {
-            if (!onSubtitlesBackRequested()) {
-                onCloseRequested()
-            }
-        },
-        title = if (panels.subtitlePanelScreen == TvPlayerSubtitlePanelScreen.OnlineSearch) {
-            stringResource(R.string.player_load_subtitles_online)
-        } else {
-            stringResource(R.string.player_subtitles_settings)
-        },
-        items = if (panels.subtitlePanelScreen == TvPlayerSubtitlePanelScreen.OnlineSearch) {
-            panels.subtitleOnlineItems
-        } else {
-            panels.subtitleItems
-        },
-        showSelectionRadio = false,
-        initialFocusedItemId = if (panels.subtitlePanelScreen == TvPlayerSubtitlePanelScreen.OnlineSearch) {
-            panels.subtitleOnlineInitialFocusedItemId
-        } else {
-            panels.subtitleInitialFocusedItemId
-        },
-        contentAnimationKey = panels.subtitlePanelScreen,
-        contentNavigationDirection = when (panels.subtitlePanelNavigationDirection) {
-            TvPlayerSubtitlePanelNavigationDirection.Forward -> SidePanelContentNavigationDirection.Forward
-            TvPlayerSubtitlePanelNavigationDirection.Backward -> SidePanelContentNavigationDirection.Backward
-        },
-        closeOnLeftPress = false,
-        closeOnFocusExit = false,
-        onActionTokenClick = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-        onDirectionalActionToken = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-    )
-
-    MenuListSidePanel(
-        visible = panels.activePanel == TvPlayerSidePanel.Tracks,
-        onCloseRequested = onCloseRequested,
-        title = stringResource(R.string.audio_tracks),
-        items = panels.trackItems,
-        showSelectionRadio = true,
-        initialFocusedItemId = panels.trackInitialFocusedItemId,
-        closeOnLeftPress = false,
-        closeOnFocusExit = false,
-        onActionTokenClick = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-        onDirectionalActionToken = { token ->
-            (token as? TvPlayerPanelItemAction)?.let(onItemAction)
-        },
-    )
+    when (panels.activePanel) {
+        TvPlayerSidePanel.None -> Unit
+        TvPlayerSidePanel.Sources -> {
+            MenuListSidePanel(
+                visible = true,
+                onCloseRequested = onCloseRequested,
+                title = stringResource(R.string.sources),
+                items = panels.sourceItems,
+                showSelectionRadio = true,
+                initialFocusedItemId = panels.sourceInitialFocusedItemId,
+                closeOnLeftPress = false,
+                closeOnFocusExit = false,
+                onActionTokenClick = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+                onDirectionalActionToken = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+            )
+        }
+        TvPlayerSidePanel.Subtitles -> {
+            MenuListSidePanel(
+                visible = true,
+                onCloseRequested = {
+                    if (!onSubtitlesBackRequested()) {
+                        onCloseRequested()
+                    }
+                },
+                title = when (panels.subtitlePanelScreen) {
+                    TvPlayerSubtitlePanelScreen.Main -> stringResource(R.string.player_subtitles_settings)
+                    TvPlayerSubtitlePanelScreen.OnlineSearch -> stringResource(R.string.player_load_subtitles_online)
+                    TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> stringResource(R.string.subs_subtitle_languages)
+                },
+                items = when (panels.subtitlePanelScreen) {
+                    TvPlayerSubtitlePanelScreen.Main -> panels.subtitleItems
+                    TvPlayerSubtitlePanelScreen.OnlineSearch,
+                    TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> panels.subtitleOnlineItems
+                },
+                showSelectionRadio = false,
+                initialFocusedItemId = when (panels.subtitlePanelScreen) {
+                    TvPlayerSubtitlePanelScreen.Main -> panels.subtitleInitialFocusedItemId
+                    TvPlayerSubtitlePanelScreen.OnlineSearch,
+                    TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> panels.subtitleOnlineInitialFocusedItemId
+                },
+                contentAnimationKey = panels.subtitlePanelScreen,
+                contentNavigationDirection = when (panels.subtitlePanelNavigationDirection) {
+                    TvPlayerSubtitlePanelNavigationDirection.Forward -> SidePanelContentNavigationDirection.Forward
+                    TvPlayerSubtitlePanelNavigationDirection.Backward -> SidePanelContentNavigationDirection.Backward
+                },
+                closeOnLeftPress = false,
+                closeOnFocusExit = false,
+                onActionTokenClick = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+                onDirectionalActionToken = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+                onInlineTextFieldValueChanged = { token, value ->
+                    if (token == TvPlayerPanelItemAction.EditOnlineSubtitlesQuery) {
+                        onItemAction(
+                            TvPlayerPanelItemAction.UpdateOnlineSubtitlesQuery(
+                                query = value,
+                            )
+                        )
+                    }
+                },
+            )
+        }
+        TvPlayerSidePanel.Tracks -> {
+            MenuListSidePanel(
+                visible = true,
+                onCloseRequested = onCloseRequested,
+                title = stringResource(R.string.audio_tracks),
+                items = panels.trackItems,
+                showSelectionRadio = true,
+                initialFocusedItemId = panels.trackInitialFocusedItemId,
+                closeOnLeftPress = false,
+                closeOnFocusExit = false,
+                onActionTokenClick = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+                onDirectionalActionToken = { token ->
+                    (token as? TvPlayerPanelItemAction)?.let(onItemAction)
+                },
+            )
+        }
+    }
 }
 
 @Composable
 private fun RuntimeAudioTracksSidePanel(
-    visible: Boolean,
     tracks: List<PlayerAudioTrackOption>,
     selectedTrackId: String?,
     onCloseRequested: () -> Unit,
@@ -1153,27 +1015,30 @@ private fun RuntimeAudioTracksSidePanel(
     onSelectTrack: (PlayerAudioTrackOption) -> Unit,
 ) {
     val defaultItemId = "runtime_track_default"
-    val items = buildList {
-        add(
-            SidePanelMenuItem(
-                id = defaultItemId,
-                title = stringResource(R.string.action_default),
-                selected = selectedTrackId == null,
-                onClick = onSelectDefault,
-            )
-        )
-        tracks.forEach { track ->
+    val defaultTitle = stringResource(R.string.action_default)
+    val items = remember(defaultTitle, tracks, selectedTrackId) {
+        buildList {
             add(
                 SidePanelMenuItem(
-                    id = track.selectionId,
-                    title = track.title,
-                    supportingTexts = track.supportingTexts,
-                    selected = selectedTrackId == track.selectionId,
-                    onClick = {
-                        onSelectTrack(track)
-                    },
+                    id = defaultItemId,
+                    title = defaultTitle,
+                    selected = selectedTrackId == null,
+                    onClick = onSelectDefault,
                 )
             )
+            tracks.forEach { track ->
+                add(
+                    SidePanelMenuItem(
+                        id = track.selectionId,
+                        title = track.title,
+                        supportingTexts = track.supportingTexts,
+                        selected = selectedTrackId == track.selectionId,
+                        onClick = {
+                            onSelectTrack(track)
+                        },
+                    )
+                )
+            }
         }
     }
     val initialFocusedItemId = selectedTrackId?.takeIf { selectedId ->
@@ -1181,7 +1046,7 @@ private fun RuntimeAudioTracksSidePanel(
     } ?: defaultItemId
 
     MenuListSidePanel(
-        visible = visible,
+        visible = true,
         onCloseRequested = onCloseRequested,
         title = stringResource(R.string.audio_tracks),
         items = items,
@@ -1323,8 +1188,15 @@ private fun languageDisplayName(languageTag: String): String {
     return localized.takeIf { it.isNotBlank() } ?: languageTag
 }
 
-private fun createTvPlayerRenderersFactory(context: Context): androidx.media3.exoplayer.RenderersFactory {
-    return runCatching {
+private fun subtitleSyncDebugLog(message: String) {
+    Log.i(SubtitleSyncDebugTag, message)
+}
+
+private fun createTvPlayerRenderersFactory(
+    context: Context,
+    subtitleSyncController: TvPlayerSubtitleSyncController,
+): RenderersFactory {
+    val baseFactory = runCatching {
         NextRenderersFactory(context).apply {
             setEnableDecoderFallback(true)
             setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
@@ -1334,6 +1206,87 @@ private fun createTvPlayerRenderersFactory(context: Context): androidx.media3.ex
             setEnableDecoderFallback(true)
         }
     }
+
+    return RenderersFactory { eventHandler, videoRendererEventListener, audioRendererEventListener, textRendererOutput, metadataRendererOutput ->
+        val style = com.lagradost.cloudstream3.ui.player.CustomDecoder.style
+        val deduplicatedTexts = HashSet<CharSequence>()
+        val combinedTextBuffer = StringBuilder()
+        val styledTextOutput = TextOutput { cueGroup ->
+            val cues = cueGroup.cues.filterNotNull()
+            if (cues.isEmpty()) {
+                if (!subtitleSyncController.dispatchStyledCues(emptyList())) {
+                    textRendererOutput.onCues(cueGroup)
+                }
+                return@TextOutput
+            }
+
+            val (bitmapCues, textCues) = cues.partition { cue -> cue.bitmap != null }
+            val styledBitmapCues = bitmapCues.map { bitmapCue ->
+                bitmapCue
+                    .buildUpon()
+                    .fixSubtitleAlignment()
+                    .applyStyle(style)
+                    .build()
+            }
+            val styledTextCues = textCues.groupBy { textCue ->
+                textCue.lineAnchor to textCue.position.times(1000.0f).toInt()
+            }.mapNotNull { (_, entries) ->
+                deduplicatedTexts.clear()
+                combinedTextBuffer.clear()
+                var lineCount = 0
+                for (entry in entries) {
+                    val text = entry.text ?: continue
+                    if (!deduplicatedTexts.add(text)) continue
+                    if (++lineCount > 1) {
+                        combinedTextBuffer.append('\n')
+                    }
+                    combinedTextBuffer.append(text.trim())
+                }
+                entries.firstOrNull()
+                    ?.buildUpon()
+                    ?.setText(combinedTextBuffer.toString())
+                    ?.fixSubtitleAlignment()
+                    ?.applyStyle(style)
+                    ?.build()
+            }
+            val combinedCues = styledBitmapCues + styledTextCues
+            if (!subtitleSyncController.dispatchStyledCues(combinedCues)) {
+                textRendererOutput.onCues(
+                    CueGroup(
+                        combinedCues,
+                        cueGroup.presentationTimeUs,
+                    )
+                )
+            }
+        }
+        baseFactory.createRenderers(
+            eventHandler,
+            videoRendererEventListener,
+            audioRendererEventListener,
+            styledTextOutput,
+            metadataRendererOutput,
+        ).map { renderer ->
+            if (renderer is TextRenderer) {
+                subtitleSyncDebugLog(
+                    "createRenderers: replacing TextRenderer with synced decoder factory",
+                )
+                val syncedRenderer = TextRenderer(
+                    styledTextOutput,
+                    eventHandler.looper,
+                    subtitleSyncController.subtitleDecoderFactory(),
+                ).apply {
+                    // WHY: parity z legacy playerem (CS3IPlayer) - bez tego część starszych
+                    // formatów napisów nie przechodzi ścieżki dekodera kompatybilnej z offsetem.
+                    @Suppress("DEPRECATION")
+                    experimentalSetLegacyDecodingEnabled(true)
+                }
+                subtitleSyncController.attachTextRenderer(syncedRenderer)
+                syncedRenderer
+            } else {
+                renderer
+            }
+        }.toTypedArray()
+    }
 }
 
 private fun createPlayer(
@@ -1341,7 +1294,13 @@ private fun createPlayer(
     link: ExtractorLink,
     subtitle: com.lagradost.cloudstream3.ui.player.SubtitleData?,
     audioTracks: List<com.lagradost.cloudstream3.AudioFile>,
-): ExoPlayer {
+    subtitleDelayMs: Long,
+    startPositionMs: Long,
+    startPlayWhenReady: Boolean,
+): TvPlayerInstance {
+    val subtitleSyncController = TvPlayerSubtitleSyncController(
+        initialSubtitleDelayMs = subtitleDelayMs,
+    )
     val subtitleConfiguration = subtitle?.let { subtitleData ->
         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitleData.getFixedUrl()))
             .setMimeType(subtitleData.mimeType)
@@ -1351,27 +1310,40 @@ private fun createPlayer(
             .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
             .build()
     }
-    val subtitleHeadersByUri = subtitle?.let { subtitleData ->
-        mapOf(subtitleData.getFixedUrl() to subtitleData.headers)
-    }.orEmpty()
+    subtitleSyncDebugLog(
+        "createPlayer: subtitle=${if (subtitle == null) "null" else "id=${subtitle.getId()} name=${subtitle.name} mime=${subtitle.mimeType} lang=${subtitle.languageCode}"}" +
+            " initialDelayMs=$subtitleDelayMs startPositionMs=$startPositionMs startPlayWhenReady=$startPlayWhenReady",
+    )
     val extractorFactory = UpdatedDefaultExtractorsFactory()
         .setFragmentedMp4ExtractorFlags(FragmentedMp4Extractor.FLAG_MERGE_FRAGMENTED_SIDX)
     val videoDataSourceFactory = createDataSourceFactory(
         context = context,
         link = link,
-        perUriExtraHeaders = subtitleHeadersByUri,
     )
     val videoMediaSourceFactory = DefaultMediaSourceFactory(videoDataSourceFactory, extractorFactory)
+        // WHY: parity z legacy subtitle sync.
+        // Przy wartości `true` Media3 parsuje napisy podczas ekstrakcji i przekazuje CuesWithTiming,
+        // omijając CustomSubtitleDecoderFactory (brak listy cue do panelu synchronizacji).
+        .experimentalParseSubtitlesDuringExtraction(false)
 
     val videoMediaItem = MediaItem.Builder()
         .setUri(link.url)
-        .apply {
-            if (subtitleConfiguration != null) {
-                setSubtitleConfigurations(listOf(subtitleConfiguration))
-            }
-        }
         .build()
     val videoMediaSource = videoMediaSourceFactory.createMediaSource(videoMediaItem)
+    val subtitleMediaSource = if (subtitle != null && subtitleConfiguration != null) {
+        val subtitleDataSourceFactory = createDataSourceFactory(
+            context = context,
+            link = link,
+            globalExtraHeaders = subtitle.headers,
+        )
+        subtitleSyncDebugLog(
+            "createPlayer: creating subtitle source id=${subtitle.getId()} uri=${subtitle.getFixedUrl()}",
+        )
+        SingleSampleMediaSource.Factory(subtitleDataSourceFactory)
+            .createMediaSource(subtitleConfiguration, C.TIME_UNSET)
+    } else {
+        null
+    }
 
     val externalAudioSources = audioTracks.mapIndexedNotNull { index, audioTrack ->
         runCatching {
@@ -1391,13 +1363,16 @@ private fun createPlayer(
         }.getOrNull()
     }
 
-    val mediaSource = if (externalAudioSources.isEmpty()) {
-        videoMediaSource
-    } else {
-        val allSources = ArrayList<androidx.media3.exoplayer.source.MediaSource>(externalAudioSources.size + 1)
+    val mediaSource = run {
+        val allSources = ArrayList<MediaSource>(externalAudioSources.size + 2)
         allSources.add(videoMediaSource)
+        subtitleMediaSource?.let(allSources::add)
         allSources.addAll(externalAudioSources)
-        MergingMediaSource(*allSources.toTypedArray())
+        if (allSources.size == 1) {
+            videoMediaSource
+        } else {
+            MergingMediaSource(*allSources.toTypedArray())
+        }
     }
 
     val trackSelector = DefaultTrackSelector(context).apply {
@@ -1406,16 +1381,25 @@ private fun createPlayer(
             .build()
     }
 
-    return ExoPlayer.Builder(context)
-        .setRenderersFactory(createTvPlayerRenderersFactory(context))
+    val exoPlayer = ExoPlayer.Builder(context)
+        .setRenderersFactory(
+            createTvPlayerRenderersFactory(
+                context = context,
+                subtitleSyncController = subtitleSyncController,
+            )
+        )
         .setTrackSelector(trackSelector)
         .setMediaSourceFactory(videoMediaSourceFactory)
         .build()
         .apply {
-            setMediaSource(mediaSource)
+            setMediaSource(mediaSource, startPositionMs.coerceAtLeast(0L))
             prepare()
-            playWhenReady = true
+            playWhenReady = startPlayWhenReady
         }
+    return TvPlayerInstance(
+        player = exoPlayer,
+        subtitleSyncController = subtitleSyncController,
+    )
 }
 
 private fun createHttpDataSourceFactory(
@@ -1501,4 +1485,16 @@ private fun seekPlayerTo(player: ExoPlayer, positionMs: Long) {
         target.coerceAtMost(duration)
     }
     player.seekTo(clamped)
+}
+
+private suspend fun requestFocusWithRetry(
+    focusRequester: FocusRequester,
+): Boolean {
+    repeat(FocusRequestRetryCount) {
+        if (focusRequester.requestFocus()) {
+            return true
+        }
+        delay(FocusRequestRetryDelayMs)
+    }
+    return false
 }

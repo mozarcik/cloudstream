@@ -262,7 +262,12 @@ class SubtitlesFragment : BaseDialogFragment<SubtitleSettingsBinding>(
         }
 
         fun getCurrentSavedStyle(): SaveCaptionStyle {
-            return cachedSubtitleStyle ?: (getKey(SUBTITLE_KEY) ?: SaveCaptionStyle(
+            val persistedStyle = getKey<SaveCaptionStyle>(SUBTITLE_KEY)
+            if (persistedStyle != null) {
+                cachedSubtitleStyle = persistedStyle
+                return persistedStyle
+            }
+            return cachedSubtitleStyle ?: SaveCaptionStyle(
                 foregroundColor = getDefColor(0),
                 backgroundColor = getDefColor(2),
                 windowColor = getDefColor(3),
@@ -272,7 +277,7 @@ class SubtitlesFragment : BaseDialogFragment<SubtitleSettingsBinding>(
                 typefaceFilePath = null,
                 elevation = DEF_SUBS_ELEVATION,
                 fixedTextSize = null,
-            )).also { cachedSubtitleStyle = it }
+            ).also { cachedSubtitleStyle = it }
         }
 
         private fun Context.getSavedFonts(): List<File> {
