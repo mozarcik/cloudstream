@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
+import com.lagradost.cloudstream3.tv.compat.home.FeaturedItemCompat
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -32,4 +33,19 @@ data class HomeFeedsUiState(
 @Immutable
 data class HomeContinueWatchingUiState(
     val state: HomeFeedLoadState = HomeFeedLoadState.Loading,
+)
+
+@Immutable
+sealed interface HomeFeaturedLoadState {
+    data object Loading : HomeFeaturedLoadState
+    data object Empty : HomeFeaturedLoadState
+    data object Error : HomeFeaturedLoadState
+
+    @Immutable
+    data class Success(val items: PersistentList<FeaturedItemCompat>) : HomeFeaturedLoadState
+}
+
+@Immutable
+data class HomeFeaturedUiState(
+    val state: HomeFeaturedLoadState = HomeFeaturedLoadState.Loading,
 )

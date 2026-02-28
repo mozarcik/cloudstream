@@ -24,17 +24,22 @@ fun HomeScreenV2(
     val continueWatchingViewModel: HomeContinueWatchingViewModel = viewModel(
         factory = remember { HomeContinueWatchingViewModelFactory() }
     )
+    val featuredViewModel: HomeFeaturedViewModel = viewModel(
+        factory = remember { HomeFeaturedViewModelFactory() }
+    )
     val feedsViewModel: HomeFeedsViewModel = viewModel(
         factory = remember { HomeFeedsViewModelFactory(FeedRepositoryImpl()) }
     )
 
     val sourcesUiState by sourcesViewModel.uiState.collectAsState()
     val continueWatchingUiState by continueWatchingViewModel.uiState.collectAsState()
+    val featuredUiState by featuredViewModel.uiState.collectAsState()
     val feedsUiState by feedsViewModel.uiState.collectAsState()
 
     HomeScreenV2Content(
         sourcesUiState = sourcesUiState,
         continueWatchingUiState = continueWatchingUiState,
+        featuredUiState = featuredUiState,
         feedsUiState = feedsUiState,
         onMediaClick = onMediaClick,
         onContinueWatchingPlay = onContinueWatchingPlay,

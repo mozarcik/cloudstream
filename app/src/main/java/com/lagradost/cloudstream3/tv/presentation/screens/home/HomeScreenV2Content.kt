@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,18 +28,23 @@ import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 private val HomeScreenSectionSpacing = 4.dp
 private val ContinueWatchingToSourcesSpacing = 8.dp
 private val ContinueWatchingToSourcesExtraTopPadding =
     ContinueWatchingToSourcesSpacing - HomeScreenSectionSpacing
+private const val HomeContinueWatchingListIndex = 0
+private const val HomeFeaturedListIndex = 2
 
 @Composable
 fun HomeScreenV2Content(
     sourcesUiState: HomeSourcesUiState,
     continueWatchingUiState: HomeContinueWatchingUiState,
+    featuredUiState: HomeFeaturedUiState,
     feedsUiState: HomeFeedsUiState,
     onMediaClick: (MediaItemCompat) -> Unit,
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
@@ -52,6 +58,7 @@ fun HomeScreenV2Content(
     val resumeFocusRequester = remember { FocusRequester() }
     val quickSourcesEntryFocusRequester = remember { FocusRequester() }
     val moreButtonFocusRequester = remember { FocusRequester() }
+    val featuredFocusRequester = remember { FocusRequester() }
     val firstFeedCardFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -60,11 +67,14 @@ fun HomeScreenV2Content(
     var isMovingDownFromCards by remember { mutableStateOf(false) }
     var shouldRestoreHeroOnFocus by remember { mutableStateOf(false) }
     var wasMorePanelOpen by rememberSaveable { mutableStateOf(false) }
+    var featuredCenterJob by remember { mutableStateOf<Job?>(null) }
 
     val isMorePanelOpen = sourcesUiState.isMorePanelOpen
     val hasContinueWatchingItems = (continueWatchingUiState.state as? HomeFeedLoadState.Success)
         ?.items
         ?.isNotEmpty() == true
+    val featuredItems = (featuredUiState.state as? HomeFeaturedLoadState.Success)?.items
+    val hasFeaturedItems = featuredItems?.isNotEmpty() == true
     val loadingLabel = stringResource(id = R.string.loading)
     val noFeedsLabel = stringResource(id = R.string.tv_home_no_feeds)
 
@@ -107,9 +117,18 @@ fun HomeScreenV2Content(
 
         coroutineScope.launch {
             if (!listState.isScrolledToTop()) {
-                listState.scrollToItem(0)
+                listState.scrollToItem(HomeContinueWatchingListIndex)
             }
             shouldRestoreHeroOnFocus = false
+        }
+    }
+
+    fun centerFeaturedInViewport() {
+        if (!hasFeaturedItems) return
+
+        featuredCenterJob?.cancel()
+        featuredCenterJob = coroutineScope.launch {
+            listState.centerItemInViewport(itemIndex = HomeFeaturedListIndex)
         }
     }
 
@@ -169,8 +188,24 @@ fun HomeScreenV2Content(
                             rowEntryFocusRequester = quickSourcesEntryFocusRequester,
                             moreButtonFocusRequester = moreButtonFocusRequester,
                             isInteractive = !isMorePanelOpen,
-                            downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
+                            downFocusRequester = if (hasFeaturedItems) {
+                                featuredFocusRequester
+                            } else if (feedsUiState.feedSections.isNotEmpty()) {
                                 firstFeedCardFocusRequester
+                            } else {
+                                null
+                            },
+                            onMoveDown = if (hasFeaturedItems) {
+                                {
+                                    coroutineScope.launch {
+                                        repeat(12) {
+                                            if (featuredFocusRequester.requestFocus()) {
+                                                return@launch
+                                            }
+                                            delay(16)
+                                        }
+                                    }
+                                }
                             } else {
                                 null
                             },
@@ -178,6 +213,25 @@ fun HomeScreenV2Content(
                             onMoreClick = {
                                 onMorePanelOpenChange(true)
                             }
+                        )
+                    }
+                }
+
+                if (hasFeaturedItems) {
+                    item {
+                        FeaturedCarousel(
+                            items = featuredItems.orEmpty(),
+                            focusRequester = featuredFocusRequester,
+                            upFocusRequester = quickSourcesEntryFocusRequester,
+                            downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
+                                firstFeedCardFocusRequester
+                            } else {
+                                null
+                            },
+                            isInteractive = !isMorePanelOpen,
+                            modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
+                            onFocused = ::centerFeaturedInViewport,
+                            onItemClick = onMediaClick
                         )
                     }
                 }
@@ -214,4 +268,23 @@ fun HomeScreenV2Content(
 
 private fun LazyListState.isScrolledToTop(): Boolean {
     return firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
+}
+
+private suspend fun LazyListState.centerItemInViewport(
+    itemIndex: Int,
+) {
+    var targetItem = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == itemIndex }
+    if (targetItem == null) {
+        animateScrollToItem(itemIndex)
+        targetItem = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == itemIndex }
+            ?: return
+    }
+
+    val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
+    val itemCenter = targetItem.offset + (targetItem.size / 2f)
+    val delta = itemCenter - viewportCenter
+
+    if (abs(delta) > 1f) {
+        animateScrollBy(delta)
+    }
 }
