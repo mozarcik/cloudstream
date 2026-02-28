@@ -1,6 +1,7 @@
-package com.lagradost.cloudstream3.tv.presentation.screens.movies
+package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,6 +9,7 @@ import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,51 +21,51 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class MovieDetailsScreenViewModel(
+class DetailsScreenViewModel(
     private val savedStateHandle: SavedStateHandle,
     private val repository: MovieRepository,
+    private val mode: DetailsScreenMode,
 ) : ViewModel() {
-    private companion object {
-        const val DebugTag = "TvMovieDetailsVM"
-    }
 
     private val favoriteOverrides = MutableStateFlow<Map<String, Boolean>>(emptyMap())
     private val bookmarkOverrides = MutableStateFlow<Map<String, WatchType>>(emptyMap())
+
     private val sourceUrl: String?
-        get() = savedStateHandle.get(MovieDetailsScreen.UrlBundleKey)
+        get() = savedStateHandle.get(DetailsScreenNavigation.UrlBundleKey)
     private val sourceApiName: String?
-        get() = savedStateHandle.get(MovieDetailsScreen.ApiNameBundleKey)
+        get() = savedStateHandle.get(DetailsScreenNavigation.ApiNameBundleKey)
 
     private val initialLoadingPreview = DetailsLoadingPreview(
-        title = savedStateHandle.get<String>(MovieDetailsScreen.LoadingTitleBundleKey)
+        title = savedStateHandle.get<String>(DetailsScreenNavigation.LoadingTitleBundleKey)
             ?.takeIf { it.isNotBlank() },
-        posterUri = savedStateHandle.get<String>(MovieDetailsScreen.LoadingPosterBundleKey)
+        posterUri = savedStateHandle.get<String>(DetailsScreenNavigation.LoadingPosterBundleKey)
             ?.takeIf { it.isNotBlank() },
-        backdropUri = savedStateHandle.get<String>(MovieDetailsScreen.LoadingBackdropBundleKey)
+        backdropUri = savedStateHandle.get<String>(DetailsScreenNavigation.LoadingBackdropBundleKey)
             ?.takeIf { it.isNotBlank() },
     )
+
     val unavailableDetails: UnavailableDetailsUiModel
         get() {
             val title = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingTitleBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingTitleBundleKey)
                 ?.takeIf { it.isNotBlank() }
                 .orEmpty()
             val posterUrl = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingPosterBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingPosterBundleKey)
                 ?.takeIf { it.isNotBlank() }
             val backdropUrl = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingBackdropBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingBackdropBundleKey)
                 ?.takeIf { it.isNotBlank() }
             val description = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingDescriptionBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingDescriptionBundleKey)
                 ?.takeIf { it.isNotBlank() }
             val type = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingTypeBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingTypeBundleKey)
                 .toTvTypeOrNull()
-                ?: TvType.Movie
-            val year = savedStateHandle.get<Int>(MovieDetailsScreen.LoadingYearBundleKey)
+                ?: mode.unavailableFallbackType
+            val year = savedStateHandle.get<Int>(DetailsScreenNavigation.LoadingYearBundleKey)
             val providerName = savedStateHandle
-                .get<String>(MovieDetailsScreen.LoadingProviderBundleKey)
+                .get<String>(DetailsScreenNavigation.LoadingProviderBundleKey)
                 ?.takeIf { it.isNotBlank() }
                 ?: sourceApiName
 
@@ -77,8 +79,10 @@ class MovieDetailsScreenViewModel(
                 providerName = providerName
             )
         }
+
     val shouldShowUnavailableState: Boolean
         get() = !sourceUrl.isNullOrBlank() && !sourceApiName.isNullOrBlank()
+
     val canRemoveFromLibrary: Boolean by lazy {
         val url = sourceUrl ?: return@lazy false
         val apiName = sourceApiName ?: return@lazy false
@@ -89,52 +93,52 @@ class MovieDetailsScreenViewModel(
     }
 
     private val baseUiState = savedStateHandle
-        .getStateFlow<String?>(MovieDetailsScreen.UrlBundleKey, null)
+        .getStateFlow<String?>(DetailsScreenNavigation.UrlBundleKey, null)
         .onEach {
             favoriteOverrides.value = emptyMap()
             bookmarkOverrides.value = emptyMap()
         }
         .map { url ->
-            val apiName = savedStateHandle.get<String>(MovieDetailsScreen.ApiNameBundleKey)
+            val apiName = savedStateHandle.get<String>(DetailsScreenNavigation.ApiNameBundleKey)
 
             if (url == null || apiName == null) {
-                Log.e(DebugTag, "missing navigation args url=$url apiName=$apiName")
-                return@map MovieDetailsScreenUiState.Error
+                Log.e(TAG, "missing navigation args url=$url apiName=$apiName")
+                return@map DetailsScreenUiState.Error
             }
 
             try {
-                val details = repository.getMovieDetails(url = url, apiName = apiName)
+                val details = repository.getDetails(url = url, apiName = apiName)
                 Log.d(
-                    DebugTag,
-                    "loaded details id=${details.id} name=${details.name} seasonCount=${details.seasonCount} episodeCount=${details.episodeCount} seasons=${details.seasons.size}"
+                    TAG,
+                    "loaded details id=${details.id} name=${details.name} mode=$mode seasonCount=${details.seasonCount} episodeCount=${details.episodeCount} seasons=${details.seasons.size}"
                 )
-                MovieDetailsScreenUiState.Done(
-                    movieDetails = details,
+                DetailsScreenUiState.Done(
+                    details = details,
                     sourceUrl = url,
                     apiName = apiName
                 )
             } catch (e: Exception) {
-                Log.e(DebugTag, "failed loading details for api=$apiName url=$url", e)
-                MovieDetailsScreenUiState.Error
+                Log.e(TAG, "failed loading details for api=$apiName url=$url mode=$mode", e)
+                DetailsScreenUiState.Error
             }
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = MovieDetailsScreenUiState.Loading(preview = initialLoadingPreview)
+            initialValue = DetailsScreenUiState.Loading(preview = initialLoadingPreview)
         )
 
     val uiState = combine(baseUiState, favoriteOverrides, bookmarkOverrides) { state, favoriteState, bookmarkState ->
         when (state) {
-            is MovieDetailsScreenUiState.Done -> {
-                val movieId = state.movieDetails.id
-                val overrideFavorite = favoriteState[movieId]
-                val overrideBookmark = bookmarkState[movieId]
+            is DetailsScreenUiState.Done -> {
+                val detailsId = state.details.id
+                val overrideFavorite = favoriteState[detailsId]
+                val overrideBookmark = bookmarkState[detailsId]
                 if (overrideFavorite == null && overrideBookmark == null) {
                     state
                 } else {
                     state.copy(
-                        movieDetails = state.movieDetails.withLibraryOverride(
+                        details = state.details.withLibraryOverride(
                             favorite = overrideFavorite,
                             bookmark = overrideBookmark
                         )
@@ -147,22 +151,22 @@ class MovieDetailsScreenViewModel(
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = MovieDetailsScreenUiState.Loading(preview = initialLoadingPreview)
+        initialValue = DetailsScreenUiState.Loading(preview = initialLoadingPreview)
     )
 
     fun onFavoriteClick() {
-        val currentState = uiState.value as? MovieDetailsScreenUiState.Done ?: return
+        val currentState = uiState.value as? DetailsScreenUiState.Done ?: return
 
-        val url = savedStateHandle.get<String>(MovieDetailsScreen.UrlBundleKey)
-        val apiName = savedStateHandle.get<String>(MovieDetailsScreen.ApiNameBundleKey)
+        val url = savedStateHandle.get<String>(DetailsScreenNavigation.UrlBundleKey)
+        val apiName = savedStateHandle.get<String>(DetailsScreenNavigation.ApiNameBundleKey)
 
         if (url == null || apiName == null) {
-            Log.e(DebugTag, "cannot toggle favorite due to missing args url=$url apiName=$apiName")
+            Log.e(TAG, "cannot toggle favorite due to missing args url=$url apiName=$apiName")
             return
         }
 
-        val targetFavoriteState = !currentState.movieDetails.isFavorite
-        val movieId = currentState.movieDetails.id
+        val targetFavoriteState = !currentState.details.isFavorite
+        val detailsId = currentState.details.id
         viewModelScope.launch {
             try {
                 repository.setMediaFavorite(
@@ -171,27 +175,29 @@ class MovieDetailsScreenViewModel(
                     isFavorite = targetFavoriteState
                 )
                 favoriteOverrides.update { currentOverrides ->
-                    currentOverrides + (movieId to targetFavoriteState)
+                    currentOverrides + (detailsId to targetFavoriteState)
                 }
-                Log.d(DebugTag, "favorite toggled movieId=$movieId isFavorite=$targetFavoriteState")
+                Log.d(TAG, "favorite toggled detailsId=$detailsId isFavorite=$targetFavoriteState")
             } catch (e: Exception) {
-                Log.e(DebugTag, "failed to toggle favorite for api=$apiName url=$url", e)
+                Log.e(TAG, "failed to toggle favorite for api=$apiName url=$url", e)
             }
         }
     }
 
     fun onBookmarkClick(status: WatchType) {
-        val currentState = uiState.value as? MovieDetailsScreenUiState.Done ?: return
+        if (!mode.allowsBookmark) return
 
-        val url = savedStateHandle.get<String>(MovieDetailsScreen.UrlBundleKey)
-        val apiName = savedStateHandle.get<String>(MovieDetailsScreen.ApiNameBundleKey)
+        val currentState = uiState.value as? DetailsScreenUiState.Done ?: return
+
+        val url = savedStateHandle.get<String>(DetailsScreenNavigation.UrlBundleKey)
+        val apiName = savedStateHandle.get<String>(DetailsScreenNavigation.ApiNameBundleKey)
 
         if (url == null || apiName == null) {
-            Log.e(DebugTag, "cannot update bookmark due to missing args url=$url apiName=$apiName")
+            Log.e(TAG, "cannot update bookmark due to missing args url=$url apiName=$apiName")
             return
         }
 
-        val movieId = currentState.movieDetails.id
+        val detailsId = currentState.details.id
         viewModelScope.launch {
             try {
                 repository.setMediaBookmarkStatus(
@@ -200,11 +206,11 @@ class MovieDetailsScreenViewModel(
                     status = status
                 )
                 bookmarkOverrides.update { currentOverrides ->
-                    currentOverrides + (movieId to status)
+                    currentOverrides + (detailsId to status)
                 }
-                Log.d(DebugTag, "bookmark updated movieId=$movieId status=$status")
+                Log.d(TAG, "bookmark updated detailsId=$detailsId status=$status")
             } catch (e: Exception) {
-                Log.e(DebugTag, "failed to update bookmark for api=$apiName url=$url", e)
+                Log.e(TAG, "failed to update bookmark for api=$apiName url=$url", e)
             }
         }
     }
@@ -217,6 +223,27 @@ class MovieDetailsScreenViewModel(
             apiName = apiName
         )
     }
+
+    private companion object {
+        private const val TAG = "TvDetailsVM"
+    }
+}
+
+@Immutable
+sealed interface DetailsScreenUiState {
+    @Immutable
+    data class Loading(
+        val preview: DetailsLoadingPreview = DetailsLoadingPreview()
+    ) : DetailsScreenUiState
+
+    data object Error : DetailsScreenUiState
+
+    @Immutable
+    data class Done(
+        val details: MovieDetails,
+        val sourceUrl: String,
+        val apiName: String,
+    ) : DetailsScreenUiState
 }
 
 private fun MovieDetails.withLibraryOverride(
@@ -237,18 +264,6 @@ private fun MovieDetails.withLibraryOverride(
     }
 
     return updatedDetails
-}
-
-sealed class MovieDetailsScreenUiState {
-    data class Loading(
-        val preview: DetailsLoadingPreview = DetailsLoadingPreview()
-    ) : MovieDetailsScreenUiState()
-    data object Error : MovieDetailsScreenUiState()
-    data class Done(
-        val movieDetails: MovieDetails,
-        val sourceUrl: String,
-        val apiName: String,
-    ) : MovieDetailsScreenUiState()
 }
 
 private fun String?.toTvTypeOrNull(): TvType? {

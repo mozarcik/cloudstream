@@ -37,18 +37,8 @@ class MovieRepositoryImpl : MovieRepository {
         return flowOf(emptyList())
     }
 
-    override suspend fun getMovieDetails(url: String, apiName: String): MovieDetails {
-        Log.d(DebugTag, "entry:getMovieDetails api=$apiName url=$url")
-        return getDetailsInternal(url, apiName)
-    }
-
-    override suspend fun getTvSeriesDetails(url: String, apiName: String): MovieDetails {
-        Log.d(DebugTag, "entry:getTvSeriesDetails api=$apiName url=$url")
-        return getDetailsInternal(url, apiName)
-    }
-
-    override suspend fun getMediaDetails(url: String, apiName: String): MovieDetails {
-        Log.d(DebugTag, "entry:getMediaDetails api=$apiName url=$url")
+    override suspend fun getDetails(url: String, apiName: String): MovieDetails {
+        Log.d(DebugTag, "entry:getDetails api=$apiName url=$url")
         return getDetailsInternal(url, apiName)
     }
 

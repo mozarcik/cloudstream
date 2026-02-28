@@ -9,9 +9,10 @@ interface MovieRepository {
     fun getTrendingMovies(): Flow<MovieList>
     fun getTop10Movies(): Flow<MovieList>
     fun getNowPlayingMovies(): Flow<MovieList>
-    suspend fun getMovieDetails(url: String, apiName: String): MovieDetails
-    suspend fun getTvSeriesDetails(url: String, apiName: String): MovieDetails
-    suspend fun getMediaDetails(url: String, apiName: String): MovieDetails
+    suspend fun getDetails(url: String, apiName: String): MovieDetails
+    suspend fun getMovieDetails(url: String, apiName: String): MovieDetails = getDetails(url, apiName)
+    suspend fun getTvSeriesDetails(url: String, apiName: String): MovieDetails = getDetails(url, apiName)
+    suspend fun getMediaDetails(url: String, apiName: String): MovieDetails = getDetails(url, apiName)
     suspend fun ensureMediaInFavorites(url: String, apiName: String)
     suspend fun setMediaFavorite(url: String, apiName: String, isFavorite: Boolean)
     suspend fun setMediaBookmarkStatus(url: String, apiName: String, status: WatchType)
