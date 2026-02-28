@@ -2,75 +2,41 @@
 
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Border
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.FilterChipDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.ProvideTextStyle
-import androidx.tv.material3.RadioButton
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.sourceId
-import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
-import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
-
-private val SourceChipShape = RoundedCornerShape(16.dp)
-private val MoreButtonShape = RoundedCornerShape(16.dp)
 
 @Composable
 fun QuickSourcesRow(
     quickSources: List<MainAPI>,
     allSourcesCount: Int,
     selectedSource: MainAPI?,
-    pinnedSourceIds: Set<String>,
     rowEntryFocusRequester: FocusRequester,
     moreButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
@@ -198,6 +164,7 @@ fun QuickSourcesRow(
                     modifier = modifier
                         .focusRequester(requesterForChip(index, entryChipIndex))
                         .focusProperties {
+                            canFocus = isInteractive
                             down = downFocusRequester ?: FocusRequester.Default
                         }
                         .testTag("source_chip_$sourceId")
@@ -209,9 +176,12 @@ fun QuickSourcesRow(
             subcompose("more_button") {
                 MoreSourcesButton(
                     onClick = onMoreClick,
-                    modifier = modifier.focusProperties {
-                        down = downFocusRequester ?: FocusRequester.Default
-                    }
+                    modifier = modifier
+                        .focusRequester(moreButtonFocusRequester)
+                        .focusProperties {
+                            canFocus = isInteractive
+                            down = downFocusRequester ?: FocusRequester.Default
+                        }
                 )
             }.first().measure(looseConstraints)
         } else {
@@ -289,224 +259,12 @@ private fun MoreSourcesButton(
     ) {
         Text(
             text = stringResource(R.string.tv_home_more_sources),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.labelMedium,
         )
         Icon(
             imageVector = Icons.Default.MoreVert,
             contentDescription = null,
             modifier = Modifier.size(18.dp)
-        )
-    }
-}
-
-@Composable
-fun SourcesMorePanel(
-    visible: Boolean,
-    sources: List<MainAPI>,
-    selectedSource: MainAPI?,
-    pinnedSourceIds: Set<String>,
-    usageCountBySourceId: Map<String, Int>,
-    sortMode: SourceSortMode,
-    searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
-    onSortModeChange: (SourceSortMode) -> Unit,
-    onSourceSelected: (MainAPI) -> Unit,
-    onTogglePin: (MainAPI) -> Unit,
-    onCloseRequested: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val selectedSourceId = selectedSource?.sourceId()
-    val menuItems = sources.map { source ->
-        val sourceId = source.sourceId()
-        val isSelected = sourceId == selectedSourceId
-        val isPinned = pinnedSourceIds.contains(sourceId)
-        val usageCount = usageCountBySourceId[sourceId] ?: 0
-
-        SidePanelMenuItem(
-            id = sourceId,
-            title = source.name,
-            selected = isSelected,
-            testTag = "sources_item_$sourceId",
-            onClick = { onSourceSelected(source) },
-            onMenuClick = { onTogglePin(source) },
-            trailingContent = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (usageCount > 0) {
-                        Text(
-                            text = usageCount.toString(),
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.alpha(0.62f)
-                        )
-                    }
-                    if (isPinned) {
-                        Icon(
-                            imageVector = Icons.Default.PushPin,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = { }
-                    )
-                }
-            }
-        )
-    }
-
-    MenuListSidePanel(
-        visible = visible,
-        onCloseRequested = onCloseRequested,
-        title = stringResource(R.string.pick_source),
-        items = menuItems,
-        panelWidth = 340.dp,
-        initialFocusedItemId = selectedSourceId ?: menuItems.firstOrNull()?.id,
-        modifier = modifier,
-        panelTestTag = "sources_panel",
-        headerContent = {
-            SourceSearchField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            SourcesSortModeRow(
-                selectedSortMode = sortMode,
-                onSortModeChange = onSortModeChange
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-        },
-        emptyContent = {
-            Text(
-                text = stringResource(R.string.tv_home_no_sources_found),
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.78f),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-            )
-        }
-    )
-}
-
-@Composable
-private fun SourceSearchField(
-    value: String,
-    onValueChange: (String) -> Unit,
-) {
-    var isFocused by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = if (isFocused) {
-                    Color.White.copy(alpha = 0.12f)
-                } else {
-                    Color.White.copy(alpha = 0.08f)
-                },
-                shape = RoundedCornerShape(12.dp)
-            )
-            .border(
-                width = if (isFocused) 1.dp else 0.dp,
-                color = Color.White.copy(alpha = 0.38f),
-                shape = RoundedCornerShape(12.dp)
-            )
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(
-                color = Color.White,
-                fontSize = MaterialTheme.typography.bodyLarge.fontSize
-            ),
-            cursorBrush = SolidColor(Color.White),
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { focusState -> isFocused = focusState.isFocused }
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            decorationBox = { innerTextField ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = if (isFocused) Color.White else Color.White.copy(alpha = 0.65f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Box {
-                        if (value.isBlank()) {
-                            Text(
-                                text = stringResource(R.string.tv_home_search_sources_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.65f)
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            }
-        )
-    }
-}
-
-@Composable
-private fun SourcesSortModeRow(
-    selectedSortMode: SourceSortMode,
-    onSortModeChange: (SourceSortMode) -> Unit,
-) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SortModeButton(
-            text = stringResource(R.string.tv_home_sort_most_used),
-            selected = selectedSortMode == SourceSortMode.MOST_USED,
-            onClick = { onSortModeChange(SourceSortMode.MOST_USED) }
-        )
-        SortModeButton(
-            text = stringResource(R.string.tv_home_sort_az),
-            selected = selectedSortMode == SourceSortMode.AZ,
-            onClick = { onSortModeChange(SourceSortMode.AZ) }
-        )
-    }
-}
-
-@Composable
-private fun SortModeButton(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
-        colors = ClickableSurfaceDefaults.colors(
-            containerColor = if (selected) {
-                Color.White.copy(alpha = 0.22f)
-            } else {
-                Color.White.copy(alpha = 0.08f)
-            },
-            focusedContainerColor = Color.White.copy(alpha = 0.26f)
-        ),
-        border = ClickableSurfaceDefaults.border(
-            focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.38f)),
-                shape = RoundedCornerShape(12.dp)
-            )
-        )
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = Color.White,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
         )
     }
 }

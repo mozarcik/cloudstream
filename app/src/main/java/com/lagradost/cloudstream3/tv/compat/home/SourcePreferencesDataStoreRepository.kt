@@ -22,7 +22,6 @@ private val Context.tvHomeSourcesDataStore: DataStore<Preferences> by preference
 
 private val PINNED_SOURCES_KEY = stringSetPreferencesKey("pinned_sources")
 private val USAGE_COUNTS_JSON_KEY = stringPreferencesKey("usage_counts_json")
-private val LAST_SELECTED_SOURCE_ID_KEY = stringPreferencesKey("last_selected_source_id")
 
 private val USAGE_COUNTS_TYPE = object : TypeReference<Map<String, Int>>() {}
 
@@ -42,7 +41,6 @@ class SourcePreferencesDataStoreRepository(
             SourcePreferencesState(
                 pinnedSourceIds = preferences[PINNED_SOURCES_KEY] ?: emptySet(),
                 usageCountBySourceId = decodeUsageCounts(preferences[USAGE_COUNTS_JSON_KEY]),
-                lastSelectedSourceId = preferences[LAST_SELECTED_SOURCE_ID_KEY]
             )
         }
 
@@ -63,16 +61,6 @@ class SourcePreferencesDataStoreRepository(
             val usageCounts = decodeUsageCounts(preferences[USAGE_COUNTS_JSON_KEY]).toMutableMap()
             usageCounts[sourceId] = (usageCounts[sourceId] ?: 0) + 1
             preferences[USAGE_COUNTS_JSON_KEY] = encodeUsageCounts(usageCounts)
-        }
-    }
-
-    override suspend fun setLastSelected(sourceId: String?) {
-        context.tvHomeSourcesDataStore.edit { preferences ->
-            if (sourceId.isNullOrBlank()) {
-                preferences.remove(LAST_SELECTED_SOURCE_ID_KEY)
-            } else {
-                preferences[LAST_SELECTED_SOURCE_ID_KEY] = sourceId
-            }
         }
     }
 

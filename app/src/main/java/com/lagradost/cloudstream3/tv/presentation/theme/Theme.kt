@@ -17,29 +17,32 @@ import androidx.tv.material3.ProvideTextStyle
 import androidx.tv.material3.darkColorScheme
 
 private val darkColorScheme = darkColorScheme(
-    primary = Color(0xFFE3E2E6),
-    onPrimary = Color(0xFF003062),
-    primaryContainer = Color(0xFF00468A),
-    onPrimaryContainer = Color(0xFFE3E2E6),
-    secondary = Color(0xFFBDC7DC),
-    onSecondary = Color(0xFF273141),
-    secondaryContainer = Color(0xFF3E4758),
-    onSecondaryContainer = Color(0xFFE3E2E6),
-    tertiary = Color(0xFFDCBCE1),
-    onTertiary = Color(0xFF3E2845),
-    tertiaryContainer = Color(0xFF563E5C),
-    onTertiaryContainer = Color(0xFFF9D8FE),
-    background = Color(0xFF1A1C1E),
-    onBackground = Color(0xFFE3E2E6),
-    surface = Color(0xFF1A1C1E),
-    onSurface = Color(0xFFE3E2E6),
-    surfaceVariant = Color(0xFF43474E),
-    onSurfaceVariant = Color(0xFFC4C6CF),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFB4AB),
-    border = Color(0xFF8E9099),
+    primary = primaryDark,
+    onPrimary = onPrimaryDark,
+    primaryContainer = primaryContainerDark,
+    onPrimaryContainer = onPrimaryContainerDark,
+    secondary = secondaryDark,
+    onSecondary = onSecondaryDark,
+    secondaryContainer = secondaryContainerDark,
+    onSecondaryContainer = onSecondaryContainerDark,
+    tertiary = tertiaryDark,
+    onTertiary = onTertiaryDark,
+    tertiaryContainer = tertiaryContainerDark,
+    onTertiaryContainer = onTertiaryContainerDark,
+    error = errorDark,
+    onError = onErrorDark,
+    errorContainer = errorContainerDark,
+    onErrorContainer = onErrorContainerDark,
+    background = backgroundDark,
+    onBackground = onBackgroundDark,
+    surface = surfaceDark,
+    onSurface = onSurfaceDark,
+    surfaceVariant = surfaceVariantDark,
+    onSurfaceVariant = onSurfaceVariantDark,
+    scrim = scrimDark,
+    inverseSurface = inverseSurfaceDark,
+    inverseOnSurface = inverseOnSurfaceDark,
+    inversePrimary = inversePrimaryDark,
 )
 
 @Composable
@@ -50,18 +53,20 @@ fun CloudStreamTheme(
         colorScheme = darkColorScheme,
         shapes = MaterialTheme.shapes,
         typography = Typography,
-    ) {
-        // Set default content color and text style for all Text components
-        CompositionLocalProvider(
-            LocalContentColor provides darkColorScheme.onBackground
-        ) {
-            ProvideTextStyle(
-                value = TextStyle(color = darkColorScheme.onBackground)
-            ) {
-                content()
-            }
-        }
-    }
+        content = content
+    )
+//    {
+////         Set default content color and text style for all Text components
+//        CompositionLocalProvider(
+//            LocalContentColor provides darkColorScheme.onBackground
+//        ) {
+//            ProvideTextStyle(
+//                value = TextStyle(color = darkColorScheme.onBackground)
+//            ) {
+//                content()
+//            }
+//        }
+//    }
 }
 
 object CloudStreamSurfaceDefaults {

@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.Flow
 data class SourcePreferencesState(
     val pinnedSourceIds: Set<String> = emptySet(),
     val usageCountBySourceId: Map<String, Int> = emptyMap(),
-    val lastSelectedSourceId: String? = null,
 )
 
 interface SourcePreferencesRepository {
@@ -14,7 +13,4 @@ interface SourcePreferencesRepository {
     suspend fun setPinned(sourceId: String, pinned: Boolean)
 
     suspend fun incrementUsage(sourceId: String)
-
-    suspend fun setLastSelected(sourceId: String?)
 }
-
