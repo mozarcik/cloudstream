@@ -8,9 +8,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.MaterialTheme
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -22,9 +24,28 @@ internal fun ContinueWatchingHeroBackdrop(
     modifier: Modifier = Modifier,
 ) {
     val imageRequest = rememberContinueWatchingImageRequest(posterUrl)
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val scrimColor = MaterialTheme.colorScheme.scrim
+    val overlayBase = remember(surfaceColor, scrimColor) {
+        if (surfaceColor.luminance() > 0.5f) surfaceColor else scrimColor
+    }
+    val horizontalGradientColors = remember(overlayBase, surfaceColor) {
+        listOf(
+            overlayBase.copy(alpha = 0.88f),
+            overlayBase.copy(alpha = 0.56f),
+            surfaceColor.copy(alpha = 0.82f),
+        )
+    }
+    val verticalGradientColors = remember(overlayBase) {
+        listOf(
+            Color.Transparent,
+            overlayBase.copy(alpha = 0.32f),
+            overlayBase.copy(alpha = 0.64f),
+        )
+    }
 
     Box(
-        modifier = modifier.background(Color(0xFF10151D))
+        modifier = modifier.background(surfaceColor)
     ) {
         if (imageRequest != null) {
             AsyncImage(
@@ -42,11 +63,7 @@ internal fun ContinueWatchingHeroBackdrop(
                 .matchParentSize()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xAD10151D),
-                            Color(0x6B10151D),
-                            Color(0xC610151D)
-                        )
+                        colors = horizontalGradientColors
                     )
                 )
         )
@@ -56,11 +73,7 @@ internal fun ContinueWatchingHeroBackdrop(
                 .matchParentSize()
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color(0x5610151D),
-                            Color(0xB010151D)
-                        )
+                        colors = verticalGradientColors
                     )
                 )
         )

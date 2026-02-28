@@ -33,7 +33,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -106,7 +105,7 @@ internal fun ContinueWatchingHeroLoadedState(
     Box(
         modifier = modifier
             .clip(ContinueWatchingHeroShape)
-            .background(Color(0xFF10151D))
+            .background(MaterialTheme.colorScheme.surface)
     ) {
         ContinueWatchingHeroBackdrop(
             posterUrl = selectedItem.posterUri,
@@ -192,7 +191,7 @@ private fun ContinueWatchingHeroInfo(
         Text(
             text = item.name,
             style = MaterialTheme.typography.displaySmall,
-            color = Color.White,
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
@@ -201,7 +200,7 @@ private fun ContinueWatchingHeroInfo(
             Text(
                 text = metadata,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.78f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -211,6 +210,14 @@ private fun ContinueWatchingHeroInfo(
             Button(
                 onClick = { onResumeClick(item) },
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                colors = ButtonDefaults.colors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    focusedContainerColor = MaterialTheme.colorScheme.primary,
+                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    pressedContainerColor = MaterialTheme.colorScheme.primary,
+                    pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
                 modifier = Modifier
                     .focusRequester(resumeFocusRequester)
                     .focusProperties {

@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -76,6 +78,9 @@ private object SettingsPanelTokens {
     val ToggleContainerWidth = 54.dp
     val ToggleContainerHeight = 28.dp
     val ToggleThumbSize = 20.dp
+    val TrailingContentSpacing = 12.dp
+    val ColorPreviewSize = 16.dp
+    val ColorPreviewBorderWidth = 1.dp
     val SliderTopPadding = 8.dp
     val SliderBarHeight = 6.dp
     val SliderValueTopPadding = 6.dp
@@ -451,6 +456,18 @@ private fun SettingsEntryRowContent(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
+        entry.trailingColorArgb?.let { colorArgb ->
+            SettingsEntryColorPreview(
+                colorArgb = colorArgb,
+                borderColor = if (interactive && isFocused) {
+                    MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.28f)
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+                }
+            )
+            Spacer(modifier = Modifier.width(SettingsPanelTokens.IconSpacing))
+        }
+
         when {
             !entry.iconUrl.isNullOrBlank() -> {
                 val painter = rememberAsyncImagePainter(
@@ -566,24 +583,52 @@ private fun SettingsEntryRowContent(
             }
         }
 
-        if (entry.type == SettingsEntryType.Toggle) {
-            ToggleIndicator(
-                enabled = toggleValue,
-                isFocused = interactive && isFocused
-            )
-        } else if (entry.showCheckmark) {
-            Icon(
-                imageVector = Icons.Default.Check,
-                contentDescription = null,
-                modifier = Modifier.size(SettingsPanelTokens.IconSize),
-                tint = if (interactive && isFocused) {
-                    MaterialTheme.colorScheme.onSecondaryContainer
-                } else {
-                    MaterialTheme.colorScheme.primary
+        if (entry.type == SettingsEntryType.Toggle || entry.showCheckmark) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(SettingsPanelTokens.TrailingContentSpacing)
+            ) {
+                if (entry.type == SettingsEntryType.Toggle) {
+                    ToggleIndicator(
+                        enabled = toggleValue,
+                        isFocused = interactive && isFocused
+                    )
                 }
-            )
+
+                if (entry.showCheckmark) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(SettingsPanelTokens.IconSize),
+                        tint = if (interactive && isFocused) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        }
+                    )
+                }
+            }
         }
     }
+}
+
+@Composable
+private fun SettingsEntryColorPreview(
+    colorArgb: Int,
+    borderColor: Color,
+) {
+    Box(
+        modifier = Modifier
+            .size(SettingsPanelTokens.ColorPreviewSize)
+            .border(
+                width = SettingsPanelTokens.ColorPreviewBorderWidth,
+                color = borderColor,
+                shape = CircleShape
+            )
+            .padding(SettingsPanelTokens.ColorPreviewBorderWidth)
+            .clip(CircleShape)
+            .background(Color(colorArgb))
+    )
 }
 
 @Composable

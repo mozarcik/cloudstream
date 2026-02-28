@@ -312,15 +312,15 @@ private fun SearchStatusCard(
             border = Border(
                 border = BorderStroke(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.08f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                 ),
                 shape = CloudStreamCardShape
             )
         ),
         colors = ClickableSurfaceDefaults.colors(
-            containerColor = Color.White.copy(alpha = 0.05f),
-            focusedContainerColor = Color.White.copy(alpha = 0.08f),
-            pressedContainerColor = Color.White.copy(alpha = 0.08f),
+            containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+            pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
             contentColor = MaterialTheme.colorScheme.onSurface,
             focusedContentColor = MaterialTheme.colorScheme.onSurface,
             pressedContentColor = MaterialTheme.colorScheme.onSurface
@@ -342,7 +342,7 @@ private fun SearchStatusCard(
             contentAlignment = Alignment.Center,
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White.copy(alpha = 0.05f), shape = CloudStreamCardShape)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), shape = CloudStreamCardShape)
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -352,18 +352,18 @@ private fun SearchStatusCard(
                 Icon(
                     imageVector = Icons.Default.Search,
                     contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.82f),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.82f),
                     modifier = Modifier.size(28.dp)
                 )
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White.copy(alpha = 0.9f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
                 )
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.66f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
                 )
             }
         }

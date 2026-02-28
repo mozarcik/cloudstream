@@ -25,6 +25,7 @@ data class SettingsEntry(
     val sliderStep: Int = 1,
     val valueText: String? = null,
     val showCheckmark: Boolean = false,
+    val trailingColorArgb: Int? = null,
     val stableKey: String,
     val nextScreenId: String? = null,
     val action: (() -> Unit)? = null,

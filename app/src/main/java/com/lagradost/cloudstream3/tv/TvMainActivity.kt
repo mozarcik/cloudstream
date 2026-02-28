@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
+import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.tv.presentation.TvApp
@@ -44,6 +45,7 @@ class TvMainActivity : AppCompatActivity() {
     
     @Suppress("DEPRECATION_ERROR")
     override fun onCreate(savedInstanceState: Bundle?) {
+        CommonActivity.loadThemes(this)
         super.onCreate(savedInstanceState)
         
         // CRITICAL: Initialize HTTP client (same as MainActivity)

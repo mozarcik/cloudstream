@@ -9,10 +9,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.tv.material3.MaterialTheme
 
 /**
  * Shimmer card placeholder shown while loading
@@ -28,11 +29,15 @@ fun ShimmerCard(modifier: Modifier = Modifier) {
 
 @Composable
 fun shimmerBrush(): Brush {
-    val shimmerColors = listOf(
-        Color(0xFF14161B),
-        Color(0xFF6B7286).copy(alpha = 0.78f),
-        Color(0xFF14161B),
-    )
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val shimmerColors = remember(surfaceColor, surfaceVariantColor) {
+        listOf(
+            surfaceColor,
+            surfaceVariantColor.copy(alpha = 0.78f),
+            surfaceColor,
+        )
+    }
     
     val transition = rememberInfiniteTransition(label = "shimmer")
     val translateAnim by transition.animateFloat(

@@ -18,7 +18,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -28,6 +27,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
@@ -56,7 +56,10 @@ internal fun ContinueWatchingHeroCard(
         scale = CloudStreamSurfaceDefaults.scale(),
         border = ClickableSurfaceDefaults.border(
             focusedBorder = Border(
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.82f)),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+                ),
                 shape = CloudStreamCardShape
             )
         ),
@@ -93,7 +96,7 @@ internal fun ContinueWatchingHeroCard(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ContinueWatchingPlaceholderColor)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
             )
 
             if (imageRequest != null) {
@@ -109,7 +112,7 @@ internal fun ContinueWatchingHeroCard(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(Color.Black.copy(alpha = 0.08f))
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.08f))
                 )
             }
 
@@ -118,13 +121,13 @@ internal fun ContinueWatchingHeroCard(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(Color.Black.copy(alpha = 0.52f))
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.52f))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(progress)
-                        .background(Color(0xFFFF5F3A))
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
         }

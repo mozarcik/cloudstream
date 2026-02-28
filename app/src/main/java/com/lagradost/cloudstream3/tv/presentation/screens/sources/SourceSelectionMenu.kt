@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -83,7 +82,7 @@ fun SourceSelectionMenu(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
+                .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
         ) {
             Surface(
                 modifier = Modifier
@@ -93,7 +92,7 @@ fun SourceSelectionMenu(
                     .padding(32.dp),
                 shape = MaterialTheme.shapes.medium,
                 colors = SurfaceDefaults.colors(
-                    containerColor = Color.Black.copy(alpha = 0.95f)
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
                 )
             ) {
                 Column(
@@ -102,7 +101,7 @@ fun SourceSelectionMenu(
                     Text(
                         text = "Select Source",
                         style = MaterialTheme.typography.headlineMedium,
-                        color = Color.White
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     
                     Spacer(modifier = Modifier.height(24.dp))
@@ -111,7 +110,7 @@ fun SourceSelectionMenu(
                         Text(
                             text = "No sources available with main page support",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
                         )
                     } else {
@@ -177,7 +176,11 @@ private fun SourceItem(
         leadingContent = {
             Text(
                 text = if (isSelected) "●" else "○",
-                color = if (isSelected) Color.Green else Color.Gray,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 style = MaterialTheme.typography.titleLarge
             )
         },
@@ -185,7 +188,11 @@ private fun SourceItem(
             Text(
                 text = api.name,
                 style = MaterialTheme.typography.bodyLarge,
-                color = if (isFocused) Color.Black else Color.White
+                color = if (isFocused) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
             )
         },
         modifier = modifier

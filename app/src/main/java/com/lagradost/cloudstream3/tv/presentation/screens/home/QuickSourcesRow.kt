@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -84,7 +83,7 @@ fun QuickSourcesRow(
                 Text(
                     text = stringResource(id = R.string.loading),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.72f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }.first().measure(looseConstraints)
             val layoutHeight = loadingPlaceable.height.coerceIn(

@@ -304,6 +304,14 @@ private fun PrimaryPlayButton(
         onClick = goToMoviePlayer,
         modifier = modifier,
         contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        colors = ButtonDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            pressedContainerColor = MaterialTheme.colorScheme.primary,
+            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
     ) {
         Icon(
             imageVector = Icons.Default.PlayArrow,
@@ -398,10 +406,20 @@ fun MovieDetailsLoadingPlaceholder(
 ) {
     val childPadding = rememberChildPadding()
     val heroSectionHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
-    val placeholderBlock = Color.White.copy(alpha = 0.14f)
+    val placeholderBlock = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f)
     val loadingBackdropUri = backdropUri?.takeIf { it.isNotBlank() }
     val loadingPosterUri = posterUri?.takeIf { it.isNotBlank() }
     val artworkUri = loadingBackdropUri ?: loadingPosterUri
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val backgroundColor = MaterialTheme.colorScheme.background
+    val placeholderGradient = remember(surfaceVariantColor, surfaceColor, backgroundColor) {
+        listOf(
+            surfaceVariantColor,
+            surfaceColor,
+            backgroundColor,
+        )
+    }
 
     Box(
         modifier = modifier
@@ -414,11 +432,7 @@ fun MovieDetailsLoadingPlaceholder(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF1A2332),
-                                Color(0xFF121924),
-                                MaterialTheme.colorScheme.background
-                            )
+                            colors = placeholderGradient
                         )
                     )
             )
@@ -449,7 +463,7 @@ fun MovieDetailsLoadingPlaceholder(
                     style = MaterialTheme.typography.displayMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -475,7 +489,7 @@ fun MovieDetailsLoadingPlaceholder(
                         .width(164.dp)
                         .height(48.dp)
                         .background(
-                            color = Color.White.copy(alpha = 0.2f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
                         )
                 )
@@ -485,7 +499,7 @@ fun MovieDetailsLoadingPlaceholder(
                         .width(280.dp)
                         .height(48.dp)
                         .background(
-                            color = Color.White.copy(alpha = 0.12f),
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
                         )
                 )

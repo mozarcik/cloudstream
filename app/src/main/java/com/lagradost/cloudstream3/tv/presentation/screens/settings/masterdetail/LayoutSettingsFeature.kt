@@ -16,6 +16,7 @@ import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
 import com.lagradost.cloudstream3.ui.search.SearchAdapter
 import com.lagradost.cloudstream3.ui.search.SearchResultBuilder
 import com.lagradost.cloudstream3.ui.settings.Globals.updateTv
+import com.lagradost.cloudstream3.tv.compat.theme.resolveLegacyPrimaryPreviewColor
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
 
 private object LayoutSettingsScreenIds {
@@ -363,6 +364,7 @@ class LayoutSettingsFeature(
                             stableKey = "layout_primary_color_option_$index",
                             title = option.label,
                             showCheckmark = option.value == current,
+                            trailingColorArgb = context.resolveLegacyPrimaryPreviewColor(option.value),
                             action = {
                                 runCatching {
                                     settingsManager.edit {
@@ -673,6 +675,7 @@ private fun itemEntry(
     subtitle: String? = null,
     fallbackIconRes: Int? = null,
     showCheckmark: Boolean = false,
+    trailingColorArgb: Int? = null,
     nextScreenId: String? = null,
     action: (() -> Unit)? = null
 ): SettingsEntry {
@@ -681,6 +684,7 @@ private fun itemEntry(
         subtitle = subtitle,
         fallbackIconRes = fallbackIconRes,
         showCheckmark = showCheckmark,
+        trailingColorArgb = trailingColorArgb,
         stableKey = stableKey,
         nextScreenId = nextScreenId,
         action = action

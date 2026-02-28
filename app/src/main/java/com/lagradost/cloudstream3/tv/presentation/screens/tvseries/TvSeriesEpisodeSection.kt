@@ -452,6 +452,14 @@ private fun PrimaryPlayButton(
         onClick = goToMoviePlayer,
         onLongClick = onLongClick,
         contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        colors = ButtonDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            pressedContainerColor = MaterialTheme.colorScheme.primary,
+            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
         modifier = modifier
     ) {
         Icon(

@@ -11,11 +11,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -26,15 +26,18 @@ internal fun ContinueWatchingHeroPlaceholder(
     message: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val onSurfaceColor = MaterialTheme.colorScheme.onSurface
+    val placeholderGradient = remember(surfaceVariantColor, surfaceColor) {
+        listOf(surfaceVariantColor, surfaceColor)
+    }
     Box(
         modifier = modifier
             .clip(ContinueWatchingHeroShape)
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color(0xFF1A202B),
-                        Color(0xFF10151D)
-                    )
+                    colors = placeholderGradient
                 )
             )
     ) {
@@ -54,14 +57,14 @@ internal fun ContinueWatchingHeroPlaceholder(
                     .fillMaxWidth(0.88f)
                     .height(34.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
+                    .background(onSurfaceColor.copy(alpha = 0.12f))
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.62f)
                     .height(34.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.White.copy(alpha = 0.1f))
+                    .background(onSurfaceColor.copy(alpha = 0.1f))
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Box(
@@ -69,21 +72,21 @@ internal fun ContinueWatchingHeroPlaceholder(
                         .width(128.dp)
                         .height(44.dp)
                         .clip(RoundedCornerShape(22.dp))
-                        .background(Color.White.copy(alpha = 0.2f))
+                        .background(onSurfaceColor.copy(alpha = 0.2f))
                 )
                 Box(
                     modifier = Modifier
                         .width(128.dp)
                         .height(44.dp)
                         .clip(RoundedCornerShape(22.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
+                        .background(onSurfaceColor.copy(alpha = 0.12f))
                 )
             }
             if (!message.isNullOrBlank()) {
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color.White.copy(alpha = 0.84f)
+                    color = onSurfaceColor.copy(alpha = 0.84f)
                 )
             }
         }
@@ -104,14 +107,14 @@ internal fun ContinueWatchingHeroPlaceholder(
                         .width(ContinueWatchingCardWidth)
                         .height(ContinueWatchingCardHeight)
                         .clip(CloudStreamCardShape)
-                        .background(Color.White.copy(alpha = 0.14f))
+                        .background(onSurfaceColor.copy(alpha = 0.14f))
                 ) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
                             .height(3.dp)
-                            .background(Color.Black.copy(alpha = 0.4f))
+                            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.4f))
                     )
                 }
             }

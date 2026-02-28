@@ -9,7 +9,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,7 +58,7 @@ fun HomeFeedGridScreen(
             Text(
                 text = selectedFeed?.name.orEmpty(),
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 24.dp, top = 12.dp, end = 24.dp)

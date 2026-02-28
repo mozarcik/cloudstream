@@ -181,8 +181,32 @@ private fun DownloadsBackdrop(
     fallbackTitle: String,
     modifier: Modifier = Modifier,
 ) {
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+    val scrimColor = MaterialTheme.colorScheme.scrim
+    val placeholderGradient = remember(surfaceVariantColor, surfaceColor) {
+        listOf(
+            surfaceVariantColor,
+            surfaceColor.copy(alpha = 0.92f),
+            surfaceColor,
+        )
+    }
+    val horizontalOverlay = remember(scrimColor, surfaceColor) {
+        listOf(
+            scrimColor.copy(alpha = 0.78f),
+            scrimColor.copy(alpha = 0.54f),
+            surfaceColor.copy(alpha = 0.42f),
+        )
+    }
+    val verticalOverlay = remember(scrimColor) {
+        listOf(
+            Color.Transparent,
+            scrimColor.copy(alpha = 0.35f),
+            scrimColor.copy(alpha = 0.55f),
+        )
+    }
     Box(
-        modifier = modifier.background(Color(0xFF0D1118))
+        modifier = modifier.background(surfaceColor)
     ) {
         Crossfade(
             targetState = backdropUrl,
@@ -195,11 +219,7 @@ private fun DownloadsBackdrop(
                         .fillMaxSize()
                         .background(
                             brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF17202E),
-                                    Color(0xFF111724),
-                                    Color(0xFF0C1016)
-                                )
+                                colors = placeholderGradient
                             )
                         )
                 )
@@ -223,11 +243,7 @@ private fun DownloadsBackdrop(
                 .fillMaxSize()
                 .background(
                     brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.78f),
-                            Color.Black.copy(alpha = 0.54f),
-                            Color.Black.copy(alpha = 0.42f)
-                        )
+                        colors = horizontalOverlay
                     )
                 )
         )
@@ -237,11 +253,7 @@ private fun DownloadsBackdrop(
                 .fillMaxSize()
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.35f),
-                            Color.Black.copy(alpha = 0.55f)
-                        )
+                        colors = verticalOverlay
                     )
                 )
         )

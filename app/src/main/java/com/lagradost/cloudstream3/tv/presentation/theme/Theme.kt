@@ -2,71 +2,26 @@ package com.lagradost.cloudstream3.tv.presentation.theme // ktlint-disable filen
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Glow
-import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.ProvideTextStyle
-import androidx.tv.material3.darkColorScheme
-
-private val darkColorScheme = darkColorScheme(
-    primary = primaryDark,
-    onPrimary = onPrimaryDark,
-    primaryContainer = primaryContainerDark,
-    onPrimaryContainer = onPrimaryContainerDark,
-    secondary = secondaryDark,
-    onSecondary = onSecondaryDark,
-    secondaryContainer = secondaryContainerDark,
-    onSecondaryContainer = onSecondaryContainerDark,
-    tertiary = tertiaryDark,
-    onTertiary = onTertiaryDark,
-    tertiaryContainer = tertiaryContainerDark,
-    onTertiaryContainer = onTertiaryContainerDark,
-    error = errorDark,
-    onError = onErrorDark,
-    errorContainer = errorContainerDark,
-    onErrorContainer = onErrorContainerDark,
-    background = backgroundDark,
-    onBackground = onBackgroundDark,
-    surface = surfaceDark,
-    onSurface = onSurfaceDark,
-    surfaceVariant = surfaceVariantDark,
-    onSurfaceVariant = onSurfaceVariantDark,
-    scrim = scrimDark,
-    inverseSurface = inverseSurfaceDark,
-    inverseOnSurface = inverseOnSurfaceDark,
-    inversePrimary = inversePrimaryDark,
-)
 
 @Composable
 fun CloudStreamTheme(
     content: @Composable () -> Unit
 ) {
+    val colorScheme = rememberCloudStreamColorScheme()
     MaterialTheme(
-        colorScheme = darkColorScheme,
+        colorScheme = colorScheme,
         shapes = MaterialTheme.shapes,
         typography = Typography,
         content = content
     )
-//    {
-////         Set default content color and text style for all Text components
-//        CompositionLocalProvider(
-//            LocalContentColor provides darkColorScheme.onBackground
-//        ) {
-//            ProvideTextStyle(
-//                value = TextStyle(color = darkColorScheme.onBackground)
-//            ) {
-//                content()
-//            }
-//        }
-//    }
 }
 
 object CloudStreamSurfaceDefaults {
