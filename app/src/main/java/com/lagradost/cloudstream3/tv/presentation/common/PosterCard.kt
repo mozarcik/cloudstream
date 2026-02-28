@@ -322,7 +322,6 @@ private fun PosterImage(
     val imageRequest = remember(context, model) {
         ImageRequest.Builder(context)
             .data(model)
-            .precision(Precision.INEXACT)
             .crossfade(false)
             .build()
     }

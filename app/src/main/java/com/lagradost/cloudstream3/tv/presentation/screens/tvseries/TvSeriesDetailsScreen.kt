@@ -3,7 +3,6 @@ package com.lagradost.cloudstream3.tv.presentation.screens.tvseries
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,6 +63,8 @@ import com.lagradost.cloudstream3.utils.VideoDownloadManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val DebugTag = "TvSeriesDetailsUI"
 private const val SkipDownloadLoadingActionId = -10_001
@@ -135,7 +136,6 @@ fun TvSeriesDetailsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.background)
-                    .animateContentSize()
             )
         }
     }
@@ -307,7 +307,9 @@ private fun Details(
         reason: String,
         compat: MovieDetailsEpisodeActionsCompat = actionsCompat
     ) {
-        val snapshot = compat.getDownloadSnapshot(context)
+        val snapshot = withContext(Dispatchers.IO) {
+            compat.getDownloadSnapshot(context)
+        }
         if (snapshot == null) {
             Log.d(DebugTag, "download snapshot[$reason]: null")
             downloadEpisodeId = null
@@ -445,7 +447,9 @@ private fun Details(
 
     LaunchedEffect(actionsCompat) {
         delay(DownloadLinksPrefetchDelayMs)
-        actionsCompat.prefetchDownloadMirrorLinks()
+        withContext(Dispatchers.IO) {
+            actionsCompat.prefetchDownloadMirrorLinks()
+        }
     }
 
     LaunchedEffect(downloadMirrorStateHolder) {

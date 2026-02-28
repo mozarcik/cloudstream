@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
@@ -83,6 +84,7 @@ import kotlin.math.roundToInt
 internal sealed interface TvPlayerControlsEvent {
     data object PlayPause : TvPlayerControlsEvent
     data object OpenSources : TvPlayerControlsEvent
+    data object OpenVideoTracks : TvPlayerControlsEvent
     data object OpenSubtitles : TvPlayerControlsEvent
     data object OpenTracks : TvPlayerControlsEvent
     data object SyncSubtitles : TvPlayerControlsEvent
@@ -129,6 +131,7 @@ private data class PlayerControlTooltipState(
 
 private enum class PlayerControlFocusTarget {
     Restart,
+    Video,
     Sources,
     PlayPause,
     NextEpisode,
@@ -145,7 +148,8 @@ internal fun PlaybackControlsLayer(
     metadata: TvPlayerMetadata,
     link: ExtractorLink,
     isPlaying: Boolean,
-    showTracksButton: Boolean,
+    showAudioTracksButton: Boolean,
+    showVideoTracksButton: Boolean,
     showSyncButton: Boolean,
     showNextEpisodeButton: Boolean,
     playPauseFocusRequester: FocusRequester,
@@ -188,7 +192,8 @@ internal fun PlaybackControlsLayer(
                 link = link,
                 isPlaying = isPlaying,
                 controlsEnabled = controlsEnabled,
-                showTracksButton = showTracksButton,
+                showAudioTracksButton = showAudioTracksButton,
+                showVideoTracksButton = showVideoTracksButton,
                 showSyncButton = showSyncButton,
                 showNextEpisodeButton = showNextEpisodeButton,
                 playPauseFocusRequester = playPauseFocusRequester,
@@ -236,7 +241,8 @@ private fun PlayerOverlay(
     link: ExtractorLink,
     isPlaying: Boolean,
     controlsEnabled: Boolean,
-    showTracksButton: Boolean,
+    showAudioTracksButton: Boolean,
+    showVideoTracksButton: Boolean,
     showSyncButton: Boolean,
     showNextEpisodeButton: Boolean,
     playPauseFocusRequester: FocusRequester,
@@ -330,7 +336,8 @@ private fun PlayerOverlay(
         PlayerBottomControlBar(
             isPlaying = isPlaying,
             controlsEnabled = controlsEnabled,
-            showTracksButton = showTracksButton,
+            showAudioTracksButton = showAudioTracksButton,
+            showVideoTracksButton = showVideoTracksButton,
             showSyncButton = showSyncButton,
             showNextEpisodeButton = showNextEpisodeButton,
             playPauseFocusRequester = playPauseFocusRequester,
@@ -391,13 +398,15 @@ private fun PlaybackTimelineSection(
 private fun PlayerBottomControlBar(
     isPlaying: Boolean,
     controlsEnabled: Boolean,
-    showTracksButton: Boolean,
+    showAudioTracksButton: Boolean,
+    showVideoTracksButton: Boolean,
     showSyncButton: Boolean,
     showNextEpisodeButton: Boolean,
     playPauseFocusRequester: FocusRequester,
     onControlsEvent: (TvPlayerControlsEvent) -> Unit,
 ) {
     val restartFocusRequester = remember { FocusRequester() }
+    val videoFocusRequester = remember { FocusRequester() }
     val sourcesFocusRequester = remember { FocusRequester() }
     val nextEpisodeFocusRequester = remember { FocusRequester() }
     val subtitlesFocusRequester = remember { FocusRequester() }
@@ -417,10 +426,10 @@ private fun PlayerBottomControlBar(
     }
     val subtitlesRightFocusRequester = when {
         showSyncButton -> syncFocusRequester
-        showTracksButton -> audioFocusRequester
+        showAudioTracksButton -> audioFocusRequester
         else -> aspectRatioFocusRequester
     }
-    val syncRightFocusRequester = if (showTracksButton) {
+    val syncRightFocusRequester = if (showAudioTracksButton) {
         audioFocusRequester
     } else {
         aspectRatioFocusRequester
@@ -431,9 +440,19 @@ private fun PlayerBottomControlBar(
         subtitlesFocusRequester
     }
     val aspectLeftFocusRequester = when {
-        showTracksButton -> audioFocusRequester
+        showAudioTracksButton -> audioFocusRequester
         showSyncButton -> syncFocusRequester
         else -> subtitlesFocusRequester
+    }
+    val restartRightFocusRequester = if (showVideoTracksButton) {
+        videoFocusRequester
+    } else {
+        sourcesFocusRequester
+    }
+    val sourceLeftFocusRequester = if (showVideoTracksButton) {
+        videoFocusRequester
+    } else {
+        restartFocusRequester
     }
     var controlsBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     var tooltipState by remember { mutableStateOf<PlayerControlTooltipState?>(null) }
@@ -443,6 +462,13 @@ private fun PlayerBottomControlBar(
     fun resolveFocusRequester(target: PlayerControlFocusTarget): FocusRequester {
         return when (target) {
             PlayerControlFocusTarget.Restart -> restartFocusRequester
+            PlayerControlFocusTarget.Video -> {
+                if (showVideoTracksButton) {
+                    videoFocusRequester
+                } else {
+                    sourcesFocusRequester
+                }
+            }
             PlayerControlFocusTarget.Sources -> sourcesFocusRequester
             PlayerControlFocusTarget.PlayPause -> playPauseFocusRequester
             PlayerControlFocusTarget.NextEpisode -> {
@@ -456,13 +482,13 @@ private fun PlayerBottomControlBar(
             PlayerControlFocusTarget.Sync -> {
                 when {
                     showSyncButton -> syncFocusRequester
-                    showTracksButton -> audioFocusRequester
+                    showAudioTracksButton -> audioFocusRequester
                     else -> aspectRatioFocusRequester
                 }
             }
             PlayerControlFocusTarget.Audio -> {
                 when {
-                    showTracksButton -> audioFocusRequester
+                    showAudioTracksButton -> audioFocusRequester
                     showSyncButton -> syncFocusRequester
                     else -> aspectRatioFocusRequester
                 }
@@ -484,7 +510,7 @@ private fun PlayerBottomControlBar(
         tooltipState = null
     }
 
-    LaunchedEffect(controlsEnabled, showNextEpisodeButton, showSyncButton, showTracksButton) {
+    LaunchedEffect(controlsEnabled, showNextEpisodeButton, showSyncButton, showAudioTracksButton, showVideoTracksButton) {
         val shouldRestoreFocus = controlsEnabled && !wasControlsEnabled
         wasControlsEnabled = controlsEnabled
         if (!shouldRestoreFocus) return@LaunchedEffect
@@ -508,7 +534,12 @@ private fun PlayerBottomControlBar(
         PlayerControlsTokens.ButtonsSpacing +
         (PlayerControlsTokens.SecondaryButtonSize / 2)
     val sourceOffsetX = -playToNearButtonOffset
-    val restartOffsetX = sourceOffsetX - PlayerControlsTokens.SecondaryButtonSize - PlayerControlsTokens.ButtonsSpacing
+    val videoOffsetX = sourceOffsetX - PlayerControlsTokens.SecondaryButtonSize - PlayerControlsTokens.ButtonsSpacing
+    val restartOffsetX = if (showVideoTracksButton) {
+        videoOffsetX - PlayerControlsTokens.SecondaryButtonSize - PlayerControlsTokens.ButtonsSpacing
+    } else {
+        videoOffsetX
+    }
     val nextOffsetX = playToNearButtonOffset
 
     Box(
@@ -545,7 +576,7 @@ private fun PlayerBottomControlBar(
                     onFocused = { lastFocusedControl = PlayerControlFocusTarget.Sync },
                 )
             }
-            if (showTracksButton) {
+            if (showAudioTracksButton) {
                 AudioTracksControlButton(
                     controlsEnabled = controlsEnabled,
                     focusRequester = audioFocusRequester,
@@ -596,13 +627,32 @@ private fun PlayerBottomControlBar(
             SourcesControlButton(
                 controlsEnabled = controlsEnabled,
                 focusRequester = sourcesFocusRequester,
-                leftFocusRequester = restartFocusRequester,
+                leftFocusRequester = sourceLeftFocusRequester,
                 rightFocusRequester = playPauseFocusRequester,
                 onClick = { onControlsEvent(TvPlayerControlsEvent.OpenSources) },
                 onTooltipVisible = ::onControlFocused,
                 onTooltipHidden = ::onControlFocusLost,
                 onFocused = { lastFocusedControl = PlayerControlFocusTarget.Sources },
             )
+        }
+
+        if (showVideoTracksButton) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(x = videoOffsetX),
+            ) {
+                VideoTracksControlButton(
+                    controlsEnabled = controlsEnabled,
+                    focusRequester = videoFocusRequester,
+                    leftFocusRequester = restartFocusRequester,
+                    rightFocusRequester = sourcesFocusRequester,
+                    onClick = { onControlsEvent(TvPlayerControlsEvent.OpenVideoTracks) },
+                    onTooltipVisible = ::onControlFocused,
+                    onTooltipHidden = ::onControlFocusLost,
+                    onFocused = { lastFocusedControl = PlayerControlFocusTarget.Video },
+                )
+            }
         }
 
         Box(
@@ -614,7 +664,7 @@ private fun PlayerBottomControlBar(
                 controlsEnabled = controlsEnabled,
                 focusRequester = restartFocusRequester,
                 leftFocusRequester = null,
-                rightFocusRequester = sourcesFocusRequester,
+                rightFocusRequester = restartRightFocusRequester,
                 onClick = { onControlsEvent(TvPlayerControlsEvent.Restart) },
                 onTooltipVisible = ::onControlFocused,
                 onTooltipHidden = ::onControlFocusLost,
@@ -871,6 +921,31 @@ private fun AudioTracksControlButton(
     PlayerSecondaryControlButton(
         icon = Icons.Default.Audiotrack,
         tooltipText = stringResource(R.string.audio_tracks),
+        onClick = onClick,
+        controlsEnabled = controlsEnabled,
+        focusRequester = focusRequester,
+        leftFocusRequester = leftFocusRequester,
+        rightFocusRequester = rightFocusRequester,
+        onTooltipVisible = onTooltipVisible,
+        onTooltipHidden = onTooltipHidden,
+        onFocused = onFocused,
+    )
+}
+
+@Composable
+private fun VideoTracksControlButton(
+    controlsEnabled: Boolean,
+    focusRequester: FocusRequester,
+    leftFocusRequester: FocusRequester?,
+    rightFocusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    onTooltipVisible: (String, Rect) -> Unit,
+    onTooltipHidden: () -> Unit,
+    onFocused: () -> Unit,
+) {
+    PlayerSecondaryControlButton(
+        icon = Icons.Default.HighQuality,
+        tooltipText = stringResource(R.string.video_tracks),
         onClick = onClick,
         controlsEnabled = controlsEnabled,
         focusRequester = focusRequester,

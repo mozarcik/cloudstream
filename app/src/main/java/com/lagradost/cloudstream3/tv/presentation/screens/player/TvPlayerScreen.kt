@@ -393,10 +393,13 @@ private fun PlaybackState(
     var playerPlaybackState by remember { mutableStateOf(exoPlayer.playbackState) }
     var playerWantsToPlay by remember { mutableStateOf(exoPlayer.playWhenReady) }
     var errorHandled by remember(state.link.url) { mutableStateOf(false) }
-    var runtimeTrackPanelVisible by remember(state.link.url) { mutableStateOf(false) }
+    var runtimeAudioTrackPanelVisible by remember(state.link.url) { mutableStateOf(false) }
+    var runtimeVideoTrackPanelVisible by remember(state.link.url) { mutableStateOf(false) }
     var subtitleSyncPanelVisible by remember(state.link.url) { mutableStateOf(false) }
     var runtimeAudioTracks by remember(state.link.url) { mutableStateOf<List<PlayerAudioTrackOption>>(emptyList()) }
+    var runtimeVideoTracks by remember(state.link.url) { mutableStateOf<List<PlayerVideoTrackOption>>(emptyList()) }
     var runtimeSelectedAudioTrackId by remember(state.link.url) { mutableStateOf<String?>(null) }
+    var runtimeSelectedVideoTrackId by remember(state.link.url) { mutableStateOf<String?>(null) }
     var hasAppliedInitialAudioSelection by remember(state.link.url) { mutableStateOf(false) }
     val subtitleFilePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -445,19 +448,40 @@ private fun PlaybackState(
         )
         runtimeSelectedAudioTrackId = track?.selectionId
     }
-    fun refreshRuntimeAudioTracks(tracksSnapshot: Tracks = exoPlayer.currentTracks) {
+    fun selectRuntimeVideoTrack(track: PlayerVideoTrackOption?) {
+        applyRuntimeVideoTrackSelection(
+            player = exoPlayer,
+            track = track,
+        )
+        runtimeSelectedVideoTrackId = track?.selectionId
+    }
+    fun refreshRuntimeTracks(tracksSnapshot: Tracks = exoPlayer.currentTracks): List<PlayerAudioTrackOption> {
         val extractedAudioTracks = extractRuntimeAudioTracks(tracksSnapshot)
         runtimeAudioTracks = extractedAudioTracks
         runtimeSelectedAudioTrackId = extractedAudioTracks.firstOrNull { track ->
             track.isSelected
         }?.selectionId
+        val extractedVideoTracks = extractRuntimeVideoTracks(tracksSnapshot)
+        runtimeVideoTracks = extractedVideoTracks
+        runtimeSelectedVideoTrackId = extractedVideoTracks.firstOrNull { track ->
+            track.isSelected
+        }?.selectionId
+        if (runtimeAudioTrackPanelVisible && extractedAudioTracks.size <= 1) {
+            runtimeAudioTrackPanelVisible = false
+        }
+        if (runtimeVideoTrackPanelVisible && extractedVideoTracks.size <= 1) {
+            runtimeVideoTrackPanelVisible = false
+        }
+        return extractedAudioTracks
     }
     val activePanel = state.panels.activePanel
     val hasSidePanel = activePanel != TvPlayerSidePanel.None ||
-        runtimeTrackPanelVisible ||
+        runtimeAudioTrackPanelVisible ||
+        runtimeVideoTrackPanelVisible ||
         subtitleSyncPanelVisible ||
         sourceErrorDialogEffect != null
-    val showRuntimeTracksButton = runtimeAudioTracks.size > 1
+    val showRuntimeAudioTracksButton = runtimeAudioTracks.size > 1
+    val showRuntimeVideoTracksButton = runtimeVideoTracks.size > 1
 
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
@@ -468,7 +492,7 @@ private fun PlaybackState(
             override fun onPlaybackStateChanged(playbackState: Int) {
                 playerPlaybackState = playbackState
                 if (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING) {
-                    refreshRuntimeAudioTracks()
+                    refreshRuntimeTracks()
                 }
                 if (playbackState == Player.STATE_READY) {
                     tvPlayerScreenViewModel.onPlaybackReady()
@@ -480,11 +504,7 @@ private fun PlaybackState(
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                val extractedAudioTracks = extractRuntimeAudioTracks(tracks)
-                runtimeAudioTracks = extractedAudioTracks
-                runtimeSelectedAudioTrackId = extractedAudioTracks.firstOrNull { track ->
-                    track.isSelected
-                }?.selectionId
+                val extractedAudioTracks = refreshRuntimeTracks(tracks)
                 if (!hasAppliedInitialAudioSelection && extractedAudioTracks.isNotEmpty()) {
                     hasAppliedInitialAudioSelection = true
                     if (runtimeSelectedAudioTrackId == null) {
@@ -537,7 +557,7 @@ private fun PlaybackState(
     }
 
     LaunchedEffect(exoPlayer, pendingSeekPositionMs, pendingPlayWhenReady) {
-        refreshRuntimeAudioTracks()
+        refreshRuntimeTracks()
 
         pendingSeekPositionMs?.let { resumePositionMs ->
             seekPlayerTo(exoPlayer, resumePositionMs)
@@ -565,8 +585,20 @@ private fun PlaybackState(
         }
     }
 
-    LaunchedEffect(controlsVisible, playerWantsToPlay, activePanel, runtimeTrackPanelVisible, controlsInteractionEvents) {
-        if (!controlsVisible || !playerWantsToPlay || activePanel != TvPlayerSidePanel.None || runtimeTrackPanelVisible) {
+    LaunchedEffect(
+        controlsVisible,
+        playerWantsToPlay,
+        activePanel,
+        runtimeAudioTrackPanelVisible,
+        runtimeVideoTrackPanelVisible,
+        controlsInteractionEvents,
+    ) {
+        if (!controlsVisible ||
+            !playerWantsToPlay ||
+            activePanel != TvPlayerSidePanel.None ||
+            runtimeAudioTrackPanelVisible ||
+            runtimeVideoTrackPanelVisible
+        ) {
             return@LaunchedEffect
         }
 
@@ -618,8 +650,10 @@ private fun PlaybackState(
             sourceErrorDialogEffect = null
         } else if (subtitleSyncPanelVisible) {
             subtitleSyncPanelVisible = false
-        } else if (runtimeTrackPanelVisible) {
-            runtimeTrackPanelVisible = false
+        } else if (runtimeAudioTrackPanelVisible) {
+            runtimeAudioTrackPanelVisible = false
+        } else if (runtimeVideoTrackPanelVisible) {
+            runtimeVideoTrackPanelVisible = false
         } else if (activePanel == TvPlayerSidePanel.Subtitles &&
             tvPlayerScreenViewModel.onSubtitlesSidePanelBackPressed()
         ) {
@@ -713,7 +747,8 @@ private fun PlaybackState(
             metadata = state.metadata,
             link = state.link,
             isPlaying = isPlaying,
-            showTracksButton = showRuntimeTracksButton,
+            showAudioTracksButton = showRuntimeAudioTracksButton,
+            showVideoTracksButton = showRuntimeVideoTracksButton,
             showSyncButton = state.selectedSubtitleIndex >= 0,
             showNextEpisodeButton = state.metadata.isEpisodeBased,
             playPauseFocusRequester = playPauseFocusRequester,
@@ -737,8 +772,11 @@ private fun PlaybackState(
                     TvPlayerControlsEvent.OpenSubtitles -> {
                         tvPlayerScreenViewModel.openPanel(TvPlayerSidePanel.Subtitles)
                     }
+                    TvPlayerControlsEvent.OpenVideoTracks -> {
+                        runtimeVideoTrackPanelVisible = runtimeVideoTracks.size > 1
+                    }
                     TvPlayerControlsEvent.OpenTracks -> {
-                        runtimeTrackPanelVisible = runtimeAudioTracks.size > 1
+                        runtimeAudioTrackPanelVisible = runtimeAudioTracks.size > 1
                     }
                     TvPlayerControlsEvent.SyncSubtitles -> {
                         subtitleSyncDebugLog(
@@ -793,22 +831,42 @@ private fun PlaybackState(
             )
         }
 
-        if (runtimeTrackPanelVisible) {
+        if (runtimeAudioTrackPanelVisible) {
             RuntimeAudioTracksSidePanel(
                 tracks = runtimeAudioTracks,
                 selectedTrackId = runtimeSelectedAudioTrackId,
                 onCloseRequested = {
-                    runtimeTrackPanelVisible = false
+                    runtimeAudioTrackPanelVisible = false
                 },
                 onSelectDefault = {
                     registerControlsInteraction()
                     selectRuntimeAudioTrack(null)
-                    runtimeTrackPanelVisible = false
+                    runtimeAudioTrackPanelVisible = false
                 },
                 onSelectTrack = { track ->
                     registerControlsInteraction()
                     selectRuntimeAudioTrack(track)
-                    runtimeTrackPanelVisible = false
+                    runtimeAudioTrackPanelVisible = false
+                },
+            )
+        }
+
+        if (runtimeVideoTrackPanelVisible) {
+            RuntimeVideoTracksSidePanel(
+                tracks = runtimeVideoTracks,
+                selectedTrackId = runtimeSelectedVideoTrackId,
+                onCloseRequested = {
+                    runtimeVideoTrackPanelVisible = false
+                },
+                onSelectDefault = {
+                    registerControlsInteraction()
+                    selectRuntimeVideoTrack(null)
+                    runtimeVideoTrackPanelVisible = false
+                },
+                onSelectTrack = { track ->
+                    registerControlsInteraction()
+                    selectRuntimeVideoTrack(track)
+                    runtimeVideoTrackPanelVisible = false
                 },
             )
         }
@@ -1057,6 +1115,57 @@ private fun RuntimeAudioTracksSidePanel(
     )
 }
 
+@Composable
+private fun RuntimeVideoTracksSidePanel(
+    tracks: List<PlayerVideoTrackOption>,
+    selectedTrackId: String?,
+    onCloseRequested: () -> Unit,
+    onSelectDefault: () -> Unit,
+    onSelectTrack: (PlayerVideoTrackOption) -> Unit,
+) {
+    val defaultItemId = "runtime_video_track_default"
+    val defaultTitle = stringResource(R.string.action_default)
+    val items = remember(defaultTitle, tracks, selectedTrackId) {
+        buildList {
+            add(
+                SidePanelMenuItem(
+                    id = defaultItemId,
+                    title = defaultTitle,
+                    selected = selectedTrackId == null,
+                    onClick = onSelectDefault,
+                )
+            )
+            tracks.forEach { track ->
+                add(
+                    SidePanelMenuItem(
+                        id = track.selectionId,
+                        title = track.title,
+                        supportingTexts = track.supportingTexts,
+                        selected = selectedTrackId == track.selectionId,
+                        onClick = {
+                            onSelectTrack(track)
+                        },
+                    )
+                )
+            }
+        }
+    }
+    val initialFocusedItemId = selectedTrackId?.takeIf { selectedId ->
+        items.any { item -> item.id == selectedId }
+    } ?: defaultItemId
+
+    MenuListSidePanel(
+        visible = true,
+        onCloseRequested = onCloseRequested,
+        title = stringResource(R.string.video_tracks),
+        items = items,
+        showSelectionRadio = true,
+        initialFocusedItemId = initialFocusedItemId,
+        closeOnLeftPress = false,
+        closeOnFocusExit = false,
+    )
+}
+
 private fun TvPlayerPanelItemAction.requiresPlaybackRestore(): Boolean {
     return when (this) {
         is TvPlayerPanelItemAction.SelectSource,
@@ -1099,9 +1208,33 @@ private data class PlayerAudioTrackOption(
     val isSelected: Boolean,
 )
 
+private data class PlayerVideoTrackOption(
+    val selectionId: String,
+    val title: String,
+    val supportingTexts: List<String>,
+    val width: Int,
+    val height: Int,
+    val trackGroup: androidx.media3.common.TrackGroup,
+    val trackIndex: Int,
+    val isSelected: Boolean,
+)
+
 private data class RuntimeAudioTrackLabel(
     val title: String,
     val supportingTexts: List<String>,
+)
+
+private data class RuntimeVideoTrackLabel(
+    val title: String,
+    val supportingTexts: List<String>,
+)
+
+private data class RuntimeVideoTrackCandidate(
+    val selectionId: String,
+    val format: Format,
+    val trackGroup: androidx.media3.common.TrackGroup,
+    val trackIndex: Int,
+    val isSelected: Boolean,
 )
 
 private fun extractRuntimeAudioTracks(tracks: Tracks): List<PlayerAudioTrackOption> {
@@ -1134,6 +1267,49 @@ private fun extractRuntimeAudioTracks(tracks: Tracks): List<PlayerAudioTrackOpti
     return runtimeTracks
 }
 
+private fun extractRuntimeVideoTracks(tracks: Tracks): List<PlayerVideoTrackOption> {
+    val runtimeTracks = mutableListOf<RuntimeVideoTrackCandidate>()
+    tracks.groups.forEachIndexed { groupIndex, group ->
+        if (group.type != C.TRACK_TYPE_VIDEO) {
+            return@forEachIndexed
+        }
+        val trackGroup = group.mediaTrackGroup
+        for (trackIndex in 0 until trackGroup.length) {
+            if (!group.isTrackSupported(trackIndex)) {
+                continue
+            }
+            val format = trackGroup.getFormat(trackIndex)
+            runtimeTracks += RuntimeVideoTrackCandidate(
+                selectionId = "runtime_video_track_${groupIndex}_${trackIndex}_${format.id.orEmpty()}",
+                format = format,
+                trackGroup = trackGroup,
+                trackIndex = trackIndex,
+                isSelected = group.isTrackSelected(trackIndex),
+            )
+        }
+    }
+    val sortedTracks = runtimeTracks.sortedWith(
+        compareByDescending<RuntimeVideoTrackCandidate> { candidate ->
+            candidate.format.height.takeIf { it > 0 } ?: Int.MIN_VALUE
+        }.thenByDescending { candidate ->
+            candidate.format.width.takeIf { it > 0 } ?: Int.MIN_VALUE
+        }
+    )
+    return sortedTracks.mapIndexed { index, candidate ->
+        val formattedLabel = formatRuntimeVideoTrackLabel(index = index, format = candidate.format)
+        PlayerVideoTrackOption(
+            selectionId = candidate.selectionId,
+            title = formattedLabel.title,
+            supportingTexts = formattedLabel.supportingTexts,
+            width = candidate.format.width,
+            height = candidate.format.height,
+            trackGroup = candidate.trackGroup,
+            trackIndex = candidate.trackIndex,
+            isSelected = candidate.isSelected,
+        )
+    }
+}
+
 private fun formatRuntimeAudioTrackLabel(
     index: Int,
     format: Format,
@@ -1159,6 +1335,30 @@ private fun formatRuntimeAudioTrackLabel(
     )
 }
 
+private fun formatRuntimeVideoTrackLabel(
+    index: Int,
+    format: Format,
+): RuntimeVideoTrackLabel {
+    val resolutionLabel = if (format.width > 0 && format.height > 0) {
+        "${format.width}x${format.height}"
+    } else {
+        null
+    }
+    val codecLabel = format.sampleMimeType
+        ?.substringAfter('/')
+        ?.uppercase(Locale.ROOT)
+    val title = format.label?.takeIf { it.isNotBlank() }
+        ?: resolutionLabel
+        ?: "Video ${index + 1}"
+    return RuntimeVideoTrackLabel(
+        title = title,
+        supportingTexts = listOfNotNull(
+            resolutionLabel?.takeUnless { it == title },
+            codecLabel,
+        ),
+    )
+}
+
 private fun applyRuntimeAudioTrackSelection(
     player: ExoPlayer,
     track: PlayerAudioTrackOption?,
@@ -1172,6 +1372,25 @@ private fun applyRuntimeAudioTrackSelection(
                 track.language?.takeIf { it.isNotBlank() }?.let(::setPreferredAudioLanguage)
             } else {
                 setPreferredAudioLanguage(null)
+            }
+        }
+        .build()
+    player.trackSelectionParameters = newParameters
+}
+
+private fun applyRuntimeVideoTrackSelection(
+    player: ExoPlayer,
+    track: PlayerVideoTrackOption?,
+) {
+    val maxWidth = track?.width?.takeIf { it > 0 } ?: Int.MAX_VALUE
+    val maxHeight = track?.height?.takeIf { it > 0 } ?: Int.MAX_VALUE
+    val newParameters = player.trackSelectionParameters.buildUpon()
+        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+        .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+        .setMaxVideoSize(maxWidth, maxHeight)
+        .apply {
+            if (track != null) {
+                setOverrideForType(TrackSelectionOverride(track.trackGroup, track.trackIndex))
             }
         }
         .build()

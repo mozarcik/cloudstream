@@ -61,6 +61,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class MovieDetailsCompatPanelItem(
     val id: Int,
@@ -128,6 +130,7 @@ class MovieDetailsEpisodeActionsCompat(
     )
 
     private var cachedTarget: MovieActionTarget? = null
+    private val targetMutex = Mutex()
     private val cachedLinks = mutableMapOf<LoadLinksCacheKey, LinkLoadingResult>()
 
     suspend fun loadPanelActions(context: Context?): List<MovieDetailsCompatPanelItem> {
@@ -699,22 +702,28 @@ class MovieDetailsEpisodeActionsCompat(
     private suspend fun resolveTarget(): MovieActionTarget? {
         cachedTarget?.let { return it }
 
-        val api = APIHolder.getApiFromNameNull(apiName) ?: return null
-        val repository = APIRepository(api)
-        val loadResponse = when (val response = repository.load(sourceUrl)) {
-            is Resource.Success -> response.value
-            else -> return null
-        }
+        return targetMutex.withLock {
+            cachedTarget?.let { return it }
 
-        val target = when (loadResponse) {
-            is MovieLoadResponse -> buildMovieTarget(loadResponse)
-            is TvSeriesLoadResponse -> buildSeriesTarget(loadResponse)
-            is AnimeLoadResponse -> buildAnimeTarget(loadResponse)
-            else -> null
-        }
+            val target = withContext(Dispatchers.IO) {
+                val api = APIHolder.getApiFromNameNull(apiName) ?: return@withContext null
+                val repository = APIRepository(api)
+                val loadResponse = when (val response = repository.load(sourceUrl)) {
+                    is Resource.Success -> response.value
+                    else -> return@withContext null
+                }
 
-        cachedTarget = target
-        return target
+                when (loadResponse) {
+                    is MovieLoadResponse -> buildMovieTarget(loadResponse)
+                    is TvSeriesLoadResponse -> buildSeriesTarget(loadResponse)
+                    is AnimeLoadResponse -> buildAnimeTarget(loadResponse)
+                    else -> null
+                }
+            }
+
+            cachedTarget = target
+            target
+        }
     }
 
     private fun buildMovieTarget(loadResponse: MovieLoadResponse): MovieActionTarget? {

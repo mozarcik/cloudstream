@@ -18,8 +18,8 @@ package com.lagradost.cloudstream3.tv
 
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +36,7 @@ import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class TvMainActivity : ComponentActivity() {
+class TvMainActivity : AppCompatActivity() {
     companion object {
         // HTTP client for network requests
         private val app = Requests()
