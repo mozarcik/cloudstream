@@ -44,8 +44,7 @@ import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
-import com.lagradost.cloudstream3.tv.presentation.common.ItemDirection
-import com.lagradost.cloudstream3.tv.presentation.common.MoviesRow
+import com.lagradost.cloudstream3.tv.presentation.common.PosterMoviesRow
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.BookmarkStatusSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.CastAndCrewList
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieActionsSidePanel
@@ -574,13 +573,12 @@ internal fun DetailsScreenContent(
 
             if (details.similarMovies.isNotEmpty()) {
                 item {
-                    MoviesRow(
+                    PosterMoviesRow(
                         title = StringConstants
                             .Composable
                             .movieDetailsScreenSimilarTo(details.name),
                         titleStyle = MaterialTheme.typography.titleMedium,
                         movieList = details.similarMovies,
-                        itemDirection = ItemDirection.Horizontal,
                         onMovieSelected = refreshScreenWithNewItem
                     )
                 }

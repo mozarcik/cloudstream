@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.movies
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,7 +60,7 @@ import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
+import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
@@ -358,14 +359,22 @@ fun MovieDetailsBackdrop(
     gradientColor: Color = MaterialTheme.colorScheme.surface,
     applyBlur: Boolean = false,
 ) {
+    val context = LocalContext.current
+    val imageRequest = remember(context, posterUri) {
+        ImageRequest.Builder(context)
+            .data(posterUri)
+            .crossfade(true)
+            .build()
+    }
+    val painter = rememberAsyncImagePainter(model = imageRequest)
     val backdropModifier = if (applyBlur) {
         modifier.blur(22.dp)
     } else {
         modifier
     }
-    AsyncImage(
-        model = ImageRequest.Builder(LocalContext.current).data(posterUri)
-            .crossfade(true).build(),
+
+    Image(
+        painter = painter,
         contentDescription = StringConstants
             .Composable
             .ContentDescription

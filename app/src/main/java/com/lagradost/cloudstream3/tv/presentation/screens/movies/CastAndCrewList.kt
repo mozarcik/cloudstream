@@ -74,7 +74,7 @@ private fun CastAndCrewItem(
             focusedBorder = Border(
                 border = BorderStroke(
                     width = CloudStreamBorderWidth,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary
                 ),
                 shape = CloudStreamCardShape
             )

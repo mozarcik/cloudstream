@@ -97,6 +97,6 @@ class FeaturedRepositoryImpl(
 
     private companion object {
         private const val FEATURED_INITIAL_PAGE = 1
-        private const val FEATURED_ITEM_COUNT = 5
+        private const val FEATURED_ITEM_COUNT = 10
     }
 }

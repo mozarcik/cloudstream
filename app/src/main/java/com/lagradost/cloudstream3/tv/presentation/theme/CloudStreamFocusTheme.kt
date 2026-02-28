@@ -6,7 +6,7 @@ import androidx.tv.material3.ShapeDefaults
 val CloudStreamCardShape = ShapeDefaults.ExtraSmall
 val CloudStreamButtonShape = ShapeDefaults.Small
 val IconSize = 48.dp
-val CloudStreamBorderWidth = 3.dp
+val CloudStreamBorderWidth = 1.dp
 
 /**
  * Space to be given below every Lazy (or scrollable) vertical list throughout the app

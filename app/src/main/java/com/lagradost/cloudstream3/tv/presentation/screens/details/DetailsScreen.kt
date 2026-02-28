@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.details
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,20 +77,36 @@ fun DetailsScreen(
         }
 
         is DetailsScreenUiState.Done -> {
-            DetailsScreenContent(
-                mode = mode,
-                details = state.details,
-                sourceUrl = state.sourceUrl,
-                apiName = state.apiName,
-                goToPlayer = goToPlayer,
-                onBackPressed = onBackPressed,
-                refreshScreenWithNewItem = refreshScreenWithNewItem,
-                onFavoriteClick = detailsScreenViewModel::onFavoriteClick,
-                onBookmarkClick = detailsScreenViewModel::onBookmarkClick,
-                modifier = modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
+            val baseColorScheme = MaterialTheme.colorScheme
+            val artworkKey = remember(state.details.id, state.details.posterUri) {
+                "details:${state.details.id}:${state.details.posterUri}"
+            }
+            val dynamicColorScheme = rememberDetailsDynamicColorScheme(
+                artworkKey = artworkKey,
+                artworkUrl = state.details.posterUri.takeIf { it.isNotBlank() },
+                baseColorScheme = baseColorScheme,
             )
+
+            MaterialTheme(
+                colorScheme = dynamicColorScheme,
+                shapes = MaterialTheme.shapes,
+                typography = MaterialTheme.typography,
+            ) {
+                DetailsScreenContent(
+                    mode = mode,
+                    details = state.details,
+                    sourceUrl = state.sourceUrl,
+                    apiName = state.apiName,
+                    goToPlayer = goToPlayer,
+                    onBackPressed = onBackPressed,
+                    refreshScreenWithNewItem = refreshScreenWithNewItem,
+                    onFavoriteClick = detailsScreenViewModel::onFavoriteClick,
+                    onBookmarkClick = detailsScreenViewModel::onBookmarkClick,
+                    modifier = modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                )
+            }
         }
     }
 }

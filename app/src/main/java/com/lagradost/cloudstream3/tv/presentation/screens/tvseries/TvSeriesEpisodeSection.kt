@@ -181,7 +181,7 @@ internal fun EpisodeCard(
             focusedBorder = Border(
                 border = BorderStroke(
                     width = CloudStreamBorderWidth,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.primary
                 ),
                 shape = CloudStreamCardShape
             )
