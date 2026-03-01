@@ -497,7 +497,10 @@ class TvPlayerScreenViewModel(
                 url = nextLink.url,
                 state = TvPlayerSourceState(status = TvPlayerSourceStatus.Loading),
             )
-            panelsState.onSourceChanged(nextLink)
+            panelsState.onSourceChanged(
+                newLink = nextLink,
+                preserveSourcesPanel = true,
+            )
             subtitlePanelNavigationState = SubtitlePanelNavigationState()
             currentLinkIndex = nextIndex
             postReadyState(

@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.player
 
 import android.widget.ProgressBar
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -46,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -121,6 +124,12 @@ private object PlayerControlsTokens {
     val TooltipMaxWidth = 220.dp
     const val TooltipFadeInMs = 150
     const val TooltipFadeOutMs = 0
+
+    val TimelineContainerHeight = 24.dp
+    val TimelineInactiveTrackHeight = 6.dp
+    val TimelineFocusedTrackHeight = 8.dp
+    val TimelineTrackPadding = 8.dp
+    const val TimelineFocusAnimationMs = 120
 }
 
 private data class PlayerControlTooltipState(
@@ -1170,10 +1179,22 @@ private fun PlaybackTimeline(
 ) {
     val safeProgress = progressFraction.coerceIn(0f, 1f)
     var isFocused by remember { mutableStateOf(false) }
+    val focusScale by animateFloatAsState(
+        targetValue = if (isFocused) {
+            PlayerControlsTokens.TimelineFocusedTrackHeight.value /
+                PlayerControlsTokens.TimelineInactiveTrackHeight.value
+        } else {
+            1f
+        },
+        animationSpec = tween(durationMillis = PlayerControlsTokens.TimelineFocusAnimationMs),
+        label = "playback_timeline_focus_scale",
+    )
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val trackAlpha = if (isFocused) 0.34f else 0.20f
 
     Box(
         modifier = modifier
-            .height(24.dp)
+            .height(PlayerControlsTokens.TimelineContainerHeight)
             .focusRequester(focusRequester)
             .focusProperties {
                 canFocus = controlsEnabled
@@ -1198,16 +1219,26 @@ private fun PlaybackTimeline(
                 isFocused = focusState.isFocused
             }
             .focusable(enabled = controlsEnabled)
-            .padding(vertical = 8.dp)
-            .clip(RoundedCornerShape(percent = 50))
-            .background(if (isFocused) Color.White.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.25f)),
+            .padding(vertical = PlayerControlsTokens.TimelineTrackPadding),
+        contentAlignment = Alignment.CenterStart,
     ) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(safeProgress)
-                .height(8.dp)
-                .background(Color.White)
-        )
+                .fillMaxWidth()
+                .height(PlayerControlsTokens.TimelineInactiveTrackHeight)
+                .graphicsLayer {
+                    scaleY = focusScale
+                }
+                .clip(CircleShape)
+                .background(primaryColor.copy(alpha = trackAlpha)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(safeProgress)
+                    .background(primaryColor)
+            )
+        }
     }
 }
 

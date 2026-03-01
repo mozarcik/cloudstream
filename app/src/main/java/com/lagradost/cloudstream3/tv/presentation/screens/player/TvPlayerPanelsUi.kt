@@ -93,16 +93,6 @@ sealed interface TvPlayerPanelEffect {
     ) : TvPlayerPanelEffect
 }
 
-enum class TvPlayerPanelItemStyle {
-    Default,
-    SourceOption,
-    SubtitleGroupHeader,
-    SubtitleItemSingle,
-    SubtitleItemTop,
-    SubtitleItemMiddle,
-    SubtitleItemBottom,
-}
-
 sealed interface TvPlayerPanelItemAction {
     data object None : TvPlayerPanelItemAction
 

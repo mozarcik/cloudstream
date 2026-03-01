@@ -86,9 +86,10 @@ import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.app
-import com.lagradost.cloudstream3.tv.presentation.common.SidePanelContentNavigationDirection
 import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelContentNavigationDirection
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelSelectionIndicatorStyle
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
 import com.lagradost.cloudstream3.ui.player.CustomDecoder.Companion.fixSubtitleAlignment
 import com.lagradost.cloudstream3.ui.player.UpdatedDefaultExtractorsFactory
@@ -984,6 +985,7 @@ private fun PlayerSidePanels(
                 title = stringResource(R.string.sources),
                 items = panels.sourceItems,
                 showSelectionRadio = true,
+                selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.RadioButton,
                 initialFocusedItemId = panels.sourceInitialFocusedItemId,
                 closeOnLeftPress = false,
                 closeOnFocusExit = false,
@@ -1014,6 +1016,7 @@ private fun PlayerSidePanels(
                     TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> panels.subtitleOnlineItems
                 },
                 showSelectionRadio = false,
+                selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.RadioButton,
                 initialFocusedItemId = when (panels.subtitlePanelScreen) {
                     TvPlayerSubtitlePanelScreen.Main -> panels.subtitleInitialFocusedItemId
                     TvPlayerSubtitlePanelScreen.OnlineSearch,
@@ -1050,6 +1053,7 @@ private fun PlayerSidePanels(
                 title = stringResource(R.string.audio_tracks),
                 items = panels.trackItems,
                 showSelectionRadio = true,
+                selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.RadioButton,
                 initialFocusedItemId = panels.trackInitialFocusedItemId,
                 closeOnLeftPress = false,
                 closeOnFocusExit = false,
@@ -1109,6 +1113,7 @@ private fun RuntimeAudioTracksSidePanel(
         title = stringResource(R.string.audio_tracks),
         items = items,
         showSelectionRadio = true,
+        selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.RadioButton,
         initialFocusedItemId = initialFocusedItemId,
         closeOnLeftPress = false,
         closeOnFocusExit = false,
@@ -1160,6 +1165,7 @@ private fun RuntimeVideoTracksSidePanel(
         title = stringResource(R.string.video_tracks),
         items = items,
         showSelectionRadio = true,
+        selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.RadioButton,
         initialFocusedItemId = initialFocusedItemId,
         closeOnLeftPress = false,
         closeOnFocusExit = false,

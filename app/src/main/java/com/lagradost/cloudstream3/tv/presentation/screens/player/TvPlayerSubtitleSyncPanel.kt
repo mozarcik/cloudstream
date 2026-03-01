@@ -2,6 +2,8 @@ package com.lagradost.cloudstream3.tv.presentation.screens.player
 
 import android.os.SystemClock
 import android.util.Log
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,7 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,14 +37,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.Button
 import androidx.tv.material3.ListItem
-import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
@@ -61,10 +63,10 @@ private object SubtitleSyncTokens {
     const val LargeStepMs = 1_000L
     const val ActiveLinesPaddingCount = 4
     const val PanelWidthFraction = 0.58f
+    const val ProgressFocusAnimationMs = 120
 
-    val PanelShape = RectangleShape
-    val PanelOuterPadding = 20.dp
-    val PanelInnerPadding = 24.dp
+    val PanelOuterPadding = 12.dp
+    val PanelInnerPadding = 20.dp
     val ColumnsSpacing = 18.dp
     val ColumnWeightDialogs = 0.58f
     val ColumnWeightControls = 0.42f
@@ -74,6 +76,7 @@ private object SubtitleSyncTokens {
     val DelayValueBottomPadding = 18.dp
     val ControlsButtonsSpacing = 8.dp
     val ActiveProgressHeight = 5.dp
+    val InactiveProgressHeight = 3.dp
     val ActiveProgressTopPadding = 6.dp
     val ButtonsContentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
 }
@@ -223,8 +226,7 @@ internal fun SubtitleSyncSidePanel(
         visible = visible,
         onCloseRequested = onCloseRequested,
         widthFraction = SubtitleSyncTokens.PanelWidthFraction,
-        panelShape = SubtitleSyncTokens.PanelShape,
-        panelBackgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        panelBackgroundColor = MaterialTheme.colorScheme.surface,
         panelOuterPadding = androidx.compose.foundation.layout.PaddingValues(SubtitleSyncTokens.PanelOuterPadding),
         panelPadding = androidx.compose.foundation.layout.PaddingValues(SubtitleSyncTokens.PanelInnerPadding),
         modifier = modifier,
@@ -241,7 +243,7 @@ internal fun SubtitleSyncSidePanel(
                 Text(
                     text = stringResource(R.string.subtitle_offset),
                     style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.alpha(0.84f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (!hasActiveSubtitleTrack) {
                     SubtitleSyncEmptyState(
@@ -265,6 +267,9 @@ internal fun SubtitleSyncSidePanel(
                         ) { index, cue ->
                             val isActive = index == activeCueIndex
                             val progressFraction = cue.progressFor(subtitleTimelinePositionMs)
+                            var isItemFocused by remember(cue.startTimeMs, cue.endTimeMs, index) {
+                                mutableStateOf(false)
+                            }
                             ListItem(
                                 selected = isActive,
                                 onClick = {
@@ -289,6 +294,7 @@ internal fun SubtitleSyncSidePanel(
                                     }
                                     .onFocusChanged { focusState ->
                                         hasDialogListFocus = focusState.hasFocus
+                                        isItemFocused = focusState.isFocused
                                     },
                                 headlineContent = {
                                     Column {
@@ -307,6 +313,7 @@ internal fun SubtitleSyncSidePanel(
                                         if (isActive) {
                                             SubtitleSyncProgressBar(
                                                 progress = progressFraction,
+                                                isFocused = isItemFocused,
                                                 modifier = Modifier.padding(top = SubtitleSyncTokens.ActiveProgressTopPadding),
                                             )
                                         }
@@ -461,7 +468,7 @@ private fun SubtitleSyncEmptyState(
         Text(
             text = message,
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2,
         )
     }
@@ -470,28 +477,47 @@ private fun SubtitleSyncEmptyState(
 @Composable
 private fun SubtitleSyncProgressBar(
     progress: Float,
+    isFocused: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val indicatorColor = LocalContentColor.current
+    val indicatorColor = MaterialTheme.colorScheme.primary
+    val focusScale by animateFloatAsState(
+        targetValue = if (isFocused) {
+            SubtitleSyncTokens.ActiveProgressHeight.value / SubtitleSyncTokens.InactiveProgressHeight.value
+        } else {
+            1f
+        },
+        animationSpec = tween(durationMillis = SubtitleSyncTokens.ProgressFocusAnimationMs),
+        label = "subtitle_sync_progress_focus_scale",
+    )
+    val trackAlpha = if (isFocused) 0.32f else 0.18f
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(SubtitleSyncTokens.ActiveProgressHeight)
-            .background(
-                color = indicatorColor.copy(alpha = 0.24f),
-                shape = RoundedCornerShape(100),
+            .height(SubtitleSyncTokens.InactiveProgressHeight)
+            .graphicsLayer {
+                scaleY = focusScale
+            }
+            .subtitleSyncProgressTrack(
+                color = indicatorColor.copy(alpha = trackAlpha),
             ),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxHeight()
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
-                .background(
-                    color = indicatorColor.copy(alpha = 0.85f),
-                    shape = RoundedCornerShape(100),
-                ),
+                .subtitleSyncProgressTrack(color = indicatorColor),
         )
     }
+}
+
+private fun Modifier.subtitleSyncProgressTrack(
+    color: Color,
+): Modifier {
+    return background(
+        color = color,
+        shape = CircleShape,
+    )
 }
 
 private fun formatSubtitleDelayLabel(delayMs: Long): String {

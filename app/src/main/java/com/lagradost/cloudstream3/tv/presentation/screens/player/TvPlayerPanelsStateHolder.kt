@@ -1,14 +1,10 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.R
@@ -22,12 +18,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import java.util.Locale
 
 private const val UnknownQualityLabel = "Unknown"
-private val SubtitleItemBackgroundColor = Color(0xFF0A0A0B)
-private val SubtitleItemShapeSingle = RoundedCornerShape(10.dp)
-private val SubtitleItemShapeTop = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp)
-private val SubtitleItemShapeBottom = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp)
-private val SubtitleItemShapeMiddle = RoundedCornerShape(0.dp)
-private val SubtitleItemFocusedShape = RoundedCornerShape(10.dp)
 
 internal data class TvPlayerPanelsSelection(
     val activePanel: TvPlayerSidePanel,
@@ -58,8 +48,13 @@ internal class TvPlayerPanelsStateHolder {
         subtitleSelectionOverriddenByUser = false
     }
 
-    fun onSourceChanged(newLink: ExtractorLink?) {
-        activePanel = TvPlayerSidePanel.None
+    fun onSourceChanged(
+        newLink: ExtractorLink?,
+        preserveSourcesPanel: Boolean = false,
+    ) {
+        if (!preserveSourcesPanel || activePanel != TvPlayerSidePanel.Sources) {
+            activePanel = TvPlayerSidePanel.None
+        }
         selectedSubtitleId = null
         selectedSubtitleIndex = -1
         selectedAudioTrackIndex = defaultAudioTrackIndex(newLink)
@@ -387,10 +382,9 @@ internal class TvPlayerPanelsStateHolder {
                     )
                 )
 
-                group.items.forEachIndexed { itemIndex, indexedSubtitle ->
+                group.items.forEach { indexedSubtitle ->
                     val index = indexedSubtitle.index
                     val subtitle = indexedSubtitle.value
-                    val subtitleStyle = subtitleItemStyle(itemIndex = itemIndex, groupSize = group.items.size)
                     add(
                         SidePanelMenuItem(
                             id = "subtitle_$index",
@@ -402,9 +396,6 @@ internal class TvPlayerPanelsStateHolder {
                             supportingTexts = formatSubtitleDetailsTexts(subtitle),
                             showTrailingRadio = true,
                             actionToken = TvPlayerPanelItemAction.SelectSubtitle(index),
-                            itemBackgroundColor = subtitleItemBackgroundColor(subtitleStyle),
-                            itemBackgroundShape = subtitleItemBackgroundShape(subtitleStyle),
-                            focusedItemShape = subtitleItemFocusedShape(subtitleStyle),
                         )
                     )
                 }
@@ -454,36 +445,6 @@ internal class TvPlayerPanelsStateHolder {
         )
     }
 
-    private fun subtitleItemBackgroundColor(style: TvPlayerPanelItemStyle): Color? {
-        return when (style) {
-            TvPlayerPanelItemStyle.SubtitleItemSingle,
-            TvPlayerPanelItemStyle.SubtitleItemTop,
-            TvPlayerPanelItemStyle.SubtitleItemMiddle,
-            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemBackgroundColor
-            else -> null
-        }
-    }
-
-    private fun subtitleItemBackgroundShape(style: TvPlayerPanelItemStyle): Shape? {
-        return when (style) {
-            TvPlayerPanelItemStyle.SubtitleItemSingle -> SubtitleItemShapeSingle
-            TvPlayerPanelItemStyle.SubtitleItemTop -> SubtitleItemShapeTop
-            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemShapeBottom
-            TvPlayerPanelItemStyle.SubtitleItemMiddle -> SubtitleItemShapeMiddle
-            else -> null
-        }
-    }
-
-    private fun subtitleItemFocusedShape(style: TvPlayerPanelItemStyle): Shape? {
-        return when (style) {
-            TvPlayerPanelItemStyle.SubtitleItemSingle,
-            TvPlayerPanelItemStyle.SubtitleItemTop,
-            TvPlayerPanelItemStyle.SubtitleItemMiddle,
-            TvPlayerPanelItemStyle.SubtitleItemBottom -> SubtitleItemFocusedShape
-            else -> null
-        }
-    }
-
     private fun normalizeSelectionIndexes(
         currentLink: ExtractorLink,
         subtitles: List<SubtitleData>,
@@ -511,15 +472,6 @@ internal class TvPlayerPanelsStateHolder {
     private fun defaultAudioTrackIndex(link: ExtractorLink?): Int {
         if (link == null) return -1
         return if (link.audioTracks.isNotEmpty()) 0 else -1
-    }
-
-    private fun subtitleItemStyle(itemIndex: Int, groupSize: Int): TvPlayerPanelItemStyle {
-        return when {
-            groupSize <= 1 -> TvPlayerPanelItemStyle.SubtitleItemSingle
-            itemIndex == 0 -> TvPlayerPanelItemStyle.SubtitleItemTop
-            itemIndex == groupSize - 1 -> TvPlayerPanelItemStyle.SubtitleItemBottom
-            else -> TvPlayerPanelItemStyle.SubtitleItemMiddle
-        }
     }
 
     private data class SubtitleLanguageGroup(

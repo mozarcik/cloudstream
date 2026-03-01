@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.tv.material3.ListItem
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
 import kotlinx.coroutines.delay
@@ -75,6 +76,11 @@ enum class SidePanelSupportingStyle {
 enum class SidePanelContentNavigationDirection {
     Forward,
     Backward,
+}
+
+enum class SidePanelSelectionIndicatorStyle {
+    Checkmark,
+    RadioButton,
 }
 
 data class SidePanelInlineTextField(
@@ -135,6 +141,7 @@ fun MenuListSidePanel(
     closeOnFocusExit: Boolean = true,
     initialFocusedItemId: String? = null,
     showSelectionRadio: Boolean = false,
+    selectionIndicatorStyle: SidePanelSelectionIndicatorStyle = SidePanelSelectionIndicatorStyle.Checkmark,
     contentAnimationKey: Any? = null,
     contentNavigationDirection: SidePanelContentNavigationDirection = SidePanelContentNavigationDirection.Forward,
     onActionTokenClick: ((Any) -> Unit)? = null,
@@ -641,11 +648,24 @@ fun MenuListSidePanel(
                                                             contentDescription = null,
                                                         )
                                                     }
-                                                    (menuItem.showTrailingRadio || showSelectionRadio) && menuItem.selected -> {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Check,
-                                                            contentDescription = null,
-                                                        )
+                                                    menuItem.showTrailingRadio || showSelectionRadio -> {
+                                                        when (selectionIndicatorStyle) {
+                                                            SidePanelSelectionIndicatorStyle.Checkmark -> {
+                                                                if (menuItem.selected) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Check,
+                                                                        contentDescription = null,
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            SidePanelSelectionIndicatorStyle.RadioButton -> {
+                                                                RadioButton(
+                                                                    selected = menuItem.selected,
+                                                                    onClick = { }
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
