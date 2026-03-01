@@ -487,6 +487,8 @@
     <string name="tv_player_source_unavailable">Unavailable</string>
     <string name="tv_player_source_error_dialog_http_code" formatted="true">This source couldn\'t be loaded (HTTP %1$d).</string>
     <string name="tv_player_source_error_dialog_unavailable">This source is currently unavailable.</string>
+    <string name="tv_player_source_trying_next" formatted="true">Source &quot;%1$s&quot; failed. Trying the next source…</string>
+    <string name="tv_player_source_trying_next_generic">This source failed. Trying the next one…</string>
     <string name="tv_search_failed_to_load">Couldn\'t load results from this source</string>
     <string name="tv_home_back">Back</string>
     <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>

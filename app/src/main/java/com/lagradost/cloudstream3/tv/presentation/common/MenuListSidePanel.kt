@@ -144,6 +144,8 @@ fun MenuListSidePanel(
     selectionIndicatorStyle: SidePanelSelectionIndicatorStyle = SidePanelSelectionIndicatorStyle.Checkmark,
     contentAnimationKey: Any? = null,
     contentNavigationDirection: SidePanelContentNavigationDirection = SidePanelContentNavigationDirection.Forward,
+    enableContentAnimation: Boolean = true,
+    enableItemAnimations: Boolean = true,
     onActionTokenClick: ((Any) -> Unit)? = null,
     onDirectionalActionToken: ((Any) -> Unit)? = null,
     onInlineTextFieldValueChanged: ((Any, String) -> Unit)? = null,
@@ -673,7 +675,7 @@ fun MenuListSidePanel(
                                     }
                                 }
 
-                                if (menuItem.animateVisibility) {
+                                if (menuItem.animateVisibility && enableItemAnimations) {
                                     AnimatedVisibility(
                                         visible = runtimeVisible,
                                         enter = expandVertically(animationSpec = tween(durationMillis = 220)),
@@ -693,7 +695,7 @@ fun MenuListSidePanel(
             }
         }
 
-        if (contentAnimationKey == null) {
+        if (contentAnimationKey == null || !enableContentAnimation) {
             panelContent()
         } else {
             AnimatedContent(

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -18,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.R
@@ -117,10 +117,13 @@ private fun buildSourceMenuItems(
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                    RadioButton(
-                        selected = isSelected,
-                        onClick = { }
-                    )
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         )

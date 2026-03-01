@@ -23,8 +23,10 @@ import com.lagradost.cloudstream3.tv.presentation.screens.details.DetailsScreenV
 import com.lagradost.cloudstream3.tv.presentation.screens.details.consumeDetailsLoadingState
 import com.lagradost.cloudstream3.tv.presentation.screens.details.createDetailsSavedStateHandle
 import com.lagradost.cloudstream3.tv.presentation.screens.details.saveDetailsLoadingState
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerScreenNavigation
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerScreenViewModel
+import com.lagradost.cloudstream3.tv.presentation.screens.player.createPlayerSavedStateHandle
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -341,11 +343,11 @@ fun TvApp(
                 val apiName = URLDecoder.decode(encodedApiName, StandardCharsets.UTF_8.toString())
                 val episodeData = URLDecoder.decode(encodedEpisodeData, StandardCharsets.UTF_8.toString())
 
-                val savedStateHandle = SavedStateHandle().apply {
-                    set(TvPlayerScreen.UrlBundleKey, url)
-                    set(TvPlayerScreen.ApiNameBundleKey, apiName)
-                    set(TvPlayerScreen.EpisodeDataBundleKey, episodeData)
-                }
+                val savedStateHandle = createPlayerSavedStateHandle(
+                    url = url,
+                    apiName = apiName,
+                    episodeData = episodeData,
+                )
 
                 val viewModel: TvPlayerScreenViewModel = viewModel(
                     factory = object : androidx.lifecycle.ViewModelProvider.Factory {

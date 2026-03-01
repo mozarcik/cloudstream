@@ -1,11 +1,18 @@
-package com.lagradost.cloudstream3.tv.presentation.screens.player
+package com.lagradost.cloudstream3.tv.presentation.screens.player.video
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerSubtitleSyncController
 import com.lagradost.cloudstream3.ui.player.CustomDecoder
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.setSubtitleViewStyle
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
@@ -29,6 +36,28 @@ internal fun TvPlayerVideoSurface(
     subtitleSyncController: TvPlayerSubtitleSyncController,
     modifier: Modifier = Modifier,
 ) {
+    var playerView by remember { mutableStateOf<PlayerView?>(null) }
+
+    DisposableEffect(player, subtitleSyncController, playerView) {
+        val resolvedPlayerView = playerView
+        if (resolvedPlayerView == null) {
+            onDispose { }
+        } else {
+            subtitleSyncController.attachSubtitleView(resolvedPlayerView.subtitleView)
+            resolvedPlayerView.applyLegacySubtitleStyle()
+            val listener = object : Player.Listener {
+                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                    resolvedPlayerView.applyLegacySubtitleStyle()
+                }
+            }
+            player.addListener(listener)
+            onDispose {
+                player.removeListener(listener)
+                subtitleSyncController.clearSubtitleView()
+            }
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { viewContext ->
@@ -38,8 +67,8 @@ internal fun TvPlayerVideoSurface(
                 setShutterBackgroundColor("#000000".toColorInt())
                 setBackgroundColor("#000000".toColorInt())
                 this.resizeMode = resizeMode
-                subtitleSyncController.attachSubtitleView(subtitleView)
                 applyLegacySubtitleStyle()
+                playerView = this
             }
         },
         update = { view ->
@@ -49,10 +78,9 @@ internal fun TvPlayerVideoSurface(
             if (view.resizeMode != resizeMode) {
                 view.resizeMode = resizeMode
             }
-            subtitleSyncController.attachSubtitleView(view.subtitleView)
-            // WHY: PlayerView potrafi nadpisać styl po podpięciu nowego playera/tracków.
-            // Reaplikujemy styl legacy, aby zawsze respektować zapisane ustawienia napisów.
-            view.applyLegacySubtitleStyle()
+            if (playerView !== view) {
+                playerView = view
+            }
         },
     )
 }

@@ -1,7 +1,9 @@
-package com.lagradost.cloudstream3.tv.presentation.screens.player
+package com.lagradost.cloudstream3.tv.presentation.screens.player.panels
 
-import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities
+import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
+import kotlinx.collections.immutable.PersistentList
+import kotlinx.collections.immutable.persistentListOf
 
 internal const val SubtitleLoadFromInternetItemId = "subtitle_load_online"
 internal const val SubtitleLoadFromFileItemId = "subtitle_load_file"
@@ -46,42 +48,47 @@ enum class TvPlayerSourceStatus {
     Error,
 }
 
+@Immutable
 data class TvPlayerSourceState(
     val status: TvPlayerSourceStatus = TvPlayerSourceStatus.Loading,
     val httpCode: Int? = null,
 )
 
+@Immutable
 data class TvPlayerSourceErrorDialog(
     val sourceIndex: Int,
     val sourceLabel: String,
     val message: String,
 )
 
+@Immutable
 data class TvPlayerPlaybackErrorDetails(
     val exoErrorCode: Int,
     val exoErrorName: String,
     val httpCode: Int? = null,
 )
 
+@Immutable
 data class TvPlayerSubtitleLanguageOption(
     val tag: String,
     val label: String,
 )
 
+@Immutable
 data class TvPlayerOnlineSubtitleResult(
     val id: String,
     val providerIdPrefix: String,
-    val subtitle: AbstractSubtitleEntities.SubtitleEntity,
     val title: String,
-    val supportingTexts: List<String>,
+    val supportingTexts: PersistentList<String>,
 )
 
+@Immutable
 data class TvPlayerOnlineSubtitlesState(
     val query: String = "",
     val selectedLanguageTag: String = "",
     val selectedLanguageLabel: String = "",
     val status: TvPlayerOnlineSubtitlesStatus = TvPlayerOnlineSubtitlesStatus.Idle,
-    val results: List<TvPlayerOnlineSubtitleResult> = emptyList(),
+    val results: PersistentList<TvPlayerOnlineSubtitleResult> = persistentListOf(),
     val errorMessage: String? = null,
 )
 
@@ -90,6 +97,10 @@ sealed interface TvPlayerPanelEffect {
 
     data class OpenSourceErrorDialog(
         val dialog: TvPlayerSourceErrorDialog,
+    ) : TvPlayerPanelEffect
+
+    data class ShowMessage(
+        val message: String,
     ) : TvPlayerPanelEffect
 }
 
