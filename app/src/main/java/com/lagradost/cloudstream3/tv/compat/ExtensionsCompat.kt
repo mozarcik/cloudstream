@@ -1,16 +1,18 @@
 package com.lagradost.cloudstream3.tv.compat
 
 import android.app.Activity
+import android.content.Context
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.context as appContext
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
-import com.lagradost.cloudstream3.plugins.PluginData
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.plugins.RepositoryManager
-import com.lagradost.cloudstream3.plugins.SitePlugin
 import com.lagradost.cloudstream3.ui.settings.extensions.REPOSITORIES_KEY
 import com.lagradost.cloudstream3.ui.settings.extensions.RepositoryData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * Compatibility layer for Extensions management.
@@ -18,59 +20,80 @@ import kotlinx.coroutines.withContext
  * Does NOT modify original code.
  */
 object ExtensionsCompat {
-    
+    private fun requireAppContext(): Context {
+        return requireNotNull(appContext) { "Application context is unavailable" }
+    }
+
+    internal fun resolveInstalledPluginFile(
+        context: Context,
+        repositoryUrl: String,
+        internalName: String
+    ): File? {
+        val expectedFile = PluginManager.getPluginPath(
+            context = context,
+            internalName = internalName,
+            repositoryUrl = repositoryUrl
+        )
+        if (expectedFile.exists()) return expectedFile
+
+        return PluginManager.getPluginsOnline()
+            .firstOrNull { pluginData -> pluginData.filePath == expectedFile.absolutePath }
+            ?.let { pluginData -> File(pluginData.filePath) }
+            ?: PluginManager.getPluginsOnline()
+                .firstOrNull { pluginData -> pluginData.internalName == internalName }
+                ?.let { pluginData -> File(pluginData.filePath) }
+    }
+
+    internal fun resolveInstalledPluginInstance(
+        context: Context,
+        repositoryUrl: String,
+        internalName: String
+    ): com.lagradost.cloudstream3.plugins.Plugin? {
+        val pluginFile = resolveInstalledPluginFile(
+            context = context,
+            repositoryUrl = repositoryUrl,
+            internalName = internalName
+        ) ?: return null
+
+        return PluginManager.plugins[pluginFile.absolutePath] as? com.lagradost.cloudstream3.plugins.Plugin
+    }
+
     // ========== Repository Operations ==========
-    
+
     /**
      * Get all repositories (user-added + prebuilt)
      */
     suspend fun getRepositories(): Result<List<RepositoryItem>> = withContext(Dispatchers.IO) {
         runCatching {
             val userRepos = getKey<Array<RepositoryData>>(REPOSITORIES_KEY) ?: emptyArray()
-            android.util.Log.d("ExtensionsCompat", "getRepositories: getKey returned ${userRepos.size} user repos")
-            android.util.Log.d("ExtensionsCompat", "getRepositories: PREBUILT_REPOSITORIES has ${RepositoryManager.PREBUILT_REPOSITORIES.size} repos")
-            
-            val allRepos = userRepos.toList() + RepositoryManager.PREBUILT_REPOSITORIES.toList()
-            android.util.Log.d("ExtensionsCompat", "getRepositories: Total repos before mapping: ${allRepos.size}")
-            
-            allRepos.mapIndexed { index, repo ->
-                val sanitizedIconUrl = repo.iconUrl?.takeIf { it != "null" && it.isNotBlank() }
-                android.util.Log.d("ExtensionsCompat", "getRepositories[$index]: ${repo.name}, url=${repo.url}")
-                
+
+            (userRepos.toList() + RepositoryManager.PREBUILT_REPOSITORIES.toList()).map { repo ->
                 RepositoryItem(
                     name = repo.name,
                     url = repo.url,
-                    iconUrl = sanitizedIconUrl,
+                    iconUrl = repo.iconUrl?.takeIf { it != "null" && it.isNotBlank() },
                     isPrebuilt = RepositoryManager.PREBUILT_REPOSITORIES.any { it.url == repo.url }
                 )
             }
         }
     }
-    
+
     /**
      * Add a new repository with URL parsing and automatic name detection
      * Following the logic from ExtensionsFragment.kt:214-244
      */
     suspend fun addRepository(name: String?, url: String): Result<RepositoryItem> = withContext(Dispatchers.IO) {
         runCatching {
-            // 1. Parse and validate URL
             val parsedUrl = RepositoryManager.parseRepoUrl(url.trim())
                 ?: throw IllegalArgumentException("Invalid repository URL")
-            
-            // 2. Fetch repository metadata
+
             val repository = RepositoryManager.parseRepository(parsedUrl)
                 ?: throw IllegalArgumentException("No repository found at this URL")
-            
-            // 3. Use provided name or fallback to repository name from metadata
-            val finalName = if (!name.isNullOrBlank()) name else repository.name
-            
-            // 4. Create repository data
+
+            val finalName = name?.takeIf { it.isNotBlank() } ?: repository.name
             val newRepo = RepositoryData(repository.iconUrl, finalName, parsedUrl)
-            
-            // 5. Add using RepositoryManager (handles duplicates internally)
             RepositoryManager.addRepository(newRepo)
-            
-            // 6. Return the added repository
+
             RepositoryItem(
                 name = finalName,
                 url = parsedUrl,
@@ -79,137 +102,153 @@ object ExtensionsCompat {
             )
         }
     }
-    
+
     /**
      * Remove a repository (only user-added, not prebuilt)
      */
     suspend fun removeRepository(url: String): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // Check if it's a prebuilt repo
             if (RepositoryManager.PREBUILT_REPOSITORIES.any { it.url == url }) {
                 throw IllegalArgumentException("Cannot remove prebuilt repository")
             }
-            
+
             val currentRepos = getKey<Array<RepositoryData>>(REPOSITORIES_KEY) ?: emptyArray()
-            val updatedRepos = currentRepos.filter { it.url != url }.toTypedArray()
-            
+            val updatedRepos = currentRepos.filter { repo -> repo.url != url }.toTypedArray()
             setKey(REPOSITORIES_KEY, updatedRepos)
         }
     }
-    
+
     // ========== Plugin Operations ==========
-    
+
     /**
      * Get all plugins from a specific repository
      */
     suspend fun getPluginsFromRepository(repoUrl: String): Result<List<PluginItem>> = withContext(Dispatchers.IO) {
-        android.util.Log.d("ExtensionsCompat", "getPluginsFromRepository called for: $repoUrl")
         runCatching {
-            android.util.Log.d("ExtensionsCompat", "Calling RepositoryManager.getRepoPlugins($repoUrl)")
             val repoPlugins = RepositoryManager.getRepoPlugins(repoUrl)
-            
-            if (repoPlugins == null) {
-                android.util.Log.e("ExtensionsCompat", "RepositoryManager.getRepoPlugins returned null for $repoUrl")
-                throw IllegalStateException("Failed to fetch plugins from repository")
-            }
-            
-            android.util.Log.d("ExtensionsCompat", "Got ${repoPlugins.size} plugins from repository")
-            
+                ?: throw IllegalStateException("Failed to fetch plugins from repository")
+
+            val context = appContext
             val installedPlugins = PluginManager.getPluginsOnline()
-            android.util.Log.d("ExtensionsCompat", "Found ${installedPlugins.size} installed plugins")
-            
-            val result = repoPlugins.map { (repo, sitePlugin) ->
-                val installedPlugin = installedPlugins.find { it.internalName == sitePlugin.internalName }
-                
-                val sanitizedIconUrl = sitePlugin.iconUrl?.takeIf { it != "null" && it.isNotBlank() }
-                
+
+            repoPlugins.map { (_, sitePlugin) ->
+                val installedPluginPath = context?.let { appContext ->
+                    resolveInstalledPluginFile(
+                        context = appContext,
+                        repositoryUrl = repoUrl,
+                        internalName = sitePlugin.internalName
+                    )?.absolutePath
+                }
+                val installedPlugin = installedPlugins.firstOrNull { pluginData ->
+                    pluginData.filePath == installedPluginPath
+                } ?: installedPlugins.firstOrNull { pluginData ->
+                    pluginData.internalName == sitePlugin.internalName
+                }
+
                 PluginItem(
                     internalName = sitePlugin.internalName,
                     name = sitePlugin.name,
                     description = sitePlugin.description,
                     authors = sitePlugin.authors,
                     version = sitePlugin.version,
-                    iconUrl = sanitizedIconUrl,
+                    iconUrl = sitePlugin.iconUrl?.takeIf { it != "null" && it.isNotBlank() },
                     repositoryUrl = repoUrl,
                     url = sitePlugin.url,
                     status = when {
                         installedPlugin == null -> PluginStatus.NOT_DOWNLOADED
                         installedPlugin.version < sitePlugin.version -> PluginStatus.UPDATE_AVAILABLE
                         else -> PluginStatus.DOWNLOADED
-                    }
+                    },
+                    hasSettings = installedPlugin != null && hasPluginSettings(
+                        repositoryUrl = repoUrl,
+                        internalName = sitePlugin.internalName
+                    )
                 )
             }
-            
-            android.util.Log.d("ExtensionsCompat", "Returning ${result.size} PluginItems")
-            result
         }
     }
-    
+
     /**
-     * Download and install a plugin
+     * Download and install a plugin.
      */
     suspend fun downloadPlugin(activity: Activity, plugin: PluginItem): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            PluginManager.downloadPlugin(
+            val success = PluginManager.downloadPlugin(
                 activity = activity,
                 pluginUrl = plugin.url,
                 internalName = plugin.internalName,
                 repositoryUrl = plugin.repositoryUrl,
                 loadPlugin = true
             )
+            if (!success) {
+                throw IllegalStateException(activity.getString(R.string.plugin_download_failed))
+            }
             Unit
         }
     }
-    
+
     /**
-     * Delete an installed plugin
+     * Delete an installed plugin.
      */
-    suspend fun deletePlugin(internalName: String): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun deletePlugin(plugin: PluginItem): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val installedPlugins = PluginManager.getPluginsOnline()
-            val pluginData = installedPlugins.find { it.internalName == internalName }
-                ?: throw IllegalArgumentException("Plugin not found")
-            
-            PluginManager.unloadPlugin(pluginData.filePath)
+            val context = requireAppContext()
+            val pluginFile = resolveInstalledPluginFile(
+                context = context,
+                repositoryUrl = plugin.repositoryUrl,
+                internalName = plugin.internalName
+            ) ?: throw IllegalArgumentException("Plugin not found")
+
+            val success = PluginManager.deletePlugin(pluginFile)
+            if (!success) {
+                throw IllegalStateException(context.getString(R.string.plugin_delete_failed))
+            }
+            Unit
         }
     }
-    
+
     /**
-     * Update a plugin to the latest version
+     * Update a plugin to the latest version.
      */
     suspend fun updatePlugin(activity: Activity, plugin: PluginItem): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            // Delete old version first
-            val installedPlugins = PluginManager.getPluginsOnline()
-            val oldPlugin = installedPlugins.find { it.internalName == plugin.internalName }
-            if (oldPlugin != null) {
-                PluginManager.unloadPlugin(oldPlugin.filePath)
+            resolveInstalledPluginFile(
+                context = activity,
+                repositoryUrl = plugin.repositoryUrl,
+                internalName = plugin.internalName
+            )?.let { existingFile ->
+                PluginManager.unloadPlugin(existingFile.absolutePath)
             }
-            
-            // Download new version
-            PluginManager.downloadPlugin(
+
+            val success = PluginManager.downloadPlugin(
                 activity = activity,
                 pluginUrl = plugin.url,
                 internalName = plugin.internalName,
                 repositoryUrl = plugin.repositoryUrl,
                 loadPlugin = true
             )
+            if (!success) {
+                throw IllegalStateException(activity.getString(R.string.plugin_update_failed))
+            }
             Unit
         }
     }
-    
+
     /**
-     * Check if a plugin has settings
-     * TODO: Implement proper check when plugin settings API is clear
+     * Check if a loaded plugin exposes settings via legacy callback.
      */
-    fun hasPluginSettings(internalName: String): Boolean {
-        // For now, return false. Plugin settings will be implemented in Phase 2
-        return false
+    fun hasPluginSettings(repositoryUrl: String, internalName: String): Boolean {
+        val context = appContext ?: return false
+        return resolveInstalledPluginInstance(
+            context = context,
+            repositoryUrl = repositoryUrl,
+            internalName = internalName
+        )?.openSettings != null
     }
 }
 
 /**
- * Represents a repository
+ * Represents a repository.
  */
 data class RepositoryItem(
     val name: String,
@@ -219,7 +258,7 @@ data class RepositoryItem(
 )
 
 /**
- * Represents a plugin
+ * Represents a plugin.
  */
 data class PluginItem(
     val internalName: String,
@@ -230,11 +269,12 @@ data class PluginItem(
     val iconUrl: String?,
     val repositoryUrl: String,
     val url: String,
-    val status: PluginStatus
+    val status: PluginStatus,
+    val hasSettings: Boolean
 )
 
 /**
- * Plugin status
+ * Plugin status.
  */
 enum class PluginStatus {
     NOT_DOWNLOADED,

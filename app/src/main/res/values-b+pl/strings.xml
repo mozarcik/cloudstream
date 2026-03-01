@@ -287,6 +287,8 @@
     <string name="app_theme_settings">Motyw aplikacji</string>
     <string name="bottom_title_settings">Pozycja tytułu względem obrazka</string>
     <string name="bottom_title_settings_des">Ustaw tytuł pod obrazkiem</string>
+    <string name="username">Nazwa użytkownika</string>
+    <string name="password">Hasło</string>
     <string name="example_lang_name">Kod języka (pl)</string>
     <string name="login_format" formatted="true">%1$s %2$s</string>
     <string name="account">konto</string>

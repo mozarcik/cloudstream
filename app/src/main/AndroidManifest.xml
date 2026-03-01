@@ -211,6 +211,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".tv.compat.PluginSettingsHostActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
         <receiver
             android:name=".receivers.VideoDownloadRestartReceiver"
             android:enabled="false"

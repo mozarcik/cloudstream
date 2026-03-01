@@ -237,7 +237,7 @@ class ExtensionsViewModel : ViewModel() {
      */
     fun deletePlugin(plugin: PluginItem, onResult: (Result<Unit>) -> Unit) {
         viewModelScope.launch {
-            val result = ExtensionsCompat.deletePlugin(plugin.internalName)
+            val result = ExtensionsCompat.deletePlugin(plugin)
             
             if (result.isSuccess) {
                 loadData()
@@ -248,6 +248,18 @@ class ExtensionsViewModel : ViewModel() {
             }
             
             onResult(result)
+        }
+    }
+
+    fun refreshData(repositoryUrl: String? = null) {
+        viewModelScope.launch {
+            loadData()
+            repositoryUrl?.let { repoUrl ->
+                loadPluginsForRepoInternal(
+                    repoUrl = repoUrl,
+                    forceRefresh = true
+                )
+            }
         }
     }
     

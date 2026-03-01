@@ -412,6 +412,8 @@
     <string name="bottom_title_settings">Poster title location</string>
     <string name="bottom_title_settings_des">Put the title under the poster</string>
     <!-- account stuff -->
+    <string name="username">Username</string>
+    <string name="password">Password</string>
     <string name="example_password">password123</string>
     <string name="example_username">Username</string>
     <string name="example_email">hello@world.com</string>
@@ -550,6 +552,16 @@
     <string name="plugin_loaded">Plugin Loaded</string>
     <string name="plugin_downloaded">Plugin Downloaded</string>
     <string name="plugin_deleted">Plugin Deleted</string>
+    <string name="plugin_updated">Plugin Updated</string>
+    <string name="plugin_downloading">Downloading…</string>
+    <string name="plugin_updating">Updating…</string>
+    <string name="plugin_removing">Removing…</string>
+    <string name="plugin_download_failed">Could not download the plugin</string>
+    <string name="plugin_update_failed">Could not update the plugin</string>
+    <string name="plugin_delete_failed">Could not delete the plugin</string>
+    <string name="plugin_settings_unavailable">This plugin does not expose settings.</string>
+    <string name="plugin_settings_open_failed">Could not open plugin settings.</string>
+    <string name="plugin_settings_legacy_summary">This plugin opens its own legacy settings UI.</string>
     <string name="plugin_load_fail" formatted="true">Could not load %s</string>
     <string name="is_adult">18+</string>
     <string name="batch_download_start_format" formatted="true">Started downloading %1$d %2$s…</string>

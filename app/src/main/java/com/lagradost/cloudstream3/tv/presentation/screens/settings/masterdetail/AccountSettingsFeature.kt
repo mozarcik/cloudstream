@@ -1,12 +1,16 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail
 
 import android.content.Context
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.core.content.edit
 import androidx.fragment.app.FragmentActivity
 import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.openBrowser
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.aniListApi
@@ -19,6 +23,8 @@ import com.lagradost.cloudstream3.syncproviders.AuthRepo
 import com.lagradost.cloudstream3.syncproviders.SubtitleRepo
 import com.lagradost.cloudstream3.syncproviders.SyncRepo
 import com.lagradost.cloudstream3.ui.settings.SettingsAccount
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.OpenSubtitlesAccountScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.OpenSubtitlesAccountViewModel
 import com.lagradost.cloudstream3.utils.BackupUtils
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.BiometricCallback
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.authCallback
@@ -27,7 +33,9 @@ import com.lagradost.cloudstream3.utils.BiometricAuthenticator.isAuthEnabled
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.startBiometricAuthentication
 
 private object AccountSettingsScreenIds {
+    const val Prefix = "settings_account"
     const val AccountMain = "settings_account"
+    const val OpenSubtitles = "$Prefix/opensubtitles"
 }
 
 private data class AccountProvider(
@@ -40,17 +48,25 @@ fun rememberAccountSettingsFeature(
     accountTitle: String
 ): AccountSettingsFeature {
     val context = androidx.compose.ui.platform.LocalContext.current
-    return remember(context, accountTitle) {
+    val openSubtitlesRepo = remember { SubtitleRepo(openSubtitlesApi) }
+    val openSubtitlesViewModel = remember {
+        OpenSubtitlesAccountViewModel(openSubtitlesRepo)
+    }
+    return remember(context, accountTitle, openSubtitlesRepo, openSubtitlesViewModel) {
         AccountSettingsFeature(
             context = context,
-            accountTitle = accountTitle
+            accountTitle = accountTitle,
+            openSubtitlesRepo = openSubtitlesRepo,
+            openSubtitlesViewModel = openSubtitlesViewModel
         )
     }
 }
 
 class AccountSettingsFeature(
     private val context: Context,
-    private val accountTitle: String
+    private val accountTitle: String,
+    private val openSubtitlesRepo: AuthRepo,
+    private val openSubtitlesViewModel: OpenSubtitlesAccountViewModel
 ) {
     private val settingsManager by lazy {
         PreferenceManager.getDefaultSharedPreferences(context)
@@ -64,7 +80,8 @@ class AccountSettingsFeature(
     }
 
     val staticScreens: List<SettingsScreen> = listOf(
-        AccountMainScreen()
+        AccountMainScreen(),
+        OpenSubtitlesScreen()
     )
 
     private inner class AccountMainScreen : SettingsScreen {
@@ -85,12 +102,11 @@ class AccountSettingsFeature(
                         itemEntry(
                             stableKey = "account_provider_${provider.stableId}",
                             title = provider.authRepo.name,
-                            subtitle = null,
+                            subtitle = providerSubtitle(provider),
                             fallbackIconRes = provider.authRepo.icon
                                 ?: R.drawable.ic_outline_account_circle_24,
-                            action = {
-                                openAccountManager(provider.authRepo)
-                            }
+                            nextScreenId = providerScreenId(provider),
+                            action = providerAction(provider)
                         )
                     )
                 }
@@ -150,13 +166,50 @@ class AccountSettingsFeature(
             ),
             AccountProvider(
                 stableId = "opensubtitles",
-                authRepo = SubtitleRepo(openSubtitlesApi)
+                authRepo = openSubtitlesRepo
             ),
             AccountProvider(
                 stableId = "subdl",
                 authRepo = SubtitleRepo(subDlApi)
             )
         )
+    }
+
+    private fun providerSubtitle(provider: AccountProvider): String? {
+        if (provider.stableId != "opensubtitles") return null
+        return selectedAccountLabel(provider.authRepo)
+            ?.let { accountName ->
+                context.getString(R.string.logged_account, accountName)
+            }
+            ?: context.getString(R.string.no_account)
+    }
+
+    private fun providerScreenId(provider: AccountProvider): String? {
+        return if (provider.stableId == "opensubtitles") {
+            AccountSettingsScreenIds.OpenSubtitles
+        } else {
+            null
+        }
+    }
+
+    private fun providerAction(provider: AccountProvider): (() -> Unit)? {
+        return if (provider.stableId == "opensubtitles") {
+            null
+        } else {
+            { openAccountManager(provider.authRepo) }
+        }
+    }
+
+    private fun selectedAccountLabel(authRepo: AuthRepo): String? {
+        val selectedAccountId = authRepo.accountId
+        val selectedIndex = authRepo.accounts.indexOfFirst { account ->
+            account.user.id == selectedAccountId
+        }
+        if (selectedIndex < 0) return null
+
+        val account = authRepo.accounts[selectedIndex]
+        return account.user.name?.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.login_format, context.getString(R.string.account), selectedIndex + 1)
     }
 
     private fun openAccountManager(authRepo: AuthRepo) {
@@ -206,6 +259,38 @@ class AccountSettingsFeature(
     private fun updateBiometricPreference(enabled: Boolean) {
         settingsManager.edit {
             putBoolean(biometricKey, enabled)
+        }
+    }
+
+    private inner class OpenSubtitlesScreen : SettingsScreen {
+        override val id: String = AccountSettingsScreenIds.OpenSubtitles
+        override val title: String = openSubtitlesRepo.name
+        override val hasCustomContent: Boolean = true
+
+        @Composable
+        override fun Content(
+            modifier: Modifier,
+            contentPadding: PaddingValues,
+            isPreview: Boolean,
+            onBack: () -> Unit,
+            onDataChanged: (String) -> Unit
+        ) {
+            val activity = context.getActivity() as? FragmentActivity
+            OpenSubtitlesAccountScreen(
+                stateFlow = openSubtitlesViewModel.uiState,
+                viewModel = openSubtitlesViewModel,
+                providerName = openSubtitlesRepo.name,
+                createAccountUrl = openSubtitlesRepo.createAccountUrl,
+                isPreview = isPreview,
+                onAccountChanged = {
+                    onDataChanged(AccountSettingsScreenIds.Prefix)
+                },
+                onOpenCreateAccount = { url ->
+                    openBrowser(url, activity)
+                },
+                modifier = modifier
+                    .padding(contentPadding)
+            )
         }
     }
 }
