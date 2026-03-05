@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.DubStatus
 import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.actions.VideoClickActionHolder
@@ -20,6 +21,12 @@ import com.lagradost.cloudstream3.getFolderPrefix
 import com.lagradost.cloudstream3.isEpisodeBased
 import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.sortUrls
+import com.lagradost.cloudstream3.tv.compat.downloads.hasActiveDownloadRequest
+import com.lagradost.cloudstream3.tv.compat.downloads.hasStoredDownloadRequest
+import com.lagradost.cloudstream3.tv.compat.downloads.isDownloadCheckWorkerActive
+import com.lagradost.cloudstream3.tv.compat.downloads.isStaleZeroProgressDownload
+import com.lagradost.cloudstream3.tv.compat.downloads.resolveNormalizedDownloadStatus
+import com.lagradost.cloudstream3.tv.data.util.buildSourcePanelEntries
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_ALL
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_CHROMECAST
@@ -51,6 +58,7 @@ import com.lagradost.cloudstream3.utils.DataStore.setKey
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getDub
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getVideoWatchState
 import com.lagradost.cloudstream3.utils.DataStoreHelper.setVideoWatchState
+import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
@@ -67,7 +75,11 @@ import kotlinx.coroutines.sync.withLock
 data class MovieDetailsCompatPanelItem(
     val id: Int,
     val label: String,
-    @DrawableRes val iconRes: Int,
+    @DrawableRes val iconRes: Int? = null,
+    val key: String = "movie_action_$id",
+    val titleMaxLines: Int = 1,
+    val supportingTexts: List<String> = emptyList(),
+    val isSectionHeader: Boolean = false,
 )
 
 data class MovieDetailsCompatSelectionRequest(
@@ -101,6 +113,7 @@ class MovieDetailsEpisodeActionsCompat(
         const val DebugTag = "MovieActionsCompat"
         const val DownloadUiBatchSize = 10
         const val LinkLoadingPollIntervalMs = 80L
+        const val NonInteractivePanelItemId = Int.MIN_VALUE
     }
 
     private data class TargetEpisode(
@@ -109,12 +122,19 @@ class MovieDetailsEpisodeActionsCompat(
         val episode: Int,
         val index: Int,
         val id: Int,
+        val name: String? = null,
+        val posterUrl: String? = null,
+        val score: Score? = null,
+        val description: String? = null,
+        val airDate: Long? = null,
+        val runTime: Int? = null,
     )
 
     private data class MovieActionTarget(
         val loadResponse: LoadResponse,
         val episode: ResultEpisode,
         val episodesBySeason: Map<Int, List<TargetEpisode>>,
+        val allEpisodes: List<TargetEpisode>,
     )
 
     private data class LoadLinksCacheKey(
@@ -220,15 +240,63 @@ class MovieDetailsEpisodeActionsCompat(
         context: Context?,
         onPlayInApp: () -> Unit,
     ): MovieDetailsCompatActionOutcome {
-        val target = resolveTarget()
-        if (target == null) {
+        return executeInternal(
+            actionId = actionId,
+            context = context,
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+            onPlayInApp = { onPlayInApp() }
+        )
+    }
+
+    suspend fun executeForEpisode(
+        actionId: Int,
+        context: Context?,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+        onPlayInApp: (String?) -> Unit,
+    ): MovieDetailsCompatActionOutcome {
+        return executeInternal(
+            actionId = actionId,
+            context = context,
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+            onPlayInApp = { target ->
+                onPlayInApp(target.episode.data)
+            }
+        )
+    }
+
+    suspend fun isEpisodeWatched(
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+    ): Boolean? {
+        val target = resolveTarget(
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        ) ?: return null
+
+        return getVideoWatchState(target.episode.id) == VideoWatchState.Watched
+    }
+
+    private suspend fun executeInternal(
+        actionId: Int,
+        context: Context?,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+        onPlayInApp: (MovieActionTarget) -> Unit,
+    ): MovieDetailsCompatActionOutcome {
+        val target = resolveTarget(
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        ) ?: run {
             showToast(R.string.no_links_found_toast)
             return MovieDetailsCompatActionOutcome.Completed
         }
 
         return when (actionId) {
             ACTION_PLAY_EPISODE_IN_PLAYER -> {
-                onPlayInApp()
+                onPlayInApp(target)
                 MovieDetailsCompatActionOutcome.Completed
             }
 
@@ -287,48 +355,83 @@ class MovieDetailsEpisodeActionsCompat(
     }
 
     suspend fun getDownloadSnapshot(context: Context?): MovieDetailsCompatDownloadSnapshot? {
-        val target = resolveTarget() ?: return null
+        return getDownloadSnapshotForEpisode(
+            context = context,
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        )
+    }
+
+    suspend fun getDownloadSnapshotForEpisode(
+        context: Context?,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+    ): MovieDetailsCompatDownloadSnapshot? {
+        val target = resolveTarget(
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        ) ?: return null
         val episodeId = target.episode.id
-        val key = episodeId.toString()
         val downloadedFileInfo = context?.let { ctx ->
             withContext(Dispatchers.IO) {
                 VideoDownloadManager.getDownloadFileInfoAndUpdateSettings(ctx, episodeId)
             }
         }
+        val downloadedBytes = downloadedFileInfo?.fileLength ?: 0L
+        val totalBytes = downloadedFileInfo?.totalBytes ?: 0L
+        val rawStatus = VideoDownloadManager.downloadStatus[episodeId]
         val hasPendingRequest = context?.let { ctx ->
             withContext(Dispatchers.IO) {
-                val hasWorkerInfo = ctx.getKey<VideoDownloadManager.DownloadInfo>(
-                    VideoDownloadManager.WORK_KEY_INFO,
-                    key
-                ) != null
-                val hasWorkerPackage = ctx.getKey<VideoDownloadManager.DownloadResumePackage>(
-                    VideoDownloadManager.WORK_KEY_PACKAGE,
-                    key
-                ) != null
-                val hasResumePackage = VideoDownloadManager.getDownloadResumePackage(
-                    ctx,
-                    episodeId
-                ) != null
-                hasWorkerInfo || hasWorkerPackage || hasResumePackage
+                val hasStoredRequest = hasStoredDownloadRequest(ctx, episodeId)
+                hasActiveDownloadRequest(
+                    context = ctx,
+                    episodeId = episodeId,
+                    status = rawStatus,
+                    hasStoredRequest = hasStoredRequest,
+                    isDownloadCheckWorkerActive = isDownloadCheckWorkerActive(ctx),
+                )
             }
         } ?: false
+        val resolvedStatus = context?.let { ctx ->
+            withContext(Dispatchers.IO) {
+                val hasStoredRequest = hasStoredDownloadRequest(ctx, episodeId)
+                resolveNormalizedDownloadStatus(
+                    status = rawStatus,
+                    downloadedBytes = downloadedBytes,
+                    totalBytes = totalBytes,
+                    hasPendingRequest = hasPendingRequest,
+                    isStaleZeroProgress = isStaleZeroProgressDownload(
+                        status = rawStatus,
+                        hasStoredRequest = hasStoredRequest,
+                        hasActiveRequest = hasPendingRequest,
+                        downloadedBytes = downloadedBytes,
+                        totalBytes = totalBytes,
+                    ),
+                )
+            }
+        } ?: rawStatus
 
         return MovieDetailsCompatDownloadSnapshot(
             episodeId = episodeId,
-            status = VideoDownloadManager.downloadStatus[episodeId],
-            downloadedBytes = downloadedFileInfo?.fileLength ?: 0L,
-            totalBytes = downloadedFileInfo?.totalBytes ?: 0L,
+            status = resolvedStatus,
+            downloadedBytes = downloadedBytes,
+            totalBytes = totalBytes,
             hasPendingRequest = hasPendingRequest
         )
     }
 
     suspend fun requestDownloadMirrorSelection(
         context: Context?,
+        preferredSeason: Int? = this.preferredSeason,
+        preferredEpisode: Int? = this.preferredEpisode,
         onSourcesProgress: (Int) -> Unit = {},
         onSelectionUpdated: ((MovieDetailsCompatSelectionRequest) -> Unit)? = null,
         shouldCancelLoading: (() -> Boolean)? = null,
     ): MovieDetailsCompatActionOutcome {
-        val target = resolveTarget()
+        val target = resolveTarget(
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        )
         if (target == null) {
             showToast(R.string.no_links_found_toast)
             return MovieDetailsCompatActionOutcome.Completed
@@ -422,13 +525,10 @@ class MovieDetailsEpisodeActionsCompat(
         context: Context?,
         loaded: LinkLoadingResult,
     ): MovieDetailsCompatSelectionRequest {
-        val options = loaded.links.mapIndexed { index, link ->
-            MovieDetailsCompatPanelItem(
-                id = index,
-                label = "${link.name} ${Qualities.getStringByInt(link.quality)}",
-                iconRes = R.drawable.baseline_downloading_24
-            )
-        }
+        val options = buildSourceSelectionPanelItems(
+            links = loaded.links,
+            itemKeyPrefix = "download_source"
+        )
         val title = context?.getString(R.string.episode_action_download_mirror)
             ?: "Download mirror"
 
@@ -522,13 +622,10 @@ class MovieDetailsEpisodeActionsCompat(
             return MovieDetailsCompatActionOutcome.Completed
         }
 
-        val options = loaded.links.mapIndexed { index, link ->
-            MovieDetailsCompatPanelItem(
-                id = index,
-                label = "${link.name} ${Qualities.getStringByInt(link.quality)}",
-                iconRes = R.drawable.ic_baseline_tv_24
-            )
-        }
+        val options = buildSourceSelectionPanelItems(
+            links = loaded.links,
+            itemKeyPrefix = "cast_source"
+        )
         val title = context?.getString(R.string.episode_action_chromecast_mirror)
             ?: "Chromecast mirror"
 
@@ -573,13 +670,10 @@ class MovieDetailsEpisodeActionsCompat(
                 return MovieDetailsCompatActionOutcome.Completed
             }
 
-            val options = loaded.links.mapIndexed { index, link ->
-                MovieDetailsCompatPanelItem(
-                    id = index,
-                    label = "${link.name} ${Qualities.getStringByInt(link.quality)}",
-                    iconRes = R.drawable.ic_baseline_open_in_new_24
-                )
-            }
+            val options = buildSourceSelectionPanelItems(
+                links = loaded.links,
+                itemKeyPrefix = "external_source_$actionId"
+            )
 
             return MovieDetailsCompatActionOutcome.OpenSelection(
                 request = MovieDetailsCompatSelectionRequest(
@@ -699,7 +793,19 @@ class MovieDetailsEpisodeActionsCompat(
         showToast(R.string.download_started)
     }
 
-    private suspend fun resolveTarget(): MovieActionTarget? {
+    private suspend fun resolveTarget(
+        preferredSeason: Int? = this.preferredSeason,
+        preferredEpisode: Int? = this.preferredEpisode,
+    ): MovieActionTarget? {
+        val baseTarget = resolveBaseTarget() ?: return null
+        return selectPreferredTarget(
+            baseTarget = baseTarget,
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        )
+    }
+
+    private suspend fun resolveBaseTarget(): MovieActionTarget? {
         cachedTarget?.let { return it }
 
         return targetMutex.withLock {
@@ -726,6 +832,31 @@ class MovieDetailsEpisodeActionsCompat(
         }
     }
 
+    private fun selectPreferredTarget(
+        baseTarget: MovieActionTarget,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+    ): MovieActionTarget {
+        if (preferredSeason == null && preferredEpisode == null) {
+            return baseTarget
+        }
+
+        val selectedEpisode = pickPreferredEpisode(
+            episodes = baseTarget.allEpisodes,
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        )
+        if (selectedEpisode.id == baseTarget.episode.id) {
+            return baseTarget
+        }
+
+        return toMovieActionTarget(
+            loadResponse = baseTarget.loadResponse,
+            selectedEpisode = selectedEpisode,
+            allEpisodes = baseTarget.allEpisodes,
+        )
+    }
+
     private fun buildMovieTarget(loadResponse: MovieLoadResponse): MovieActionTarget? {
         val data = loadResponse.dataUrl.takeIf { it.isNotBlank() } ?: return null
         val mainId = loadResponse.getId()
@@ -734,7 +865,10 @@ class MovieDetailsEpisodeActionsCompat(
             season = 0,
             episode = 0,
             index = 0,
-            id = mainId
+            id = mainId,
+            name = loadResponse.name,
+            posterUrl = loadResponse.posterUrl ?: loadResponse.backgroundPosterUrl,
+            description = loadResponse.plot,
         )
         return toMovieActionTarget(
             loadResponse = loadResponse,
@@ -754,7 +888,13 @@ class MovieDetailsEpisodeActionsCompat(
                     season = episode.season ?: 0,
                     episode = episodeIndex,
                     index = index,
-                    id = mainId + (episode.season?.times(100_000) ?: 0) + episodeIndex + 1
+                    id = mainId + (episode.season?.times(100_000) ?: 0) + episodeIndex + 1,
+                    name = episode.name,
+                    posterUrl = episode.posterUrl,
+                    score = episode.score,
+                    description = episode.description,
+                    airDate = episode.date,
+                    runTime = episode.runTime,
                 )
             }
 
@@ -764,7 +904,11 @@ class MovieDetailsEpisodeActionsCompat(
 
         return toMovieActionTarget(
             loadResponse = loadResponse,
-            selectedEpisode = pickPreferredEpisode(episodes),
+            selectedEpisode = pickPreferredEpisode(
+                episodes = episodes,
+                preferredSeason = preferredSeason,
+                preferredEpisode = preferredEpisode,
+            ),
             allEpisodes = episodes
         )
     }
@@ -784,13 +928,23 @@ class MovieDetailsEpisodeActionsCompat(
                 season = episode.season ?: 0,
                 episode = episodeIndex,
                 index = index,
-                id = mainId + episodeIndex + preferredDub.id * 1_000_000 + ((episode.season ?: 0) * 10_000)
+                id = mainId + episodeIndex + preferredDub.id * 1_000_000 + ((episode.season ?: 0) * 10_000),
+                name = episode.name,
+                posterUrl = episode.posterUrl,
+                score = episode.score,
+                description = episode.description,
+                airDate = episode.date,
+                runTime = episode.runTime,
             )
         }
 
         return toMovieActionTarget(
             loadResponse = loadResponse,
-            selectedEpisode = pickPreferredEpisode(episodes),
+            selectedEpisode = pickPreferredEpisode(
+                episodes = episodes,
+                preferredSeason = preferredSeason,
+                preferredEpisode = preferredEpisode,
+            ),
             allEpisodes = episodes
         )
     }
@@ -814,7 +968,11 @@ class MovieDetailsEpisodeActionsCompat(
         }
     }
 
-    private fun pickPreferredEpisode(episodes: List<TargetEpisode>): TargetEpisode {
+    private fun pickPreferredEpisode(
+        episodes: List<TargetEpisode>,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
+    ): TargetEpisode {
         val orderedEpisodes = episodes.sortedWith(compareBy({ it.season }, { it.episode }))
         val exact = orderedEpisodes.firstOrNull { episode ->
             preferredSeason != null &&
@@ -847,8 +1005,8 @@ class MovieDetailsEpisodeActionsCompat(
         val season = selectedEpisode.season.takeIf { it > 0 }
         val episode = buildResultEpisode(
             headerName = loadResponse.name,
-            name = loadResponse.name,
-            poster = loadResponse.posterUrl ?: loadResponse.backgroundPosterUrl,
+            name = selectedEpisode.name ?: loadResponse.name,
+            poster = selectedEpisode.posterUrl ?: loadResponse.posterUrl ?: loadResponse.backgroundPosterUrl,
             episode = selectedEpisode.episode,
             seasonIndex = season,
             season = season,
@@ -856,9 +1014,12 @@ class MovieDetailsEpisodeActionsCompat(
             apiName = loadResponse.apiName,
             id = selectedEpisode.id,
             index = selectedEpisode.index,
-            description = loadResponse.plot,
+            rating = selectedEpisode.score,
+            description = selectedEpisode.description ?: loadResponse.plot,
             tvType = loadResponse.type,
             parentId = loadResponse.getId(),
+            airDate = selectedEpisode.airDate,
+            runTime = selectedEpisode.runTime,
         )
 
         val episodesBySeason = allEpisodes
@@ -868,7 +1029,8 @@ class MovieDetailsEpisodeActionsCompat(
         return MovieActionTarget(
             loadResponse = loadResponse,
             episode = episode,
-            episodesBySeason = episodesBySeason
+            episodesBySeason = episodesBySeason,
+            allEpisodes = allEpisodes
         )
     }
 
@@ -1069,6 +1231,25 @@ class MovieDetailsEpisodeActionsCompat(
             label = context?.getString(labelRes) ?: labelRes.toString(),
             iconRes = iconRes
         )
+    }
+
+    private fun buildSourceSelectionPanelItems(
+        links: List<ExtractorLink>,
+        itemKeyPrefix: String,
+    ): List<MovieDetailsCompatPanelItem> {
+        return buildSourcePanelEntries(
+            orderedLinks = links,
+            itemKeyPrefix = itemKeyPrefix,
+        ).map { entry ->
+            MovieDetailsCompatPanelItem(
+                id = entry.sourceIndex ?: NonInteractivePanelItemId,
+                key = entry.key,
+                label = entry.title,
+                titleMaxLines = entry.titleMaxLines,
+                supportingTexts = entry.supportingTexts,
+                isSectionHeader = entry.isSectionHeader,
+            )
+        }
     }
 
     private fun showToast(@StringRes textRes: Int) {

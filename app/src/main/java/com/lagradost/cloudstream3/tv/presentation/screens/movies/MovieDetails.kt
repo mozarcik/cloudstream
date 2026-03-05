@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -81,12 +82,17 @@ enum class MovieDetailsQuickAction {
     Search,
     Download,
     More,
+    MarkAsWatched,
+    MarkWatchedUpToThisEpisode,
+    RemoveFromWatched,
+    RemoveWatchedUpToThisEpisode,
 }
 
 sealed interface MovieDetailsDownloadActionState {
     data object Idle : MovieDetailsDownloadActionState
     data class Downloading(val progress: Float) : MovieDetailsDownloadActionState
     data object Downloaded : MovieDetailsDownloadActionState
+    data object Failed : MovieDetailsDownloadActionState
 }
 
 @Composable
@@ -226,6 +232,7 @@ private fun DetailsActionsRow(
                 downloadActionState.progress.coerceIn(0f, 1f)
 
             MovieDetailsDownloadActionState.Downloaded -> 1f
+            MovieDetailsDownloadActionState.Failed -> 0f
         }
 
         val downloadLabel = when (downloadActionState) {
@@ -234,12 +241,14 @@ private fun DetailsActionsRow(
                 "$downloadingLabel (${(downloadProgressFraction * 100f).roundToInt()}%)"
 
             MovieDetailsDownloadActionState.Downloaded -> downloadedLabel
+            MovieDetailsDownloadActionState.Failed -> stringResource(R.string.download_failed)
         }
 
         val downloadIcon = when (downloadActionState) {
             MovieDetailsDownloadActionState.Idle -> Icons.Filled.CustomDownload
             is MovieDetailsDownloadActionState.Downloading -> Icons.Default.Downloading
             MovieDetailsDownloadActionState.Downloaded -> Icons.Default.DownloadDone
+            MovieDetailsDownloadActionState.Failed -> Icons.Outlined.ErrorOutline
         }
         val actions = remember(
             bookmarkLabel,

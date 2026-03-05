@@ -1,6 +1,8 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -51,6 +54,8 @@ import androidx.tv.material3.OutlinedButtonDefaults
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.common.ActionIconContent
+import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPillDefaults
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,6 +67,7 @@ internal fun ContinueWatchingHeroLoadedState(
     isInteractive: Boolean,
     onResumeClick: (MediaItemCompat) -> Unit,
     onDetailsClick: (MediaItemCompat) -> Unit,
+    onRemoveClick: (MediaItemCompat) -> Unit,
     onCardClick: (MediaItemCompat) -> Unit,
     onMoveDownFromCards: () -> Unit,
     onHeroContentFocused: () -> Unit,
@@ -70,6 +76,7 @@ internal fun ContinueWatchingHeroLoadedState(
     val rowState = rememberLazyListState()
     val cardFocusRequesters = remember { mutableStateMapOf<Int, FocusRequester>() }
     val detailsFocusRequester = remember { FocusRequester() }
+    val removeFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -119,9 +126,16 @@ internal fun ContinueWatchingHeroLoadedState(
             isInteractive = isInteractive,
             resumeFocusRequester = resumeFocusRequester,
             detailsFocusRequester = detailsFocusRequester,
+            removeFocusRequester = removeFocusRequester,
             onHeroContentFocused = onHeroContentFocused,
             onResumeClick = onResumeClick,
             onDetailsClick = onDetailsClick,
+            onRemoveClick = {
+                if (items.size == 1 && isInteractive) {
+                    sourceButtonFocusRequester.requestFocus()
+                }
+                onRemoveClick(it)
+            },
             onRequestCardsFocus = ::requestCardsFocus,
             modifier = Modifier.align(Alignment.BottomStart)
         )
@@ -172,12 +186,18 @@ private fun ContinueWatchingHeroInfo(
     isInteractive: Boolean,
     resumeFocusRequester: FocusRequester,
     detailsFocusRequester: FocusRequester,
+    removeFocusRequester: FocusRequester,
     onHeroContentFocused: () -> Unit,
     onResumeClick: (MediaItemCompat) -> Unit,
     onDetailsClick: (MediaItemCompat) -> Unit,
+    onRemoveClick: (MediaItemCompat) -> Unit,
     onRequestCardsFocus: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val removeInteractionSource = remember { MutableInteractionSource() }
+    val isRemoveButtonFocused by removeInteractionSource.collectIsFocusedAsState()
+    val removeLabel = stringResource(R.string.action_remove_watching)
+
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         modifier = modifier
@@ -261,6 +281,7 @@ private fun ContinueWatchingHeroInfo(
                     .focusProperties {
                         canFocus = isInteractive
                         left = resumeFocusRequester
+                        right = removeFocusRequester
                     }
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {
@@ -288,6 +309,46 @@ private fun ContinueWatchingHeroInfo(
                 Text(
                     text = stringResource(R.string.details),
                     style = MaterialTheme.typography.titleSmall
+                )
+            }
+
+            OutlinedButton(
+                onClick = { onRemoveClick(item) },
+                contentPadding = if (isRemoveButtonFocused) {
+                    OutlinedButtonDefaults.ButtonWithIconContentPadding
+                } else {
+                    OutlinedButtonDefaults.ContentPadding
+                },
+                interactionSource = removeInteractionSource,
+                modifier = Modifier
+                    .focusRequester(removeFocusRequester)
+                    .focusProperties {
+                        canFocus = isInteractive
+                        left = detailsFocusRequester
+                    }
+                    .onFocusChanged { focusState ->
+                        if (focusState.isFocused) {
+                            onHeroContentFocused()
+                        }
+                    }
+                    .onPreviewKeyEvent { event ->
+                        if (!isInteractive || event.type != KeyEventType.KeyDown) {
+                            return@onPreviewKeyEvent false
+                        }
+
+                        if (event.key == Key.DirectionDown) {
+                            onRequestCardsFocus()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+            ) {
+                ActionIconContent(
+                    icon = Icons.Default.DeleteOutline,
+                    label = removeLabel,
+                    isFocused = isRemoveButtonFocused,
+                    style = ActionIconsPillDefaults.default(),
                 )
             }
         }

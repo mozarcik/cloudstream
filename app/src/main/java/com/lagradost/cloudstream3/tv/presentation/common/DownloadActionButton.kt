@@ -25,10 +25,10 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.OutlinedButtonDefaults
 import com.lagradost.cloudstream3.tv.presentation.utils.Green300
 
-private const val ProgressButtonFocusAnimationMs = 180
-private const val ProgressButtonFocusedScale = 1.1f
+private const val DownloadButtonFocusAnimationMs = 180
+private const val DownloadButtonFocusedScale = 1.1f
 
-private data class ProgressButtonClip(
+private data class DownloadButtonClip(
     val scaledWidth: Float,
     val scaledHeight: Float,
     val backgroundLeft: Float,
@@ -36,38 +36,36 @@ private data class ProgressButtonClip(
 )
 
 @Composable
-internal fun ProgressButtonV2(
+internal fun DownloadActionButton(
     action: ActionIconSpec,
     isFocused: Boolean,
     progressFraction: Float,
+    style: ActionIconsPillStyle,
     interactionSource: MutableInteractionSource,
     modifier: Modifier = Modifier,
     onClick: () -> Unit = {},
 ) {
+    val normalizedProgress = progressFraction.coerceIn(0f, 1f)
+    val shouldDrawProgress = normalizedProgress > 0f
     val animatedProgress by animateFloatAsState(
-        targetValue = progressFraction.coerceIn(0f, 1f),
-        animationSpec = tween(ProgressButtonFocusAnimationMs),
-        label = "download_progress_v2"
+        targetValue = normalizedProgress,
+        animationSpec = tween(DownloadButtonFocusAnimationMs),
+        label = "download_button_progress"
     )
     val progressScale by animateFloatAsState(
-        targetValue = if (isFocused) ProgressButtonFocusedScale else 1f,
-        animationSpec = tween(ProgressButtonFocusAnimationMs),
-        label = "download_progress_v2_scale"
+        targetValue = if (isFocused) DownloadButtonFocusedScale else 1f,
+        animationSpec = tween(DownloadButtonFocusAnimationMs),
+        label = "download_button_scale"
     )
-    // In tv-material3 default OutlinedButton focused container is onSurface.
     val focusOverlayColor = MaterialTheme.colorScheme.onSurface.copy(
         alpha = if (isFocused) 0.42f else 0.28f
     )
-    val contentPadding = if (isFocused) {
-        OutlinedButtonDefaults.ButtonWithIconContentPadding
-    } else {
-        OutlinedButtonDefaults.ContentPadding
-    }
+    val contentPadding = if (isFocused) style.focusedContentPadding else style.contentPadding
 
     var buttonWidthPx by remember { mutableFloatStateOf(0f) }
     var buttonHeightPx by remember { mutableFloatStateOf(0f) }
     val clip = remember(buttonWidthPx, buttonHeightPx, progressScale) {
-        calculateProgressButtonClip(
+        calculateDownloadButtonClip(
             width = buttonWidthPx,
             height = buttonHeightPx,
             scale = progressScale
@@ -77,12 +75,16 @@ internal fun ProgressButtonV2(
     OutlinedButton(
         onClick = onClick,
         contentPadding = contentPadding,
-        colors = OutlinedButtonDefaults.colors(
-            containerColor = Color.Transparent,
-            focusedContainerColor = Color.Transparent,
-            pressedContainerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent
-        ),
+        colors = if (shouldDrawProgress) {
+            OutlinedButtonDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+                pressedContainerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent
+            )
+        } else {
+            OutlinedButtonDefaults.colors()
+        },
         interactionSource = interactionSource,
         modifier = modifier
             .onSizeChanged { size ->
@@ -90,6 +92,10 @@ internal fun ProgressButtonV2(
                 buttonHeightPx = size.height.toFloat()
             }
             .drawBehind {
+                if (!shouldDrawProgress || clip.scaledWidth <= 0f || clip.scaledHeight <= 0f) {
+                    return@drawBehind
+                }
+
                 val buttonShapePath = createScaledCirclePath(
                     clip = clip,
                     layoutDirection = layoutDirection,
@@ -103,7 +109,6 @@ internal fun ProgressButtonV2(
                     )
                 }) {
                     clipPath(buttonShapePath) {
-                        // Base layer: raw progress fill.
                         drawRect(
                             color = Green300,
                             size = Size(
@@ -111,7 +116,6 @@ internal fun ProgressButtonV2(
                                 height = clip.scaledHeight
                             )
                         )
-                        // Top layer: translucent focused-container tint for readability.
                         drawRect(
                             color = focusOverlayColor,
                             size = Size(
@@ -127,17 +131,18 @@ internal fun ProgressButtonV2(
             icon = action.icon,
             label = action.label,
             isFocused = isFocused,
+            style = style,
         )
     }
 }
 
-private fun calculateProgressButtonClip(
+private fun calculateDownloadButtonClip(
     width: Float,
     height: Float,
     scale: Float,
-): ProgressButtonClip {
+): DownloadButtonClip {
     if (width <= 0f || height <= 0f) {
-        return ProgressButtonClip(
+        return DownloadButtonClip(
             scaledWidth = 0f,
             scaledHeight = 0f,
             backgroundLeft = 0f,
@@ -148,7 +153,7 @@ private fun calculateProgressButtonClip(
     val scaledWidth = width * scale
     val scaledHeight = height * scale
 
-    return ProgressButtonClip(
+    return DownloadButtonClip(
         scaledWidth = scaledWidth,
         scaledHeight = scaledHeight,
         backgroundLeft = -((scaledWidth - width) / 2f),
@@ -157,7 +162,7 @@ private fun calculateProgressButtonClip(
 }
 
 private fun createScaledCirclePath(
-    clip: ProgressButtonClip,
+    clip: DownloadButtonClip,
     layoutDirection: LayoutDirection,
     density: Density,
 ): Path {

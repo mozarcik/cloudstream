@@ -11,6 +11,7 @@ import kotlinx.coroutines.withContext
 
 interface ContinueWatchingRepository {
     suspend fun getItems(): Result<MediaListCompat>
+    suspend fun removeItem(parentId: Int): Result<Unit>
 }
 
 class ContinueWatchingRepositoryImpl : ContinueWatchingRepository {
@@ -20,6 +21,12 @@ class ContinueWatchingRepositoryImpl : ContinueWatchingRepository {
                 .orEmpty()
                 .map { resumeItem -> resumeItem.toMediaItemCompat() }
                 .distinctBy { mediaItem -> "${mediaItem.apiName}|${mediaItem.url}" }
+        }
+    }
+
+    override suspend fun removeItem(parentId: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            removeContinueWatchingEntry(parentId)
         }
     }
 }

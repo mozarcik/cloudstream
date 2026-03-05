@@ -52,8 +52,7 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.OutlinedButtonDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.SubcomposeAsyncImage
-import coil3.compose.SubcomposeAsyncImageContent
+import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
@@ -205,27 +204,27 @@ private fun DownloadPoster(
     title: String,
     modifier: Modifier = Modifier,
 ) {
-    SubcomposeAsyncImage(
-        model = ImageRequest.Builder(LocalContext.current)
-            .data(posterUrl)
-            .crossfade(true)
-            .build(),
-        contentDescription = title,
-        contentScale = ContentScale.Crop,
+    Box(
         modifier = modifier
             .shadow(10.dp, DownloadPosterShape)
             .clip(DownloadPosterShape)
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.55f))
     ) {
-        if (painter.state is coil3.compose.AsyncImagePainter.State.Success) {
-            SubcomposeAsyncImageContent()
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.76f))
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.76f))
+        )
+
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(posterUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -338,8 +337,16 @@ private fun buildMetaLine(
     val typeLabel = when (item.mediaType) {
         DownloadMediaType.Movie -> stringResource(R.string.movies_singular)
         DownloadMediaType.Series -> {
+            val seasonLabel = stringResource(R.string.season)
             val episodeLabel = stringResource(R.string.episode)
-            item.episodeNumber?.let { episode -> "$episodeLabel $episode" } ?: episodeLabel
+            when {
+                item.seasonNumber != null && item.episodeNumber != null ->
+                    "$seasonLabel ${item.seasonNumber} $episodeLabel ${item.episodeNumber}"
+
+                item.seasonNumber != null -> "$seasonLabel ${item.seasonNumber}"
+                item.episodeNumber != null -> "$episodeLabel ${item.episodeNumber}"
+                else -> null
+            }
         }
 
         DownloadMediaType.Media -> null

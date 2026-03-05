@@ -6,6 +6,19 @@ internal object PlayerScreenNavigation {
     const val UrlBundleKey = "url"
     const val ApiNameBundleKey = "apiName"
     const val EpisodeDataBundleKey = "episodeData"
+    private const val DownloadEpisodePrefix = "__download_episode__:"
+
+    fun buildDownloadedEpisodeData(episodeId: Int): String {
+        return "$DownloadEpisodePrefix$episodeId"
+    }
+
+    fun parseDownloadedEpisodeId(episodeData: String?): Int? {
+        if (episodeData.isNullOrBlank()) return null
+        if (!episodeData.startsWith(DownloadEpisodePrefix)) return null
+        return episodeData
+            .removePrefix(DownloadEpisodePrefix)
+            .toIntOrNull()
+    }
 }
 
 internal fun createPlayerSavedStateHandle(

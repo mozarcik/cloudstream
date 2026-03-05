@@ -1150,6 +1150,27 @@ object VideoDownloadManager {
         }
     }
 
+    private suspend fun resolveDownloadUrl(rawUrl: String): String? {
+        val trimmedUrl = rawUrl.trim()
+        if (trimmedUrl.isBlank()) {
+            return null
+        }
+
+        val unshortenedUrl = unshortenLinkSafe(trimmedUrl).trim()
+        return sequenceOf(trimmedUrl, unshortenedUrl)
+            .distinct()
+            .firstNotNullOfOrNull { candidate ->
+                candidate
+                    .takeIf(::hasSupportedDownloadScheme)
+                    ?.replace(" ", "%20")
+            }
+    }
+
+    private fun hasSupportedDownloadScheme(url: String): Boolean {
+        val scheme = runCatching { Uri.parse(url).scheme?.lowercase(Locale.ROOT) }.getOrNull()
+        return scheme == "http" || scheme == "https"
+    }
+
     /** download a file that consist of a single stream of data*/
     suspend fun downloadThing(
         context: Context,
@@ -1166,6 +1187,12 @@ object VideoDownloadManager {
         minimumSize: Long = 100
     ): DownloadStatus = withContext(Dispatchers.IO) {
         if (parallelConnections < 1) {
+            return@withContext DOWNLOAD_INVALID_INPUT
+        }
+
+        val downloadUrl = resolveDownloadUrl(link.url)
+        if (downloadUrl == null) {
+            Log.e(TAG, "Invalid direct download url: ${link.url.take(160)}")
             return@withContext DOWNLOAD_INVALID_INPUT
         }
 
@@ -1192,7 +1219,7 @@ object VideoDownloadManager {
             metadata.type = DownloadType.IsPending
 
             val items = streamLazy(
-                url = link.url.replace(" ", "%20"),
+                url = downloadUrl,
                 referer = link.referer,
                 startByte = stream.startAt,
                 headers = link.headers.appendAndDontOverride(
@@ -1419,6 +1446,15 @@ object VideoDownloadManager {
     ): DownloadStatus = withContext(Dispatchers.IO) {
         if (parallelConnections < 1) return@withContext DOWNLOAD_INVALID_INPUT
 
+        val downloadUrl = resolveDownloadUrl(link.url)
+        if (downloadUrl == null) {
+            Log.e(
+                TAG,
+                "Invalid HLS download url source=${link.source} name=${link.name} raw=${link.url.take(160)}"
+            )
+            return@withContext DOWNLOAD_INVALID_INPUT
+        }
+
         val metadata = DownloadMetaData(
             createNotificationCallback = createNotificationCallback,
             id = parentId
@@ -1456,7 +1492,7 @@ object VideoDownloadManager {
 
             // do the initial get request to fetch the segments
             val m3u8 = M3u8Helper.M3u8Stream(
-                link.url, link.quality, link.headers.appendAndDontOverride(
+                downloadUrl, link.quality, link.headers.appendAndDontOverride(
                     mapOf(
                         "Accept-Encoding" to "identity",
                         "accept" to "*/*",

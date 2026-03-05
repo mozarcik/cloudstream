@@ -53,6 +53,7 @@ fun HomeScreenV2Content(
     onSourceSelected: (MainAPI) -> Unit,
     onMorePanelOpenChange: (Boolean) -> Unit,
     onTogglePin: (MainAPI) -> Unit,
+    onRemoveContinueWatching: (MediaItemCompat) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val resumeFocusRequester = remember { FocusRequester() }
@@ -155,6 +156,7 @@ fun HomeScreenV2Content(
                         modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
                         onResumeClick = onContinueWatchingPlay,
                         onDetailsClick = onMediaClick,
+                        onRemoveClick = onRemoveContinueWatching,
                         onCardClick = onMediaClick,
                         onMoveDownFromCards = {
                             if (isMovingDownFromCards) return@ContinueWatchingHeroSection

@@ -27,6 +27,7 @@ sealed class MediaItemCompat {
     open val continueWatchingSeason: Int? = null
     open val continueWatchingEpisode: Int? = null
     open val continueWatchingHasBackdrop: Boolean = false
+    open val continueWatchingParentId: Int? = null
     
     @Immutable
     data class Movie(
@@ -50,6 +51,7 @@ sealed class MediaItemCompat {
         override val continueWatchingSeason: Int? = null,
         override val continueWatchingEpisode: Int? = null,
         override val continueWatchingHasBackdrop: Boolean = false,
+        override val continueWatchingParentId: Int? = null,
     ) : MediaItemCompat()
     
     @Immutable
@@ -75,6 +77,7 @@ sealed class MediaItemCompat {
         override val continueWatchingSeason: Int? = null,
         override val continueWatchingEpisode: Int? = null,
         override val continueWatchingHasBackdrop: Boolean = false,
+        override val continueWatchingParentId: Int? = null,
     ) : MediaItemCompat()
     
     @Immutable
@@ -98,6 +101,7 @@ sealed class MediaItemCompat {
         override val continueWatchingSeason: Int? = null,
         override val continueWatchingEpisode: Int? = null,
         override val continueWatchingHasBackdrop: Boolean = false,
+        override val continueWatchingParentId: Int? = null,
     ) : MediaItemCompat()
 }
 

@@ -36,8 +36,8 @@ internal fun PlayerPlaybackScreen(
     var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
     var pendingPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
 
-    val selectedSubtitle = catalogState.subtitles.getOrNull(catalogState.selectedSubtitleIndex)
-    val selectedSubtitleId = selectedSubtitle?.getId()
+    val selectedSubtitle = catalogState.selectedSubtitle
+    val selectedSubtitleId = catalogState.selectedSubtitleId
     val subtitleDelayByTrackId = remember(
         state.episodeId,
         state.metadata.title,
@@ -84,7 +84,7 @@ internal fun PlayerPlaybackScreen(
         subtitleSyncController = subtitleSyncController,
         overlayState = overlayState,
         runtimeTracksState = runtimeTracksState,
-        selectedSubtitleIndex = catalogState.selectedSubtitleIndex,
+        selectedSubtitleId = selectedSubtitleId,
         actions = actions,
         onPendingPlaybackRestoreCaptured = { positionMs, playWhenReady ->
             pendingSeekPositionMs = positionMs
@@ -95,6 +95,8 @@ internal fun PlayerPlaybackScreen(
         state = state,
         selectedSubtitle = selectedSubtitle,
         selectedSubtitleId = selectedSubtitleId,
+        isCurrentSourceReady = catalogState.isCurrentSourceReady,
+        subtitleSelectionSource = catalogState.subtitleSelectionSource,
         initialSubtitleDelayMs = initialSubtitleDelayMs,
         initialPlayerPositionMs = initialPlayerPositionMs,
         initialPlayerPlayWhenReady = initialPlayerPlayWhenReady,

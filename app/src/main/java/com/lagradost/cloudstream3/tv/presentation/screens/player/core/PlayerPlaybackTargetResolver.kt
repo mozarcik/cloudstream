@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.mvvm.Resource
+import com.lagradost.cloudstream3.tv.compat.home.refreshContinueWatchingHeader
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerMetadata
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
@@ -171,6 +172,18 @@ internal suspend fun resolvePlayerPlaybackTarget(
         tvType = resolvedType,
         parentId = parentId,
     )
+
+    loadResponse?.let { page ->
+        refreshContinueWatchingHeader(
+            parentId = parentId,
+            apiName = apiName,
+            url = page.url,
+            name = page.name,
+            type = resolvedType,
+            posterUrl = page.posterUrl,
+            backdropUrl = page.backgroundPosterUrl,
+        )
+    }
 
     return PlayerPlaybackTarget(
         episode = episode,

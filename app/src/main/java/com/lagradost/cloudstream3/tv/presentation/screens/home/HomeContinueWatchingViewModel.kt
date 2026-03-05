@@ -26,6 +26,22 @@ class HomeContinueWatchingViewModel(
         loadContinueWatching()
     }
 
+    fun removeItem(parentId: Int?) {
+        if (parentId == null) return
+
+        viewModelScope.launch {
+            continueWatchingRepository.removeItem(parentId)
+                .fold(
+                    onSuccess = {
+                        loadContinueWatching(forceReload = true)
+                    },
+                    onFailure = { throwable ->
+                        Log.e(TAG, "Failed to remove continue watching item", throwable)
+                    }
+                )
+        }
+    }
+
     private fun loadContinueWatching(forceReload: Boolean = false) {
         val currentState = _uiState.value.state
         if (!forceReload && currentState !is HomeFeedLoadState.Loading) {

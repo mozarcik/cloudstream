@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.ui.player
 
 import android.net.Uri
+import android.util.Log
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.context
 import com.lagradost.cloudstream3.CommonActivity.activity
 import com.lagradost.cloudstream3.R
@@ -12,6 +13,8 @@ import com.lagradost.cloudstream3.utils.SubtitleUtils.cleanDisplayName
 import com.lagradost.cloudstream3.utils.SubtitleUtils.isMatchingSubtitle
 import com.lagradost.cloudstream3.utils.VideoDownloadManager.getDownloadFileInfoAndUpdateSettings
 import com.lagradost.cloudstream3.utils.VideoDownloadManager.getFolder
+
+private const val DebugTag = "TvDownloadPlayback"
 
 class DownloadFileGenerator(
     episodes: List<ExtractorUri>,
@@ -40,10 +43,20 @@ class DownloadFileGenerator(
             }
 
             if (info != null) {
+                Log.d(DebugTag, "generateLinks resolved URI from download info id=${meta.id} path=${info.path}")
                 val newMeta = meta.copy(uri = info.path)
                 callback(null to newMeta)
-            } else callback(null to meta)
-        } else callback(null to meta)
+            } else {
+                Log.e(
+                    DebugTag,
+                    "generateLinks could not resolve URI id=${meta.id} basePath=${meta.basePath} relativePath=${meta.relativePath}"
+                )
+                callback(null to meta)
+            }
+        } else {
+            Log.d(DebugTag, "generateLinks using existing URI id=${meta.id} uri=${meta.uri}")
+            callback(null to meta)
+        }
 
         val ctx = context ?: return true
         val relative = meta.relativePath ?: return true

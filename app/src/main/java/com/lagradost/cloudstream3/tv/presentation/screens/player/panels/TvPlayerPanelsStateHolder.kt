@@ -1,5 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.panels
 
+import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerSubtitleSelectionSource
+import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSyncDebugLog
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.getAutoSelectLanguageTagIETF
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -7,7 +9,9 @@ import java.util.Locale
 
 internal data class TvPlayerPanelsSelection(
     val activePanel: TvPlayerSidePanel,
+    val selectedSubtitleId: String?,
     val selectedSubtitleIndex: Int,
+    val subtitleSelectionSource: TvPlayerSubtitleSelectionSource,
     val selectedAudioTrackIndex: Int,
 )
 
@@ -22,6 +26,8 @@ internal class TvPlayerPanelsStateHolder {
     private var selectedSubtitleIndex: Int = -1
     private var selectedAudioTrackIndex: Int = -1
     private var subtitleSelectionOverriddenByUser: Boolean = false
+    private var subtitleSelectionSource: TvPlayerSubtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
+    private var allowPreferredSubtitleAutoSelection: Boolean = true
     private val preferredSubtitleLanguageTag: String = getAutoSelectLanguageTagIETF().trim()
     private val preferredSubtitleLanguageKey: String = preferredSubtitleLanguageTag.lowercase(Locale.ROOT)
     private val preferredSubtitleBaseLanguageKey: String = preferredSubtitleLanguageKey.substringBefore('-')
@@ -32,6 +38,8 @@ internal class TvPlayerPanelsStateHolder {
         selectedSubtitleIndex = -1
         selectedAudioTrackIndex = -1
         subtitleSelectionOverriddenByUser = false
+        subtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
+        allowPreferredSubtitleAutoSelection = true
     }
 
     fun onSourceChanged(
@@ -45,6 +53,8 @@ internal class TvPlayerPanelsStateHolder {
         selectedSubtitleIndex = -1
         selectedAudioTrackIndex = defaultAudioTrackIndex(newLink)
         subtitleSelectionOverriddenByUser = false
+        subtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
+        allowPreferredSubtitleAutoSelection = true
     }
 
     fun openPanel(panel: TvPlayerSidePanel): Boolean {
@@ -66,40 +76,83 @@ internal class TvPlayerPanelsStateHolder {
         selectedSubtitleId = null
         selectedSubtitleIndex = -1
         subtitleSelectionOverriddenByUser = true
+        subtitleSelectionSource = TvPlayerSubtitleSelectionSource.PlaybackErrorRecovery
         return true
     }
 
-    fun selectSubtitleById(subtitleId: String?): Boolean {
+    fun selectSubtitleById(
+        subtitleId: String?,
+        source: TvPlayerSubtitleSelectionSource = TvPlayerSubtitleSelectionSource.User,
+    ): Boolean {
         if (subtitleId == null) {
-            return disableSubtitlesFromPlaybackError()
+            val changed = selectedSubtitleId != null || selectedSubtitleIndex != -1 || activePanel != TvPlayerSidePanel.None
+            selectedSubtitleId = null
+            selectedSubtitleIndex = -1
+            subtitleSelectionOverriddenByUser = true
+            subtitleSelectionSource = source
+            activePanel = TvPlayerSidePanel.None
+            return changed
         }
 
         val changed = selectedSubtitleId != subtitleId || activePanel != TvPlayerSidePanel.None
         selectedSubtitleId = subtitleId
         selectedSubtitleIndex = -1
         subtitleSelectionOverriddenByUser = true
+        subtitleSelectionSource = source
         activePanel = TvPlayerSidePanel.None
         return changed
     }
 
+    fun onPlaybackReady() {
+        allowPreferredSubtitleAutoSelection = false
+    }
+
     fun applyPreferredSubtitleAutoSelection(subtitles: List<SubtitleData>) {
-        if (subtitleSelectionOverriddenByUser) return
-        if (preferredSubtitleLanguageTag.isBlank()) return
+        if (!allowPreferredSubtitleAutoSelection) {
+            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=locked_after_first_start")
+            return
+        }
+        if (subtitleSelectionOverriddenByUser) {
+            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=user_override")
+            return
+        }
+        if (preferredSubtitleLanguageTag.isBlank()) {
+            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=blank_preference")
+            return
+        }
 
         normalizeSelectedSubtitleIndex(subtitles)
 
         val currentSubtitle = subtitles.getOrNull(selectedSubtitleIndex)
         if (currentSubtitle != null && currentSubtitle.matchesLanguageCode(preferredSubtitleLanguageTag)) {
+            subtitleSyncDebugLog(
+                "applyPreferredSubtitleAutoSelection: skipped reason=already_selected" +
+                    " subtitleId=${currentSubtitle.getId()}",
+            )
             return
         }
 
         val targetIndex = subtitles.indexOfFirst { subtitle ->
             subtitle.matchesLanguageCode(preferredSubtitleLanguageTag)
         }
-        if (targetIndex < 0) return
+        if (targetIndex < 0) {
+            subtitleSyncDebugLog(
+                "applyPreferredSubtitleAutoSelection: skipped reason=no_match" +
+                    " subtitles=${subtitles.size}" +
+                    " preferred=$preferredSubtitleLanguageTag",
+            )
+            return
+        }
 
         selectedSubtitleIndex = targetIndex
         selectedSubtitleId = subtitles[targetIndex].getId()
+        subtitleSelectionSource = TvPlayerSubtitleSelectionSource.Auto
+        subtitleSyncDebugLog(
+            "applyPreferredSubtitleAutoSelection: selected" +
+                " subtitleId=$selectedSubtitleId" +
+                " subtitleIndex=$selectedSubtitleIndex" +
+                " preferred=$preferredSubtitleLanguageTag",
+        )
     }
 
     fun selection(
@@ -112,7 +165,9 @@ internal class TvPlayerPanelsStateHolder {
         )
         return TvPlayerPanelsSelection(
             activePanel = activePanel,
+            selectedSubtitleId = selectedSubtitleId,
             selectedSubtitleIndex = selectedSubtitleIndex,
+            subtitleSelectionSource = subtitleSelectionSource,
             selectedAudioTrackIndex = selectedAudioTrackIndex,
         )
     }
@@ -138,6 +193,7 @@ internal class TvPlayerPanelsStateHolder {
                 selectedSubtitleId = null
                 selectedSubtitleIndex = -1
                 subtitleSelectionOverriddenByUser = true
+                subtitleSelectionSource = TvPlayerSubtitleSelectionSource.User
                 activePanel = TvPlayerSidePanel.None
                 TvPlayerPanelActionOutcome(stateChanged = changed)
             }
@@ -148,6 +204,7 @@ internal class TvPlayerPanelsStateHolder {
                 selectedSubtitleId = targetSubtitleId
                 selectedSubtitleIndex = if (targetSubtitle == null) -1 else action.index
                 subtitleSelectionOverriddenByUser = true
+                subtitleSelectionSource = TvPlayerSubtitleSelectionSource.User
                 activePanel = TvPlayerSidePanel.None
                 TvPlayerPanelActionOutcome(stateChanged = changed)
             }
@@ -233,6 +290,13 @@ internal class TvPlayerPanelsStateHolder {
     }
 
     private fun normalizeSelectedSubtitleIndex(subtitles: List<SubtitleData>) {
+        if (subtitles.isEmpty()) {
+            // WHY: przed pierwszym udanym startem playera ukrywamy listę napisów w UI,
+            // ale nie możemy przez to zgubić wcześniej auto-wybranego subtitle.
+            selectedSubtitleIndex = -1
+            return
+        }
+
         selectedSubtitleIndex = selectedSubtitleId?.let { subtitleId ->
             subtitles.indexOfFirst { subtitle ->
                 subtitle.getId() == subtitleId
@@ -240,6 +304,9 @@ internal class TvPlayerPanelsStateHolder {
         } ?: -1
         if (selectedSubtitleIndex == -1) {
             selectedSubtitleId = null
+            if (subtitleSelectionSource == TvPlayerSubtitleSelectionSource.Auto) {
+                subtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
+            }
         }
         if (selectedSubtitleIndex !in subtitles.indices) {
             selectedSubtitleIndex = -1

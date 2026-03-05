@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -14,7 +15,11 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatPanelItem
 import com.lagradost.cloudstream3.tv.presentation.common.MenuListSidePanel
 import com.lagradost.cloudstream3.tv.presentation.common.SidePanelMenuItem
+import com.lagradost.cloudstream3.tv.presentation.common.SidePanelSupportingStyle
 import com.lagradost.cloudstream3.ui.WatchType
+
+private val DefaultMovieActionsPanelWidth = 340.dp
+private val SourceStyledMovieActionsPanelWidth = 420.dp
 
 @Composable
 fun MovieActionsSidePanel(
@@ -26,6 +31,7 @@ fun MovieActionsSidePanel(
     onCloseRequested: () -> Unit,
     onActionSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    panelWidth: Dp? = null,
     panelTestTag: String = "movie_actions_side_panel",
     showItemsWhileLoading: Boolean = false,
     headerContent: (@Composable ColumnScope.() -> Unit)? = null,
@@ -36,18 +42,39 @@ fun MovieActionsSidePanel(
     } else {
         items.map { action ->
             SidePanelMenuItem(
-                id = "movie_action_${action.id}",
+                id = action.key,
                 title = action.label,
-                enabled = if (loading && showItemsWhileLoading) true else !inProgress,
+                titleMaxLines = action.titleMaxLines,
+                enabled = when {
+                    action.isSectionHeader -> false
+                    loading && showItemsWhileLoading -> true
+                    else -> !inProgress
+                },
+                isSectionHeader = action.isSectionHeader,
+                supportingTexts = action.supportingTexts,
+                supportingStyle = if (action.supportingTexts.isNotEmpty()) {
+                    SidePanelSupportingStyle.SourceOption
+                } else {
+                    SidePanelSupportingStyle.Default
+                },
                 onClick = { onActionSelected(action.id) },
-                leadingContent = {
-                    Icon(
-                        painter = painterResource(id = action.iconRes),
-                        contentDescription = null
-                    )
+                leadingContent = action.iconRes?.let { iconRes ->
+                    {
+                        Icon(
+                            painter = painterResource(id = iconRes),
+                            contentDescription = null
+                        )
+                    }
                 }
             )
         }
+    }
+    val resolvedPanelWidth = panelWidth ?: if (
+        items.any { action -> action.supportingTexts.isNotEmpty() || action.isSectionHeader }
+    ) {
+        SourceStyledMovieActionsPanelWidth
+    } else {
+        DefaultMovieActionsPanelWidth
     }
 
     MenuListSidePanel(
@@ -55,10 +82,10 @@ fun MovieActionsSidePanel(
         onCloseRequested = onCloseRequested,
         title = title,
         items = menuItems,
-        panelWidth = 340.dp,
+        panelWidth = resolvedPanelWidth,
         modifier = modifier,
         panelTestTag = panelTestTag,
-        initialFocusedItemId = menuItems.firstOrNull()?.id,
+        initialFocusedItemId = menuItems.firstOrNull { !it.isSectionHeader }?.id,
         headerContent = headerContent,
         emptyContent = {
             if (emptyContent != null) {
@@ -108,7 +135,7 @@ fun BookmarkStatusSidePanel(
         onCloseRequested = onCloseRequested,
         title = stringResource(R.string.action_add_to_bookmarks),
         items = menuItems,
-        panelWidth = 340.dp,
+        panelWidth = DefaultMovieActionsPanelWidth,
         modifier = modifier,
         panelTestTag = panelTestTag,
         initialFocusedItemId = menuItems.firstOrNull { it.selected }?.id ?: menuItems.firstOrNull()?.id,

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,9 +21,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Settings
@@ -33,13 +30,12 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
-import androidx.tv.material3.Surface
-import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.PluginItem
 import com.lagradost.cloudstream3.tv.compat.PluginSettingsHostActivity
 import com.lagradost.cloudstream3.tv.compat.PluginStatus
+import com.lagradost.cloudstream3.tv.presentation.common.TvConfirmDialog
 
 /**
  * Action buttons for plugin (Settings/Download/Update/Delete).
@@ -302,54 +298,15 @@ private fun DeletePluginDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            colors = SurfaceDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f)
-            ),
-            modifier = Modifier.widthIn(max = 720.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text(
-                    text = stringResource(R.string.delete_plugin),
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Text(
-                    text = pluginName,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = stringResource(R.string.delete_message, pluginName),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(stringResource(R.string.cancel))
-                    }
-                    Button(
-                        onClick = onConfirm,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(stringResource(R.string.delete))
-                    }
-                }
-            }
-        }
-    }
+    TvConfirmDialog(
+        title = stringResource(R.string.delete_plugin),
+        description = stringResource(R.string.delete_message, pluginName),
+        primaryText = stringResource(R.string.delete),
+        secondaryText = stringResource(R.string.cancel),
+        onPrimary = onConfirm,
+        onSecondary = onDismiss,
+        onDismiss = onDismiss
+    )
 }
 
 private enum class PluginActionState {

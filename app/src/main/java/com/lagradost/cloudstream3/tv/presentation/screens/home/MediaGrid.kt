@@ -52,8 +52,8 @@ fun MediaGrid(
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(MEDIA_GRID_COLUMNS),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
+        horizontalArrangement =  Arrangement.spacedBy(space = FeedGridColumnSpacing),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
     ) {
@@ -117,8 +117,8 @@ fun MediaGridStatic(
     LazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(MEDIA_GRID_COLUMNS),
-        contentPadding = PaddingValues(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 14.dp, bottom = 28.dp),
+        horizontalArrangement =  Arrangement.spacedBy(space = FeedGridColumnSpacing),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
     ) {

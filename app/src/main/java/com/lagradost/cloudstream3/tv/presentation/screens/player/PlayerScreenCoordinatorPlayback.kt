@@ -70,6 +70,7 @@ internal fun retrySource(
 
 internal fun onPlaybackReady(context: PlayerScreenCoordinatorContext) {
     if (!context.catalog.hasFinalized) return
+    context.panels.stateHolder.onPlaybackReady()
     val currentLink = context.catalog.store.currentLink() ?: return
     val stateUpdated = context.catalog.store.updateSourceState(
         url = currentLink.url,

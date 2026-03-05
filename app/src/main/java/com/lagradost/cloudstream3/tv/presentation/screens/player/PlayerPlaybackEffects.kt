@@ -4,7 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
@@ -12,11 +15,13 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.PlayerSessionController
+import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSyncDebugLog
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.toTvPlayerPlaybackErrorDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.player.overlay.PlayerOverlayStateHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerRuntimeTracksStateHolder
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.applyRuntimeSubtitleSelection
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,14 +33,14 @@ internal fun PlayerPlaybackListenerEffect(
     subtitleSyncController: TvPlayerSubtitleSyncController,
     overlayState: PlayerOverlayStateHolder,
     runtimeTracksState: PlayerRuntimeTracksStateHolder,
-    selectedSubtitleIndex: Int,
+    selectedSubtitleId: String?,
     actions: PlayerScreenActions,
     onPendingPlaybackRestoreCaptured: (Long, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val currentOverlayState by rememberUpdatedState(overlayState)
     val currentRuntimeTracksState by rememberUpdatedState(runtimeTracksState)
-    val currentSelectedSubtitleIndex by rememberUpdatedState(selectedSubtitleIndex)
+    val currentSelectedSubtitleId by rememberUpdatedState(selectedSubtitleId)
     val currentActions by rememberUpdatedState(actions)
     val currentPendingPlaybackRestoreCapture by rememberUpdatedState(onPendingPlaybackRestoreCaptured)
     DisposableEffect(exoPlayer, subtitleSyncController) {
@@ -69,7 +74,7 @@ internal fun PlayerPlaybackListenerEffect(
                 val currentPosition = exoPlayer.currentPosition
                 val currentPlayWhenReady = exoPlayer.playWhenReady
 
-                if (currentSelectedSubtitleIndex >= 0) {
+                if (currentSelectedSubtitleId != null) {
                     currentPendingPlaybackRestoreCapture(currentPosition, currentPlayWhenReady)
                     currentActions.onDisableSubtitlesFromPlaybackError()
                     android.widget.Toast
@@ -103,6 +108,8 @@ internal fun PlayerPlaybackLoadEffect(
     state: TvPlayerUiState.Ready,
     selectedSubtitle: com.lagradost.cloudstream3.ui.player.SubtitleData?,
     selectedSubtitleId: String?,
+    isCurrentSourceReady: Boolean,
+    subtitleSelectionSource: TvPlayerSubtitleSelectionSource,
     initialSubtitleDelayMs: Long,
     initialPlayerPositionMs: Long,
     initialPlayerPlayWhenReady: Boolean,
@@ -111,6 +118,12 @@ internal fun PlayerPlaybackLoadEffect(
     runtimeTracksState: PlayerRuntimeTracksStateHolder,
     onPlaybackRestoreConsumed: () -> Unit,
 ) {
+    var lastLoadedLinkUrl by remember { mutableStateOf<String?>(null) }
+    var lastLoadedSubtitleId by remember { mutableStateOf<String?>(null) }
+    var lastLoadedSubtitleDelayMs by remember { mutableStateOf<Long?>(null) }
+    var lastLoadedStartPositionMs by remember { mutableStateOf<Long?>(null) }
+    var lastLoadedPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
+
     LaunchedEffect(
         state.link.url,
         selectedSubtitleId,
@@ -118,6 +131,75 @@ internal fun PlayerPlaybackLoadEffect(
         initialPlayerPositionMs,
         initialPlayerPlayWhenReady,
     ) {
+        val isLinkChanged = lastLoadedLinkUrl != state.link.url
+        val isSubtitleChanged = lastLoadedSubtitleId != selectedSubtitleId
+        val isSubtitleDelayChanged = lastLoadedSubtitleDelayMs != initialSubtitleDelayMs
+        val isStartPositionChanged = lastLoadedStartPositionMs != initialPlayerPositionMs
+        val isPlayWhenReadyChanged = lastLoadedPlayWhenReady != initialPlayerPlayWhenReady
+        val loadReason = buildString {
+            if (isLinkChanged) append("link_changed ")
+            if (isSubtitleChanged) append("subtitle_changed ")
+            if (isSubtitleDelayChanged) append("subtitle_delay_changed ")
+            if (isStartPositionChanged) append("start_position_changed ")
+            if (isPlayWhenReadyChanged) append("play_when_ready_changed ")
+        }.trim().ifBlank { "unknown" }
+        subtitleSyncDebugLog(
+            "PlayerPlaybackLoadEffect: load reason=$loadReason" +
+                " linkHash=${state.link.url.hashCode()}" +
+                " subtitleId=${selectedSubtitleId ?: "null"}" +
+                " subtitleName=${selectedSubtitle?.name ?: "null"}" +
+                " subtitleSelectionSource=$subtitleSelectionSource" +
+                " sourceReady=$isCurrentSourceReady" +
+                " subtitleDelayMs=$initialSubtitleDelayMs" +
+                " startPositionMs=$initialPlayerPositionMs" +
+                " playWhenReady=$initialPlayerPlayWhenReady",
+        )
+
+        if (!isLinkChanged && isSubtitleChanged) {
+            when (subtitleSelectionSource) {
+                TvPlayerSubtitleSelectionSource.User -> {
+                    val runtimeApplied = applyRuntimeSubtitleSelection(
+                        player = playerSessionController.player,
+                        subtitleId = selectedSubtitleId,
+                    )
+                    subtitleSyncDebugLog(
+                        "PlayerPlaybackLoadEffect: user subtitle change runtimeApplied=$runtimeApplied" +
+                            " subtitleId=${selectedSubtitleId ?: "null"}",
+                    )
+                    if (runtimeApplied) {
+                        overlayState.syncFromPlayer(playerSessionController.player)
+                        runtimeTracksState.refresh()
+                        onPlaybackRestoreConsumed()
+                        lastLoadedSubtitleId = selectedSubtitleId
+                        return@LaunchedEffect
+                    }
+                }
+
+                TvPlayerSubtitleSelectionSource.Auto -> {
+                    if (isCurrentSourceReady) {
+                        val runtimeApplied = applyRuntimeSubtitleSelection(
+                            player = playerSessionController.player,
+                            subtitleId = selectedSubtitleId,
+                        )
+                        subtitleSyncDebugLog(
+                            "PlayerPlaybackLoadEffect: auto subtitle change after start runtimeApplied=$runtimeApplied" +
+                                " subtitleId=${selectedSubtitleId ?: "null"}",
+                        )
+                        if (runtimeApplied) {
+                            overlayState.syncFromPlayer(playerSessionController.player)
+                            runtimeTracksState.refresh()
+                        }
+                        onPlaybackRestoreConsumed()
+                        lastLoadedSubtitleId = selectedSubtitleId
+                        return@LaunchedEffect
+                    }
+                }
+
+                TvPlayerSubtitleSelectionSource.None,
+                TvPlayerSubtitleSelectionSource.PlaybackErrorRecovery -> Unit
+            }
+        }
+
         overlayState.resetForSourceChange()
         playerSessionController.load(
             link = state.link,
@@ -130,6 +212,11 @@ internal fun PlayerPlaybackLoadEffect(
         overlayState.syncFromPlayer(playerSessionController.player)
         runtimeTracksState.refresh()
         onPlaybackRestoreConsumed()
+        lastLoadedLinkUrl = state.link.url
+        lastLoadedSubtitleId = selectedSubtitleId
+        lastLoadedSubtitleDelayMs = initialSubtitleDelayMs
+        lastLoadedStartPositionMs = initialPlayerPositionMs
+        lastLoadedPlayWhenReady = initialPlayerPlayWhenReady
     }
 }
 

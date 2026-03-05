@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.downloads
 
+import android.util.Log
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -18,23 +19,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -44,32 +39,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.tv.material3.Button
-import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.OutlinedButton
-import androidx.tv.material3.Surface
-import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
-import com.lagradost.cloudstream3.ui.download.DOWNLOAD_ACTION_PLAY_FILE
-import com.lagradost.cloudstream3.ui.download.DownloadButtonSetup
-import com.lagradost.cloudstream3.ui.download.DownloadClickEvent
-import com.lagradost.cloudstream3.utils.VideoDownloadHelper
-import com.lagradost.cloudstream3.utils.VideoDownloadManager
+import com.lagradost.cloudstream3.tv.presentation.common.TvConfirmDialog
 
 private const val BackdropCrossfadeDurationMs = 300
+private const val DebugTag = "TvDownloadsScreen"
 
 @Composable
 fun DownloadsScreen(
     onOpenDetails: (DownloadItemUiModel) -> Unit,
+    onPlayDownloaded: (DownloadItemUiModel) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = viewModel(),
@@ -77,7 +64,6 @@ fun DownloadsScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
 
     val allItems = remember(uiState.downloadingItems, uiState.downloadedItems) {
         uiState.downloadingItems + uiState.downloadedItems
@@ -149,7 +135,7 @@ fun DownloadsScreen(
                     DownloadItemCard(
                         item = item,
                         onCardClick = { onOpenDetails(item) },
-                        onPlayClick = { playDownloadedItem(item) },
+                        onPlayClick = { playDownloadedItem(item, onPlayDownloaded) },
                         onDeleteClick = { pendingDeleteItem = item },
                         onCardFocused = { focusedItemId = item.id },
                         modifier = Modifier.fillMaxWidth(),
@@ -163,10 +149,9 @@ fun DownloadsScreen(
                 itemTitle = itemToDelete.title,
                 onDismiss = { pendingDeleteItem = null },
                 onConfirm = {
-                    VideoDownloadManager.deleteFilesAndUpdateSettings(
+                    viewModel.deleteItem(
                         context = context,
-                        ids = setOf(itemToDelete.episodeId),
-                        scope = coroutineScope
+                        item = itemToDelete
                     )
                     pendingDeleteItem = null
                 }
@@ -307,110 +292,32 @@ private fun DeleteDownloadDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val dismissFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        dismissFocusRequester.requestFocus()
-    }
-
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(18.dp),
-            colors = SurfaceDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.96f)
-            ),
-            modifier = Modifier.width(620.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Text(
-                        text = stringResource(R.string.delete_file),
-                        style = MaterialTheme.typography.titleLarge,
-                    )
-                }
-
-                Text(
-                    text = itemTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = stringResource(R.string.delete_message).format(itemTitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .focusRequester(dismissFocusRequester)
-                            .weight(1f)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.cancel),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                    }
-
-                    Button(
-                        onClick = onConfirm,
-                        colors = ButtonDefaults.colors(
-                            containerColor = MaterialTheme.colorScheme.error,
-                            contentColor = MaterialTheme.colorScheme.onError
-                        ),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = null
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = stringResource(R.string.delete),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                    }
-                }
-            }
-        }
-    }
+    TvConfirmDialog(
+        title = stringResource(R.string.delete_file),
+        description = stringResource(R.string.delete_message, itemTitle),
+        primaryText = stringResource(R.string.delete),
+        secondaryText = stringResource(R.string.cancel),
+        onPrimary = onConfirm,
+        onSecondary = onDismiss,
+        onDismiss = onDismiss
+    )
 }
 
-private fun playDownloadedItem(item: DownloadItemUiModel) {
-    if (item.state !is DownloadState.Downloaded) return
-
-    DownloadButtonSetup.handleDownloadClick(
-        DownloadClickEvent(
-            action = DOWNLOAD_ACTION_PLAY_FILE,
-            data = VideoDownloadHelper.DownloadEpisodeCached(
-                name = item.episodeName,
-                poster = item.posterUrl,
-                episode = item.episodeNumber ?: 0,
-                season = item.seasonNumber,
-                parentId = item.parentId,
-                score = null,
-                description = item.description,
-                cacheTime = item.startedAtMillis,
-                id = item.episodeId,
-            )
+private fun playDownloadedItem(
+    item: DownloadItemUiModel,
+    onPlayDownloaded: (DownloadItemUiModel) -> Unit,
+) {
+    if (item.state !is DownloadState.Downloaded) {
+        Log.d(
+            DebugTag,
+            "playDownloadedItem ignored id=${item.episodeId} state=${item.state::class.simpleName}"
         )
+        return
+    }
+
+    onPlayDownloaded(item)
+    Log.d(
+        DebugTag,
+        "playDownloadedItem routed to compose player id=${item.episodeId} parentId=${item.parentId}"
     )
 }

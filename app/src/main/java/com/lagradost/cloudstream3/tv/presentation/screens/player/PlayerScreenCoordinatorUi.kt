@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.getImdbId
 import com.lagradost.cloudstream3.LoadResponse.Companion.getMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.getTMDbId
 import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities.SubtitleSearch
+import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSyncDebugLog
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceState
@@ -22,23 +23,31 @@ internal fun postReadyState(
     val sourceStatesSnapshot = context.catalog.store.snapshotSourceStates()
     val isCurrentSourceReady =
         sourceStatesSnapshot[link.url]?.status == TvPlayerSourceStatus.Success
-    if (isCurrentSourceReady) {
-        context.panels.stateHolder.applyPreferredSubtitleAutoSelection(
-            context.catalog.store.orderedSubtitles,
-        )
-    }
+    context.panels.stateHolder.applyPreferredSubtitleAutoSelection(
+        context.catalog.store.orderedSubtitles,
+    )
     val panelSelection = context.panels.stateHolder.selection(
         currentLink = link,
         subtitles = context.catalog.store.orderedSubtitles,
     )
-    // WHY: player powinien wystartować najpierw na samym źródle.
-    // Dopiero po sukcesie odtwarzania udostępniamy/subskrybujemy napisy w UI i playerze.
+    val selectedSubtitle = context.catalog.store.orderedSubtitles.getOrNull(panelSelection.selectedSubtitleIndex)
+    // WHY: UI z napisami pokazujemy dopiero po udanym starcie źródła.
+    // Sam player może jednak dostać auto-wybrany subtitle już przed pierwszym startem,
+    // żeby uniknąć późnego reloadu po wejściu w STATE_READY.
     val subtitlesForUi = if (isCurrentSourceReady) context.catalog.store.orderedSubtitles else emptyList()
     val selectedSubtitleIndexForUi = if (isCurrentSourceReady) {
         panelSelection.selectedSubtitleIndex
     } else {
         -1
     }
+    subtitleSyncDebugLog(
+        "postReadyState: sourceReady=$isCurrentSourceReady" +
+            " linkHash=${link.url.hashCode()}" +
+            " loadedSubtitles=${context.catalog.store.orderedSubtitles.size}" +
+            " uiSubtitles=${subtitlesForUi.size}" +
+            " selectedSubtitleIndex=${panelSelection.selectedSubtitleIndex}" +
+            " selectedSubtitleIndexForUi=$selectedSubtitleIndexForUi",
+    )
     val currentPanelsUiState = context.panels.uiState.value
     val shouldRefreshPanelsUiState =
         panelSelection.activePanel != TvPlayerSidePanel.None ||
@@ -56,8 +65,12 @@ internal fun postReadyState(
         sourceCount = context.catalog.store.orderedLinks.size,
         sources = context.catalog.store.orderedLinks.toPersistentList(),
         currentSourceIndex = currentIndex,
+        isCurrentSourceReady = isCurrentSourceReady,
         subtitles = subtitlesForUi.toPersistentList(),
+        selectedSubtitle = selectedSubtitle,
+        selectedSubtitleId = panelSelection.selectedSubtitleId,
         selectedSubtitleIndex = selectedSubtitleIndexForUi,
+        subtitleSelectionSource = panelSelection.subtitleSelectionSource,
         selectedAudioTrackIndex = panelSelection.selectedAudioTrackIndex,
     )
     val episodeId = context.core.currentEpisode?.id ?: -1
@@ -77,27 +90,38 @@ internal fun updateCatalogUiState(
     val sourceStatesSnapshot = context.catalog.store.snapshotSourceStates()
     val isCurrentSourceReady =
         sourceStatesSnapshot[link.url]?.status == TvPlayerSourceStatus.Success
-    if (isCurrentSourceReady) {
-        context.panels.stateHolder.applyPreferredSubtitleAutoSelection(
-            context.catalog.store.orderedSubtitles,
-        )
-    }
+    context.panels.stateHolder.applyPreferredSubtitleAutoSelection(
+        context.catalog.store.orderedSubtitles,
+    )
     val panelSelection = context.panels.stateHolder.selection(
         currentLink = link,
         subtitles = context.catalog.store.orderedSubtitles,
     )
+    val selectedSubtitle = context.catalog.store.orderedSubtitles.getOrNull(panelSelection.selectedSubtitleIndex)
     val subtitlesForUi = if (isCurrentSourceReady) context.catalog.store.orderedSubtitles else emptyList()
     val selectedSubtitleIndexForUi = if (isCurrentSourceReady) {
         panelSelection.selectedSubtitleIndex
     } else {
         -1
     }
+    subtitleSyncDebugLog(
+        "updateCatalogUiState: sourceReady=$isCurrentSourceReady" +
+            " linkHash=${link.url.hashCode()}" +
+            " loadedSubtitles=${context.catalog.store.orderedSubtitles.size}" +
+            " uiSubtitles=${subtitlesForUi.size}" +
+            " selectedSubtitleIndex=${panelSelection.selectedSubtitleIndex}" +
+            " selectedSubtitleIndexForUi=$selectedSubtitleIndexForUi",
+    )
     context.catalog.uiState.value = PlayerCatalogUiState(
         sourceCount = context.catalog.store.orderedLinks.size,
         sources = context.catalog.store.orderedLinks.toPersistentList(),
         currentSourceIndex = currentIndex,
+        isCurrentSourceReady = isCurrentSourceReady,
         subtitles = subtitlesForUi.toPersistentList(),
+        selectedSubtitle = selectedSubtitle,
+        selectedSubtitleId = panelSelection.selectedSubtitleId,
         selectedSubtitleIndex = selectedSubtitleIndexForUi,
+        subtitleSelectionSource = panelSelection.subtitleSelectionSource,
         selectedAudioTrackIndex = panelSelection.selectedAudioTrackIndex,
     )
 }
@@ -156,6 +180,10 @@ internal fun applyOnlineSubtitlesSelection(
             existing.getId() == subtitle.getId()
         }?.getId()
     } ?: downloadedSubtitles.first().getId()
+    subtitleSyncDebugLog(
+        "applyOnlineSubtitlesSelection: downloaded=${downloadedSubtitles.size}" +
+            " selectedSubtitleId=$selectedSubtitleId",
+    )
     context.panels.stateHolder.selectSubtitleById(selectedSubtitleId)
     context.panels.onlineSubtitlesController.resetNavigation()
     postReadyStateForCurrentLink(context)

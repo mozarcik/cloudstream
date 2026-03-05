@@ -241,7 +241,8 @@ object SearchResponseMapper {
                 continueWatchingRemainingMs = remainingMs,
                 continueWatchingSeason = this.season,
                 continueWatchingEpisode = this.episode,
-                continueWatchingHasBackdrop = hasBackdrop
+                continueWatchingHasBackdrop = hasBackdrop,
+                continueWatchingParentId = this.parentId,
             )
         }
 
@@ -259,7 +260,8 @@ object SearchResponseMapper {
                 continueWatchingRemainingMs = remainingMs,
                 continueWatchingSeason = this.season,
                 continueWatchingEpisode = this.episode,
-                continueWatchingHasBackdrop = hasBackdrop
+                continueWatchingHasBackdrop = hasBackdrop,
+                continueWatchingParentId = this.parentId,
             )
         }
 
@@ -276,7 +278,8 @@ object SearchResponseMapper {
             continueWatchingRemainingMs = remainingMs,
             continueWatchingSeason = this.season,
             continueWatchingEpisode = this.episode,
-            continueWatchingHasBackdrop = hasBackdrop
+            continueWatchingHasBackdrop = hasBackdrop,
+            continueWatchingParentId = this.parentId,
         )
     }
 

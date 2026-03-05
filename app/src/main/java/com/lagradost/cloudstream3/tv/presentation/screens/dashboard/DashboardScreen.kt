@@ -51,6 +51,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreenV2
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerScreenNavigation
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
@@ -421,6 +422,13 @@ private fun Body(
                             }
                         }
                     }
+                },
+                onPlayDownloaded = { item ->
+                    openVideoPlayer(
+                        item.sourceUrl.ifBlank { "download://local" },
+                        item.apiName.ifBlank { "download" },
+                        PlayerScreenNavigation.buildDownloadedEpisodeData(item.episodeId)
+                    )
                 },
                 onScroll = updateTopBarVisibility
             )

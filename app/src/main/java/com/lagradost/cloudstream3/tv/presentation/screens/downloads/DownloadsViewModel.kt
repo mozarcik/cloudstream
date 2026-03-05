@@ -6,6 +6,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.tv.compat.downloads.calculateDownloadProgressFraction
+import com.lagradost.cloudstream3.tv.compat.downloads.deleteDownloadEntry
+import com.lagradost.cloudstream3.tv.compat.downloads.hasActiveDownloadRequest
+import com.lagradost.cloudstream3.tv.compat.downloads.hasStoredDownloadRequest
+import com.lagradost.cloudstream3.tv.compat.downloads.isDownloadCheckWorkerActive
+import com.lagradost.cloudstream3.tv.compat.downloads.isStaleZeroProgressDownload
+import com.lagradost.cloudstream3.tv.compat.downloads.resolveNormalizedDownloadStatus
+import com.lagradost.cloudstream3.tv.compat.downloads.resolveDownloadArtwork
 import com.lagradost.cloudstream3.utils.DOWNLOAD_EPISODE_CACHE
 import com.lagradost.cloudstream3.utils.DOWNLOAD_HEADER_CACHE
 import com.lagradost.cloudstream3.utils.DataStore.getFolderName
@@ -121,6 +129,7 @@ class DownloadsViewModel : ViewModel() {
     private fun buildDownloadsState(
         context: Context
     ): DownloadsUiState {
+        val downloadCheckWorkerActive = isDownloadCheckWorkerActive(context)
         val headersById = context.getKeys(DOWNLOAD_HEADER_CACHE)
             .mapNotNull { key ->
                 context.getKey<VideoDownloadHelper.DownloadHeaderCached>(key)
@@ -150,20 +159,35 @@ class DownloadsViewModel : ViewModel() {
             val fileInfo = VideoDownloadManager.getDownloadFileInfoAndUpdateSettings(context, episode.id)
             val downloadedBytes = fileInfo?.fileLength ?: 0L
             val totalBytes = fileInfo?.totalBytes ?: 0L
-            val hasPendingRequest = hasPendingDownloadRequest(context, episode.id)
+            val storedRequest = hasStoredDownloadRequest(context, episode.id)
+            val activeRequest = hasActiveDownloadRequest(
+                context = context,
+                episodeId = episode.id,
+                status = VideoDownloadManager.downloadStatus[episode.id],
+                hasStoredRequest = storedRequest,
+                isDownloadCheckWorkerActive = downloadCheckWorkerActive
+            )
             val status = normalizeDownloadStatus(
                 status = VideoDownloadManager.downloadStatus[episode.id],
                 downloadedBytes = downloadedBytes,
                 totalBytes = totalBytes,
-                hasPendingRequest = hasPendingRequest
+                hasPendingRequest = activeRequest,
+                isStaleZeroProgress = isStaleZeroProgressDownload(
+                    status = VideoDownloadManager.downloadStatus[episode.id],
+                    hasStoredRequest = storedRequest,
+                    hasActiveRequest = activeRequest,
+                    downloadedBytes = downloadedBytes,
+                    totalBytes = totalBytes
+                )
             )
-            val progressFraction = calculateProgressFraction(downloadedBytes, totalBytes)
+            val progressFraction = calculateDownloadProgressFraction(downloadedBytes, totalBytes)
             val speedBytesPerSec = speedBytesPerSecondById[episode.id]
             val etaSeconds = if (speedBytesPerSec != null && speedBytesPerSec > 0L && totalBytes > downloadedBytes) {
                 ((totalBytes - downloadedBytes) / speedBytesPerSec).coerceAtLeast(1L)
             } else {
                 null
             }
+            val artwork = resolveDownloadArtwork(header = header, episode = episode)
 
             val state = when {
                 status == VideoDownloadManager.DownloadType.IsDone || progressFraction >= 0.999f -> {
@@ -217,8 +241,8 @@ class DownloadsViewModel : ViewModel() {
                 episodeNumber = episode.episode.takeIf { it > 0 },
                 seasonNumber = episode.season,
                 description = episode.description,
-                posterUrl = episode.poster ?: header.poster,
-                backdropUrl = header.backdrop,
+                posterUrl = artwork.posterUrl,
+                backdropUrl = artwork.backdropUrl,
                 mediaType = header.type.toDownloadMediaType(),
                 sourceUrl = header.url,
                 apiName = header.apiName,
@@ -239,25 +263,18 @@ class DownloadsViewModel : ViewModel() {
         )
     }
 
-    private fun hasPendingDownloadRequest(
+    fun deleteItem(
         context: Context,
-        episodeId: Int,
-    ): Boolean {
-        val key = episodeId.toString()
-        val hasWorkerInfo = context.getKey<VideoDownloadManager.DownloadInfo>(
-            VideoDownloadManager.WORK_KEY_INFO,
-            key
-        ) != null
-        val hasWorkerPackage = context.getKey<VideoDownloadManager.DownloadResumePackage>(
-            VideoDownloadManager.WORK_KEY_PACKAGE,
-            key
-        ) != null
-        val hasResumePackage = VideoDownloadManager.getDownloadResumePackage(
-            context,
-            episodeId
-        ) != null
-
-        return hasWorkerInfo || hasWorkerPackage || hasResumePackage
+        item: DownloadItemUiModel,
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            deleteDownloadEntry(
+                context = context.applicationContext,
+                episodeId = item.episodeId,
+                parentId = item.parentId,
+            )
+            refreshRequests.tryEmit(Unit)
+        }
     }
 
     private fun normalizeDownloadStatus(
@@ -265,44 +282,15 @@ class DownloadsViewModel : ViewModel() {
         downloadedBytes: Long,
         totalBytes: Long,
         hasPendingRequest: Boolean,
+        isStaleZeroProgress: Boolean,
     ): VideoDownloadManager.DownloadType? {
-        if (status != null) return status
-
-        if (hasPendingRequest) {
-            return if (downloadedBytes > 0L) {
-                VideoDownloadManager.DownloadType.IsDownloading
-            } else {
-                VideoDownloadManager.DownloadType.IsPending
-            }
-        }
-
-        if (downloadedBytes > 0L && totalBytes <= 0L) {
-            return VideoDownloadManager.DownloadType.IsDownloading
-        }
-
-        if (totalBytes <= 0L) {
-            return null
-        }
-
-        val isDone = downloadedBytes > 1024L &&
-            downloadedBytes + 1024L >= totalBytes
-
-        return if (isDone) {
-            VideoDownloadManager.DownloadType.IsDone
-        } else {
-            VideoDownloadManager.DownloadType.IsDownloading
-        }
-    }
-
-    private fun calculateProgressFraction(
-        downloadedBytes: Long,
-        totalBytes: Long,
-    ): Float {
-        if (downloadedBytes <= 0L || totalBytes <= 0L) {
-            return 0f
-        }
-
-        return (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+        return resolveNormalizedDownloadStatus(
+            status = status,
+            downloadedBytes = downloadedBytes,
+            totalBytes = totalBytes,
+            hasPendingRequest = hasPendingRequest,
+            isStaleZeroProgress = isStaleZeroProgress,
+        )
     }
 
     private fun resolveDownloadItemTitle(
@@ -313,20 +301,18 @@ class DownloadsViewModel : ViewModel() {
             return header.name
         }
 
-        val seasonNumber = episode.season
-        val episodeNumber = episode.episode.takeIf { it > 0 }
-        val episodeLabel = when {
-            seasonNumber != null && episodeNumber != null -> "S${seasonNumber}E${episodeNumber}"
-            episodeNumber != null -> "E${episodeNumber}"
-            else -> null
-        }
+        val seriesTitle = header.name.trim()
+        val episodeTitle = episode.name
+            ?.trim()
+            ?.takeIf { title ->
+                title.isNotBlank() && !title.equals(seriesTitle, ignoreCase = true)
+            }
 
-        val episodeTitle = episode.name?.takeIf { it.isNotBlank() }
         return listOfNotNull(
-            header.name,
-            episodeLabel,
+            seriesTitle.takeIf { it.isNotBlank() },
             episodeTitle
         ).joinToString(" • ")
+            .ifBlank { header.name }
     }
 
     private fun TvType.toDownloadMediaType(): DownloadMediaType {

@@ -1,25 +1,30 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.tvseries
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RemoveDone
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,7 +43,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,16 +52,10 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Icon
-import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.OutlinedButton
-import androidx.tv.material3.OutlinedButtonDefaults
-import androidx.tv.material3.OutlinedIconButtonDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Tab
-import androidx.tv.material3.TabDefaults
 import androidx.tv.material3.TabRow
-import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -69,6 +67,8 @@ import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.icons.CustomDownload
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconSpec
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPill
+import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPillDefaults
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.TitleValueText
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
@@ -76,6 +76,7 @@ import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamBorderWidth
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import java.text.DateFormat
 import java.util.Date
+import kotlin.math.roundToInt
 
 internal fun resolveInitialSeasonId(
     seasons: List<TvSeason>,
@@ -89,6 +90,11 @@ internal fun resolveInitialSeasonId(
             season.seasonNumber == preferredSeasonNumber
     }?.id ?: seasons.first().id
 }
+
+private val CompactActionMinHeight = 40.dp
+private val CompactPlayButtonWithIconPadding = PaddingValues(start = 10.dp, top = 6.dp, end = 12.dp, bottom = 6.dp)
+private val CompactPlayIconSize = 18.dp
+private val CompactPlayIconSpacing = 6.dp
 
 @Composable
 internal fun SeasonsSectionHeader(modifier: Modifier = Modifier) {
@@ -163,6 +169,8 @@ internal fun EpisodeCard(
     fallbackDescription: String,
     onEpisodeSelected: (TvEpisode) -> Unit,
     onEpisodeQuickActionClick: (TvEpisode, MovieDetailsQuickAction) -> Unit = { _, _ -> },
+    isWatched: Boolean = false,
+    downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
     modifier: Modifier = Modifier
 ) {
     val actionFocusRequester = remember { FocusRequester() }
@@ -243,9 +251,11 @@ internal fun EpisodeCard(
 
                 AnimatedVisibility(visible = hasCardOrChildFocus) {
                     DetailsActionsRow(
-                        onPlayClick = {},
-                        playButtonLabel = "Play",
+                        onPlayClick = { onEpisodeSelected(episode) },
+                        playButtonLabel = stringResource(R.string.home_play),
                         onPlayLongClick = { },
+                        isWatched = isWatched,
+                        downloadActionState = downloadActionState,
                         onQuickActionClick = { action ->
                             onEpisodeQuickActionClick(episode, action)
                         },
@@ -386,14 +396,62 @@ private fun DetailsActionsRow(
     playButtonModifier: Modifier = Modifier,
     playButtonLabel: String? = null,
     onPlayLongClick: (() -> Unit)? = null,
+    isWatched: Boolean = false,
+    downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
 ) {
-    val downloadLabel = stringResource(R.string.download)
+    val watchedLabel = if (isWatched) {
+        stringResource(R.string.action_remove_from_watched)
+    } else {
+        stringResource(R.string.action_mark_as_watched)
+    }
+    val watchedUpToLabel = if (isWatched) {
+        stringResource(R.string.action_remove_mark_watched_up_to_this_episode)
+    } else {
+        stringResource(R.string.action_mark_watched_up_to_this_episode)
+    }
+    val watchedIcon = if (isWatched) Icons.Default.Close else Icons.Default.Done
+    val watchedUpToIcon = if (isWatched) Icons.Default.RemoveDone else Icons.Default.DoneAll
+    val watchedAction = if (isWatched) {
+        MovieDetailsQuickAction.RemoveFromWatched
+    } else {
+        MovieDetailsQuickAction.MarkAsWatched
+    }
+    val watchedUpToAction = if (isWatched) {
+        MovieDetailsQuickAction.RemoveWatchedUpToThisEpisode
+    } else {
+        MovieDetailsQuickAction.MarkWatchedUpToThisEpisode
+    }
+    val downloadIdleLabel = stringResource(R.string.download)
+    val downloadingLabel = stringResource(R.string.downloading)
+    val downloadedLabel = stringResource(R.string.downloaded)
+    val downloadProgressFraction = when (downloadActionState) {
+        MovieDetailsDownloadActionState.Idle -> 0f
+        is MovieDetailsDownloadActionState.Downloading ->
+            downloadActionState.progress.coerceIn(0f, 1f)
+
+        MovieDetailsDownloadActionState.Downloaded -> 1f
+        MovieDetailsDownloadActionState.Failed -> 0f
+    }
+    val downloadLabel = when (downloadActionState) {
+        MovieDetailsDownloadActionState.Idle -> downloadIdleLabel
+        is MovieDetailsDownloadActionState.Downloading ->
+            "$downloadingLabel (${(downloadProgressFraction * 100f).roundToInt()}%)"
+
+        MovieDetailsDownloadActionState.Downloaded -> downloadedLabel
+        MovieDetailsDownloadActionState.Failed -> stringResource(R.string.download_failed)
+    }
+    val downloadIcon = when (downloadActionState) {
+        MovieDetailsDownloadActionState.Idle -> Icons.Filled.CustomDownload
+        is MovieDetailsDownloadActionState.Downloading -> Icons.Default.Downloading
+        MovieDetailsDownloadActionState.Downloaded -> Icons.Default.DownloadDone
+        MovieDetailsDownloadActionState.Failed -> Icons.Outlined.ErrorOutline
+    }
 
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         PrimaryPlayButton(
             goToMoviePlayer = onPlayClick,
@@ -405,34 +463,29 @@ private fun DetailsActionsRow(
         val actions =
             listOf(
                 ActionIconSpec(
-                    icon = Icons.Default.Done,
-                    label = "Watched",
+                    icon = watchedIcon,
+                    label = watchedLabel,
                     testTag = "action_watched",
-                    action = MovieDetailsQuickAction.Bookmark
+                    action = watchedAction
                 ),
                 ActionIconSpec(
-                    icon = Icons.Default.DoneAll,
-                    label = "Watched up to",
+                    icon = watchedUpToIcon,
+                    label = watchedUpToLabel,
                     testTag = "action_watched_all",
-                    action = MovieDetailsQuickAction.Favorite
+                    action = watchedUpToAction
                 ),
                 ActionIconSpec(
-                    icon = Icons.Filled.CustomDownload,
+                    icon = downloadIcon,
                     label = downloadLabel,
                     testTag = "action_download",
-                    action = MovieDetailsQuickAction.Download
-                ),
-                ActionIconSpec(
-                    icon = Icons.Default.MoreVert,
-                    label = "More",
-                    testTag = "action_more",
-                    action = MovieDetailsQuickAction.More
+                    action = MovieDetailsQuickAction.Download,
+                    progressFraction = downloadProgressFraction
                 ),
             )
 
-
         ActionIconsPill(
             actions = actions,
+            style = ActionIconsPillDefaults.compact(),
             onActionClick = onQuickActionClick,
         )
     }
@@ -451,7 +504,7 @@ private fun PrimaryPlayButton(
     Button(
         onClick = goToMoviePlayer,
         onLongClick = onLongClick,
-        contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+        contentPadding = CompactPlayButtonWithIconPadding,
         colors = ButtonDefaults.colors(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -460,16 +513,17 @@ private fun PrimaryPlayButton(
             pressedContainerColor = MaterialTheme.colorScheme.primary,
             pressedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
-        modifier = modifier
+        modifier = modifier.heightIn(min = CompactActionMinHeight)
     ) {
         Icon(
             imageVector = Icons.Default.PlayArrow,
-            contentDescription = null
+            contentDescription = null,
+            modifier = Modifier.size(CompactPlayIconSize)
         )
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.size(CompactPlayIconSpacing))
         Text(
             text = label,
-            style = MaterialTheme.typography.titleSmall
+            style = MaterialTheme.typography.bodySmall
         )
     }
 }

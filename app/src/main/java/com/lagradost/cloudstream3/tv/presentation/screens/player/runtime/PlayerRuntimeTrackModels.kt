@@ -157,6 +157,44 @@ internal fun applyRuntimeVideoTrackSelection(
     player.trackSelectionParameters = newParameters
 }
 
+internal fun applyRuntimeSubtitleSelection(
+    player: ExoPlayer,
+    subtitleId: String?,
+): Boolean {
+    val parameterBuilder = player.trackSelectionParameters.buildUpon()
+        .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+
+    if (subtitleId == null) {
+        player.trackSelectionParameters = parameterBuilder
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            .build()
+        return true
+    }
+
+    val matchingTrack = player.currentTracks.groups.firstNotNullOfOrNull { group ->
+        if (group.type != C.TRACK_TYPE_TEXT) {
+            return@firstNotNullOfOrNull null
+        }
+        val trackGroup = group.mediaTrackGroup
+        (0 until trackGroup.length).firstOrNull { trackIndex ->
+            group.isTrackSupported(trackIndex) &&
+                trackGroup.getFormat(trackIndex).id?.stripRuntimeTrackId() == subtitleId
+        }?.let { trackIndex ->
+            trackGroup to trackIndex
+        }
+    } ?: return false
+
+    player.trackSelectionParameters = parameterBuilder
+        .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+        .setOverrideForType(TrackSelectionOverride(matchingTrack.first, matchingTrack.second))
+        .build()
+    return true
+}
+
+private fun String.stripRuntimeTrackId(): String {
+    return replace(Regex("""^\d+:"""), "")
+}
+
 private fun formatRuntimeAudioTrackLabel(
     index: Int,
     format: Format,

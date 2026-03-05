@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,8 @@ sealed interface DownloadMirrorSelectionEvent {
     data class Open(
         val compat: MovieDetailsEpisodeActionsCompat,
         val context: Context?,
+        val preferredSeason: Int? = null,
+        val preferredEpisode: Int? = null,
     ) : DownloadMirrorSelectionEvent
 
     data object SkipLoadingUi : DownloadMirrorSelectionEvent
@@ -60,7 +63,9 @@ class DownloadMirrorSelectionStateHolder(
         when (event) {
             is DownloadMirrorSelectionEvent.Open -> openPanel(
                 compat = event.compat,
-                context = event.context
+                context = event.context,
+                preferredSeason = event.preferredSeason,
+                preferredEpisode = event.preferredEpisode,
             )
 
             DownloadMirrorSelectionEvent.SkipLoadingUi -> skipLoadingUi()
@@ -77,6 +82,8 @@ class DownloadMirrorSelectionStateHolder(
     private fun openPanel(
         compat: MovieDetailsEpisodeActionsCompat,
         context: Context?,
+        preferredSeason: Int?,
+        preferredEpisode: Int?,
     ) {
         val requestVersion = activeRequestVersion + 1
         activeRequestVersion = requestVersion
@@ -86,10 +93,12 @@ class DownloadMirrorSelectionStateHolder(
             isLoading = true,
         )
 
-        loadingJob = scope.launch {
+        loadingJob = scope.launch(Dispatchers.IO) {
             try {
                 val outcome = compat.requestDownloadMirrorSelection(
                     context = context,
+                    preferredSeason = preferredSeason,
+                    preferredEpisode = preferredEpisode,
                     onSourcesProgress = { loadedSources ->
                         if (activeRequestVersion != requestVersion) return@requestDownloadMirrorSelection
                         _uiState.update { current ->

@@ -6,6 +6,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatDownloadSnapshot
+import com.lagradost.cloudstream3.tv.compat.downloads.calculateDownloadProgressFraction
+import com.lagradost.cloudstream3.tv.compat.downloads.resolveNormalizedDownloadStatus
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
 import com.lagradost.cloudstream3.ui.WatchType
@@ -85,6 +87,9 @@ internal fun resolveDownloadActionState(
     val normalizedProgress = progressFraction.coerceIn(0f, 1f)
 
     return when {
+        status == VideoDownloadManager.DownloadType.IsFailed ->
+            MovieDetailsDownloadActionState.Failed
+
         status == VideoDownloadManager.DownloadType.IsDone || normalizedProgress >= 0.999f ->
             MovieDetailsDownloadActionState.Downloaded
 
@@ -98,47 +103,23 @@ internal fun resolveDownloadActionState(
 internal fun normalizeDownloadStatus(
     snapshot: MovieDetailsCompatDownloadSnapshot,
 ): VideoDownloadManager.DownloadType? {
-    val status = snapshot.status
-    if (status != null) {
-        return status
-    }
-
-    if (snapshot.hasPendingRequest) {
-        return if (snapshot.downloadedBytes > 0L) {
-            VideoDownloadManager.DownloadType.IsDownloading
-        } else {
-            VideoDownloadManager.DownloadType.IsPending
-        }
-    }
-
-    if (snapshot.downloadedBytes > 0L && snapshot.totalBytes <= 0L) {
-        return VideoDownloadManager.DownloadType.IsDownloading
-    }
-
-    if (snapshot.totalBytes <= 0L) {
-        return null
-    }
-
-    val hasFinishedDownload = snapshot.totalBytes > 0L &&
-        snapshot.downloadedBytes > 1024L &&
-        snapshot.downloadedBytes + 1024L >= snapshot.totalBytes
-
-    return if (hasFinishedDownload) {
-        VideoDownloadManager.DownloadType.IsDone
-    } else {
-        VideoDownloadManager.DownloadType.IsDownloading
-    }
+    return resolveNormalizedDownloadStatus(
+        status = snapshot.status,
+        downloadedBytes = snapshot.downloadedBytes,
+        totalBytes = snapshot.totalBytes,
+        hasPendingRequest = snapshot.hasPendingRequest,
+        isStaleZeroProgress = false,
+    )
 }
 
 internal fun calculateProgressFraction(
     downloadedBytes: Long,
     totalBytes: Long,
 ): Float {
-    if (downloadedBytes <= 0L || totalBytes <= 0L) {
-        return 0f
-    }
-
-    return (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
+    return calculateDownloadProgressFraction(
+        downloadedBytes = downloadedBytes,
+        totalBytes = totalBytes,
+    )
 }
 
 internal fun Int?.toWatchType(): WatchType {
