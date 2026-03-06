@@ -62,6 +62,9 @@ import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
+import com.lagradost.cloudstream3.tv.presentation.focus.resolveAvailableFocusKey
 
 private object SettingsPanelTokens {
     val ActivePanelContentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp)
@@ -110,27 +113,31 @@ internal fun ActiveSettingsPanelList(
     val focusableEntries = remember(entries) {
         entries.filter { entry -> entry.type != SettingsEntryType.Header }
     }
-    val requestersByKey = remember(focusableEntries) {
-        focusableEntries.associate { entry ->
-            entry.stableKey to FocusRequester()
+    val focusableKeys = remember(focusableEntries) {
+        focusableEntries.map(SettingsEntry::stableKey)
+    }
+    val requestersByKey = rememberFocusRequesterMap(focusableKeys)
+    val focusedKey = focusedKeyProvider()
+    val restoreKey = remember(restoreFocusToken, autoRequestFocus, focusableKeys, focusedKey) {
+        if (!autoRequestFocus) {
+            null
+        } else {
+            resolveAvailableFocusKey(focusableKeys, focusedKey)
         }
     }
 
-    LaunchedEffect(restoreFocusToken, focusableEntries, autoRequestFocus) {
-        if (!autoRequestFocus) return@LaunchedEffect
-        if (focusableEntries.isEmpty()) return@LaunchedEffect
-        val focusedKey = focusedKeyProvider()
-        val restoreKey = focusedKey ?: focusableEntries.first().stableKey
-        val restoreIndex = focusableEntries.indexOfFirst { it.stableKey == restoreKey }
-            .takeIf { it >= 0 }
-            ?: 0
-
-        if (focusedKey == null) {
-            onEntryFocused(focusableEntries[restoreIndex])
+    FocusRequestEffect(
+        requester = restoreKey?.let(requestersByKey::get),
+        requestKey = restoreFocusToken to restoreKey,
+        enabled = autoRequestFocus && restoreKey != null,
+        onFocused = {
+            if (focusedKey == null) {
+                focusableEntries
+                    .firstOrNull { entry -> entry.stableKey == restoreKey }
+                    ?.let(onEntryFocused)
+            }
         }
-
-        requestersByKey[focusableEntries[restoreIndex].stableKey]?.requestFocus()
-    }
+    )
 
     SettingsPanelList(
         title = title,

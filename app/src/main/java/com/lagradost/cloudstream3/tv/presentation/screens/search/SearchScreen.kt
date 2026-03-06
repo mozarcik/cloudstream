@@ -273,16 +273,6 @@ private fun SearchInputField(
                 .onPreviewKeyEvent { keyEvent ->
                     if (keyEvent.type != KeyEventType.KeyUp) return@onPreviewKeyEvent false
                     when (keyEvent.key) {
-                        Key.DirectionDown -> {
-                            focusManager.moveFocus(FocusDirection.Down)
-                            true
-                        }
-
-                        Key.DirectionUp -> {
-                            focusManager.moveFocus(FocusDirection.Up)
-                            true
-                        }
-
                         Key.Enter,
                         Key.NumPadEnter -> {
                             onSearchAction()

@@ -8,13 +8,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.home.MediaGridStatic
 
 @Composable
@@ -22,6 +25,7 @@ fun LibraryFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onBack: () -> Unit,
     onScroll: (Boolean) -> Unit,
+    restoreFocusToken: Int = 0,
 ) {
     val selectedSection by LibraryFeedGridSelectionStore.selectedSection.collectAsState()
 
@@ -34,10 +38,18 @@ fun LibraryFeedGridScreen(
 
     val section = selectedSection ?: return
     val gridState = rememberLazyGridState()
+    val firstItemFocusRequester = remember { FocusRequester() }
+    val pendingRestoreTargetId = LibraryFeedGridSelectionStore.pendingRestoreTargetId
 
     LaunchedEffect(Unit) {
         onScroll(true)
     }
+
+    FocusRequestEffect(
+        requester = firstItemFocusRequester,
+        requestKey = section.id,
+        enabled = pendingRestoreTargetId == null
+    )
 
     HaloHost(
         modifier = Modifier.fillMaxSize()
@@ -56,8 +68,19 @@ fun LibraryFeedGridScreen(
 
             MediaGridStatic(
                 items = section.items,
-                onMediaClick = onMediaClick,
+                onMediaClick = { item ->
+                    LibraryFeedGridSelectionStore.scheduleRestoreToLastFocused()
+                    onMediaClick(item)
+                },
                 gridState = gridState,
+                firstItemFocusRequester = firstItemFocusRequester,
+                focusKeyPrefix = "library_feed_grid",
+                pendingRestoreFocusTargetId = pendingRestoreTargetId,
+                restoreFocusToken = restoreFocusToken,
+                onItemFocused = LibraryFeedGridSelectionStore::onTargetFocused,
+                onRestoreFocusConsumed = { targetId ->
+                    LibraryFeedGridSelectionStore.clearPendingRestore(targetId)
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 56.dp)

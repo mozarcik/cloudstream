@@ -13,15 +13,20 @@ import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 fun ContinueWatchingHeroSection(
     state: HomeFeedLoadState,
     resumeFocusRequester: FocusRequester,
+    cardsFocusRequester: FocusRequester,
+    upFocusRequester: FocusRequester,
     sourceButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
+    pendingRestoreFocusTargetId: String? = null,
+    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     onResumeClick: (MediaItemCompat) -> Unit = {},
     onDetailsClick: (MediaItemCompat) -> Unit = {},
     onRemoveClick: (MediaItemCompat) -> Unit = {},
     onCardClick: (MediaItemCompat) -> Unit = {},
-    onMoveDownFromCards: () -> Unit = {},
     onHeroContentFocused: () -> Unit = {},
+    onFocusTargetFocused: (String) -> Unit = {},
+    onRestoreFocusConsumed: (String) -> Unit = {},
 ) {
     when (state) {
         HomeFeedLoadState.Loading -> {
@@ -55,14 +60,19 @@ fun ContinueWatchingHeroSection(
             ContinueWatchingHeroLoadedState(
                 items = state.items,
                 resumeFocusRequester = resumeFocusRequester,
+                cardsFocusRequester = cardsFocusRequester,
+                upFocusRequester = upFocusRequester,
                 sourceButtonFocusRequester = sourceButtonFocusRequester,
                 isInteractive = isInteractive,
+                pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
+                restoreFocusToken = restoreFocusToken,
                 onResumeClick = onResumeClick,
                 onDetailsClick = onDetailsClick,
                 onRemoveClick = onRemoveClick,
                 onCardClick = onCardClick,
-                onMoveDownFromCards = onMoveDownFromCards,
                 onHeroContentFocused = onHeroContentFocused,
+                onFocusTargetFocused = onFocusTargetFocused,
+                onRestoreFocusConsumed = onRestoreFocusConsumed,
                 modifier = modifier
                     .fillMaxWidth()
                     .height(ContinueWatchingHeroHeight)

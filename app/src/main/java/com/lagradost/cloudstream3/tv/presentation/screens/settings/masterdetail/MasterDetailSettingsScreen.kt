@@ -8,6 +8,7 @@ fun MasterDetailSettingsScreen(
     onExitSettings: () -> Unit,
     modifier: Modifier = Modifier,
     onTopBarFocusableChanged: (Boolean) -> Unit = {},
+    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit = {},
     showDebugOverlay: Boolean = false
 ) {
     val registry = rememberMasterDetailSettingsRegistry()
@@ -20,6 +21,7 @@ fun MasterDetailSettingsScreen(
         hostState = hostState,
         onExitSettings = onExitSettings,
         onTopBarFocusableChanged = onTopBarFocusableChanged,
+        onTopBarDownNavigationEnabledChanged = onTopBarDownNavigationEnabledChanged,
         modifier = modifier,
         showDebugOverlay = showDebugOverlay
     )

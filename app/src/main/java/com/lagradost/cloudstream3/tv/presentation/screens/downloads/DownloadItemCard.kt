@@ -73,11 +73,11 @@ fun DownloadItemCard(
     onPlayClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onCardFocused: () -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
-    focusRequester: FocusRequester? = null,
 ) {
     val context = LocalContext.current
-    val cardFocusRequester = focusRequester ?: remember { FocusRequester() }
+    val cardFocusRequester = focusRequester
     val playButtonFocusRequester = remember { FocusRequester() }
     val deleteButtonFocusRequester = remember { FocusRequester() }
     val canPlay = item.state is DownloadState.Downloaded

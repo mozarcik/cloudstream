@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -44,6 +43,7 @@ import androidx.compose.material.icons.filled.Warning
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
@@ -109,14 +109,16 @@ fun UnavailableDetailsScreen(
     val manualSearchQuery = remember(state.title) {
         state.title.trim()
     }
-
-    LaunchedEffect(state.title, showRemoveFromLibraryAction) {
-        if (showRemoveFromLibraryAction) {
-            removeButtonFocusRequester.requestFocus()
-        } else {
-            manualSearchFocusRequester.requestFocus()
-        }
+    val initialFocusRequester = if (showRemoveFromLibraryAction) {
+        removeButtonFocusRequester
+    } else {
+        manualSearchFocusRequester
     }
+
+    FocusRequestEffect(
+        requester = initialFocusRequester,
+        requestKey = state.title to showRemoveFromLibraryAction,
+    )
 
     BackHandler(onBack = onBackPressed)
 

@@ -34,14 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +66,7 @@ import com.lagradost.cloudstream3.tv.icons.CustomDownload
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconSpec
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPill
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPillDefaults
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.TitleValueText
@@ -117,35 +116,40 @@ internal fun EpisodesSectionHeader(modifier: Modifier = Modifier) {
 internal fun SeasonSelectorRow(
     seasons: List<TvSeason>,
     selectedSeasonId: String?,
+    focusRequesters: List<FocusRequester>,
     onSeasonSelected: (TvSeason) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (seasons.isEmpty()) return
 
-    val focusManager = LocalFocusManager.current
-    val (tabRowFocusRequester, firstTabFocusRequester) = remember { FocusRequester.createRefs() }
+    val (tabRowFocusRequester, fallbackTabFocusRequester) = remember { FocusRequester.createRefs() }
+    val internalTabFocusRequesters = rememberFocusRequesters(count = seasons.size)
+    val tabFocusRequesters = if (focusRequesters.size == seasons.size) {
+        focusRequesters
+    } else {
+        internalTabFocusRequesters
+    }
     val selectedTabIndex = seasons.indexOfFirst { season -> season.id == selectedSeasonId }
         .takeIf { it >= 0 } ?: 0
+    val selectedTabFocusRequester = tabFocusRequesters.getOrElse(selectedTabIndex) {
+        fallbackTabFocusRequester
+    }
 
     TabRow(
         modifier = modifier
             .focusRequester(tabRowFocusRequester)
-            .focusRestorer(firstTabFocusRequester),
+            .focusRestorer(selectedTabFocusRequester),
         selectedTabIndex = selectedTabIndex,
         separator = { Spacer(modifier = Modifier.width(12.dp)) },
     ) {
         seasons.forEachIndexed { index, season ->
-            val tabModifier = if (index == 0) {
-                Modifier.focusRequester(firstTabFocusRequester)
-            } else {
-                Modifier
-            }
-
             Tab(
                 selected = index == selectedTabIndex,
                 onFocus = { onSeasonSelected(season) },
-                onClick = { focusManager.moveFocus(FocusDirection.Down) },
-                modifier = tabModifier,
+                onClick = { onSeasonSelected(season) },
+                modifier = Modifier.focusRequester(
+                    tabFocusRequesters.getOrElse(index) { fallbackTabFocusRequester }
+                ),
             ) {
                 Text(
                     text = seasonChipLabel(season = season),

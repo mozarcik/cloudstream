@@ -15,11 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -44,9 +39,9 @@ fun QuickSourcesRow(
     rowEntryFocusRequester: FocusRequester,
     moreButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
+    upFocusRequester: FocusRequester? = null,
     downFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
-    onMoveDown: (() -> Unit)? = null,
     onSourceSelected: (MainAPI) -> Unit,
     onMoreClick: () -> Unit,
 ) {
@@ -170,12 +165,9 @@ fun QuickSourcesRow(
                         .focusRequester(requesterForChip(index, entryChipIndex))
                         .focusProperties {
                             canFocus = isInteractive
+                            up = upFocusRequester ?: FocusRequester.Default
                             down = downFocusRequester ?: FocusRequester.Default
                         }
-                        .handleMoveDown(
-                            isInteractive = isInteractive,
-                            onMoveDown = onMoveDown
-                        )
                         .testTag("source_chip_$sourceId")
                 )
             }.first().measure(looseConstraints)
@@ -189,12 +181,9 @@ fun QuickSourcesRow(
                         .focusRequester(moreButtonFocusRequester)
                         .focusProperties {
                             canFocus = isInteractive
+                            up = upFocusRequester ?: FocusRequester.Default
                             down = downFocusRequester ?: FocusRequester.Default
                         }
-                        .handleMoveDown(
-                            isInteractive = isInteractive,
-                            onMoveDown = onMoveDown
-                        )
                 )
             }.first().measure(looseConstraints)
         } else {
@@ -279,25 +268,5 @@ private fun MoreSourcesButton(
             contentDescription = null,
             modifier = Modifier.size(18.dp)
         )
-    }
-}
-
-private fun Modifier.handleMoveDown(
-    isInteractive: Boolean,
-    onMoveDown: (() -> Unit)?,
-): Modifier {
-    if (onMoveDown == null) return this
-
-    return onPreviewKeyEvent { event ->
-        if (!isInteractive || event.type != KeyEventType.KeyDown) {
-            return@onPreviewKeyEvent false
-        }
-
-        if (event.key == Key.DirectionDown) {
-            onMoveDown()
-            true
-        } else {
-            false
-        }
     }
 }

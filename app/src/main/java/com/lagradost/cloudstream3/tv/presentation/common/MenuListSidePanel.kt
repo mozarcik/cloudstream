@@ -58,8 +58,10 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.RadioButton
 import androidx.tv.material3.Text
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
+import com.lagradost.cloudstream3.tv.presentation.focus.resolveAvailableFocusKey
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DotSeparatedRow
-import kotlinx.coroutines.delay
 
 enum class SidePanelTitleStyle {
     Default,
@@ -150,6 +152,7 @@ fun MenuListSidePanel(
     onDirectionalActionToken: ((Any) -> Unit)? = null,
     onInlineTextFieldValueChanged: ((Any, String) -> Unit)? = null,
     onInlineTextFieldSubmit: ((Any, String) -> Unit)? = null,
+    onExitUpRequested: (() -> Unit)? = null,
 ) {
     val resolvedContentKey = contentAnimationKey ?: Unit
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
@@ -182,22 +185,34 @@ fun MenuListSidePanel(
         !menuItem.isSectionHeader && menuItem.enabled && isItemVisible(menuItem)
     }
         .map { menuItem -> menuItem.id }
-    val focusRequesters = remember(focusableItemIds) {
-        focusableItemIds.associateWith { FocusRequester() }
-    }
+    val firstFocusableItemId = focusableItemIds.firstOrNull()
+    val focusRequesters = rememberFocusRequesterMap(focusableItemIds)
     val listState = remember(resolvedContentKey) {
         LazyListState()
     }
-    var hasRequestedInitialFocus by remember { mutableStateOf(false) }
     var focusedItemId by remember(resolvedContentKey) { mutableStateOf<String?>(null) }
+    val requestFocusItemId = remember(
+        visible,
+        resolvedContentKey,
+        initialFocusedItemId,
+        focusableItemIds,
+        focusedItemId
+    ) {
+        if (!visible || focusableItemIds.isEmpty()) {
+            null
+        } else if (focusedItemId != null && focusedItemId in focusableItemIds) {
+            null
+        } else {
+            resolveAvailableFocusKey(focusableItemIds, initialFocusedItemId, focusedItemId)
+        }
+    }
 
     LaunchedEffect(visible, resolvedContentKey) {
-        hasRequestedInitialFocus = false
         focusedItemId = null
     }
 
-    suspend fun requestItemFocus(targetItemId: String): Boolean {
-        val focusRequester = focusRequesters[targetItemId] ?: return false
+    LaunchedEffect(requestFocusItemId, items) {
+        val targetItemId = requestFocusItemId ?: return@LaunchedEffect
         val focusItemListIndex = items.indexOfFirst { menuItem ->
             menuItem.id == targetItemId && isItemVisible(menuItem)
         }
@@ -205,40 +220,18 @@ fun MenuListSidePanel(
         if (focusItemListIndex >= 0) {
             listState.scrollToItem(index = focusItemListIndex)
         }
-
-        repeat(2) {
-            if (focusRequester.requestFocus()) {
-                return true
-            }
-            delay(16)
-        }
-        return false
     }
 
-    LaunchedEffect(visible, resolvedContentKey, initialFocusedItemId, focusableItemIds, focusedItemId) {
-        if (!visible || focusableItemIds.isEmpty()) {
-            return@LaunchedEffect
+    FocusRequestEffect(
+        requester = requestFocusItemId?.let(focusRequesters::get),
+        requestKey = resolvedContentKey to requestFocusItemId,
+        enabled = visible && requestFocusItemId != null,
+        attempts = 40,
+        retryDelayMs = 50,
+        onFocused = {
+            focusedItemId = requestFocusItemId
         }
-
-        if (focusedItemId?.let(focusableItemIds::contains) == true) {
-            return@LaunchedEffect
-        }
-
-        val focusItemId = initialFocusedItemId?.takeIf(focusRequesters::containsKey)
-            ?: focusableItemIds.first()
-        repeat(40) {
-            if (!visible) return@LaunchedEffect
-            if (focusedItemId?.let(focusableItemIds::contains) == true) {
-                return@LaunchedEffect
-            }
-            if (requestItemFocus(focusItemId)) {
-                hasRequestedInitialFocus = true
-                focusedItemId = focusItemId
-                return@LaunchedEffect
-            }
-            delay(50)
-        }
-    }
+    )
 
     SlidingSidePanel(
         visible = visible,
@@ -448,8 +441,23 @@ fun MenuListSidePanel(
                                                     .semantics(mergeDescendants = true) { }
                                                     .onPreviewKeyEvent { keyEvent ->
                                                         val nativeEvent = keyEvent.nativeKeyEvent
+                                                        val isExitUpEvent =
+                                                            (nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
+                                                                nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP) &&
+                                                                menuItem.id == firstFocusableItemId &&
+                                                                onExitUpRequested != null
+
+                                                        if (isExitUpEvent && nativeEvent.action == AndroidKeyEvent.ACTION_DOWN) {
+                                                            onExitUpRequested()
+                                                            return@onPreviewKeyEvent true
+                                                        }
+
                                                         if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
                                                             return@onPreviewKeyEvent false
+                                                        }
+
+                                                        if (isExitUpEvent) {
+                                                            return@onPreviewKeyEvent true
                                                         }
 
                                                         if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {
@@ -550,8 +558,23 @@ fun MenuListSidePanel(
                                                 .semantics(mergeDescendants = true) { }
                                                 .onPreviewKeyEvent { keyEvent ->
                                                     val nativeEvent = keyEvent.nativeKeyEvent
+                                                    val isExitUpEvent =
+                                                        (nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
+                                                            nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP) &&
+                                                            menuItem.id == firstFocusableItemId &&
+                                                            onExitUpRequested != null
+
+                                                    if (isExitUpEvent && nativeEvent.action == AndroidKeyEvent.ACTION_DOWN) {
+                                                        onExitUpRequested()
+                                                        return@onPreviewKeyEvent true
+                                                    }
+
                                                     if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {
                                                         return@onPreviewKeyEvent false
+                                                    }
+
+                                                    if (isExitUpEvent) {
+                                                        return@onPreviewKeyEvent true
                                                     }
 
                                                     if (menuItem.onKeyUp?.invoke(nativeEvent.keyCode) == true) {

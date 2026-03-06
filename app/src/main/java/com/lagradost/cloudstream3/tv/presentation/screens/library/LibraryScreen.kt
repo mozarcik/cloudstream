@@ -32,6 +32,7 @@ fun LibraryScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (LibrarySectionUiState) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
+    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     viewModel: LibraryViewModel = viewModel(),
 ) {
@@ -42,9 +43,20 @@ fun LibraryScreen(
     val loadingLabel = stringResource(id = R.string.loading)
     val emptyLibraryLabel = stringResource(id = R.string.empty_library_logged_in_message)
     val noLibraryAccountsLabel = stringResource(id = R.string.empty_library_no_accounts_message)
+    val pendingRestoreTargetId = LibraryFocusStore.pendingRestoreTargetId
 
     LaunchedEffect(Unit) {
         onScroll(true)
+    }
+
+    val openDetailsWithRestore: (MediaItemCompat) -> Unit = { item ->
+        LibraryFocusStore.scheduleRestoreToLastFocused()
+        onMediaClick(item)
+    }
+
+    val openFeedGridWithRestore: (LibrarySectionUiState) -> Unit = { section ->
+        LibraryFocusStore.scheduleRestoreToLastFocused()
+        onOpenFeedGrid(section)
     }
 
     HaloHost(
@@ -96,15 +108,31 @@ fun LibraryScreen(
                             FeedSection(
                                 title = section.title,
                                 state = HomeFeedLoadState.Success(section.items),
-                                onMediaClick = onMediaClick,
+                                onMediaClick = openDetailsWithRestore,
                                 onShowMoreClick = {
-                                    onOpenFeedGrid(section)
+                                    openFeedGridWithRestore(section)
                                 },
                                 isInteractive = true,
                                 firstItemFocusRequester = if (index == 0) {
                                     firstFeedCardFocusRequester
                                 } else {
                                     null
+                                },
+                                sectionFocusKey = "library:section:${section.id}",
+                                pendingRestoreFocusTargetId = pendingRestoreTargetId,
+                                restoreFocusToken = restoreFocusToken,
+                                onItemFocused = { item ->
+                                    LibraryFocusStore.onTargetFocused(
+                                        LibraryFocusStore.feedPoster(section.id, item)
+                                    )
+                                },
+                                onShowMoreFocused = {
+                                    LibraryFocusStore.onTargetFocused(
+                                        LibraryFocusStore.feedShowMore(section.id)
+                                    )
+                                },
+                                onRestoreFocusConsumed = { targetId ->
+                                    LibraryFocusStore.clearPendingRestore(targetId)
                                 }
                             )
                         }

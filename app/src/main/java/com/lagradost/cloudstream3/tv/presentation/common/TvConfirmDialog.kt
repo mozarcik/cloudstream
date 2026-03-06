@@ -41,6 +41,7 @@ import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Surface
 import androidx.tv.material3.SurfaceDefaults
 import androidx.tv.material3.Text
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -90,11 +91,11 @@ fun TvConfirmDialog(
         isVisible = true
     }
 
-    LaunchedEffect(isVisible) {
-        if (isVisible) {
-            primaryFocusRequester.requestFocus()
-        }
-    }
+    FocusRequestEffect(
+        requester = primaryFocusRequester,
+        requestKey = isVisible,
+        enabled = isVisible
+    )
 
     Dialog(
         onDismissRequest = {

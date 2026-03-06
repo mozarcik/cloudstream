@@ -5,6 +5,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
 import com.lagradost.cloudstream3.tv.compat.home.FeedRepositoryImpl
@@ -16,6 +17,8 @@ fun HomeScreenV2(
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
+    topBarFocusRequester: FocusRequester,
+    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val sourcesViewModel: HomeSourcesViewModel = viewModel(
@@ -45,6 +48,8 @@ fun HomeScreenV2(
         onContinueWatchingPlay = onContinueWatchingPlay,
         onOpenFeedGrid = onOpenFeedGrid,
         onScroll = onScroll,
+        topBarFocusRequester = topBarFocusRequester,
+        restoreFocusToken = restoreFocusToken,
         onSourceSelected = sourcesViewModel::selectSource,
         onMorePanelOpenChange = sourcesViewModel::setMorePanelOpen,
         onTogglePin = sourcesViewModel::togglePinned,

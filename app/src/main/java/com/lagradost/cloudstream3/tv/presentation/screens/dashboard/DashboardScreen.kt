@@ -1,4 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
+
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
@@ -18,11 +19,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -57,7 +60,10 @@ import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridS
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.MasterDetailSettingsScreen
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
+import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
+import kotlinx.coroutines.launch
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
 private val DashboardTopBarHorizontalPadding = 48.dp
@@ -90,15 +96,23 @@ fun DashboardScreen(
 ) {
     val density = LocalDensity.current
     val navController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
+    val topBarFocusRequesters = rememberFocusRequesters(count = TopBarTabs.size + 1)
 
     var isTopBarVisible by remember { mutableStateOf(true) }
     var isTopBarFocused by remember { mutableStateOf(false) }
     var isTopBarFocusable by remember { mutableStateOf(true) }
+    var isTopBarDownNavigationEnabled by remember { mutableStateOf(true) }
 
     val homeTabIndex = remember { TopBarTabs.indexOf(Screens.Home).coerceAtLeast(0) }
     val libraryTabIndex = remember { TopBarTabs.indexOf(Screens.Library).coerceAtLeast(0) }
     val searchTabIndex = remember { TopBarTabs.indexOf(Screens.Search).coerceAtLeast(0) }
     var currentDestination: String? by remember { mutableStateOf(null) }
+    var previousDestination: String? by remember { mutableStateOf(null) }
+    var homeRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var libraryRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var homeFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var libraryFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     val currentTopBarSelectedTabIndex by remember(
         currentDestination,
         homeTabIndex,
@@ -122,6 +136,9 @@ fun DashboardScreen(
             if (tabIndex >= 0) tabIndex else homeTabIndex
         }
     }
+    val currentTopBarFocusRequester = topBarFocusRequesters[
+        (currentTopBarSelectedTabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
+    ]
 
     DisposableEffect(Unit) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -132,6 +149,54 @@ fun DashboardScreen(
 
         onDispose {
             navController.removeOnDestinationChangedListener(listener)
+        }
+    }
+
+    LaunchedEffect(currentDestination) {
+        isTopBarDownNavigationEnabled = true
+        when {
+            previousDestination == Screens.HomeFeedGrid.name &&
+                currentDestination == Screens.Home.name -> {
+                homeRestoreFocusToken += 1
+            }
+
+            previousDestination == Screens.LibraryFeedGrid.name &&
+                currentDestination == Screens.Library.name -> {
+                libraryRestoreFocusToken += 1
+            }
+        }
+        if (currentDestination != null) {
+            previousDestination = currentDestination
+        }
+    }
+
+    LaunchedEffect(isComingBackFromDifferentScreen, currentDestination) {
+        if (!isComingBackFromDifferentScreen) return@LaunchedEffect
+
+        when (currentDestination) {
+            Screens.Home.name -> {
+                homeRestoreFocusToken += 1
+            }
+
+            Screens.Library.name -> {
+                libraryRestoreFocusToken += 1
+            }
+
+            Screens.HomeFeedGrid.name -> {
+                homeFeedGridRestoreFocusToken += 1
+            }
+
+            Screens.LibraryFeedGrid.name -> {
+                libraryFeedGridRestoreFocusToken += 1
+            }
+        }
+        resetIsComingBackFromDifferentScreen()
+    }
+
+    fun requestTopBarFocus(tabIndex: Int) {
+        val requesterIndex = (tabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
+        coroutineScope.launch {
+            topBarFocusRequesters[requesterIndex].requestFocusWithRetry()
         }
     }
 
@@ -146,11 +211,13 @@ fun DashboardScreen(
                 navController.popBackStack()
             } else if (!isTopBarVisible) {
                 isTopBarVisible = true
-                TopBarFocusRequesters[currentTopBarSelectedTabIndex + 1].requestFocus()
+                requestTopBarFocus(currentTopBarSelectedTabIndex)
             } else if (currentTopBarSelectedTabIndex == homeTabIndex) onBackPressed()
             else if (!isTopBarFocused) {
-                TopBarFocusRequesters[currentTopBarSelectedTabIndex + 1].requestFocus()
-            } else TopBarFocusRequesters[homeTabIndex + 1].requestFocus()
+                requestTopBarFocus(currentTopBarSelectedTabIndex)
+            } else {
+                requestTopBarFocus(homeTabIndex)
+            }
         }
     ) {
         // We do not want to focus the TopBar everytime we come back from another screen e.g.
@@ -180,7 +247,7 @@ fun DashboardScreen(
 
         LaunchedEffect(Unit) {
             if (!wasTopBarFocusRequestedBefore) {
-                TopBarFocusRequesters[currentTopBarSelectedTabIndex + 1].requestFocus()
+                requestTopBarFocus(currentTopBarSelectedTabIndex)
                 wasTopBarFocusRequestedBefore = true
             }
         }
@@ -196,7 +263,9 @@ fun DashboardScreen(
                     bottom = DashboardTopBarVerticalPadding
                 ),
             selectedTabIndex = currentTopBarSelectedTabIndex,
+            focusRequesters = topBarFocusRequesters,
             isFocusable = isTopBarFocusable,
+            isDownNavigationEnabled = isTopBarDownNavigationEnabled,
         ) { screen ->
             val targetRoute = screen()
             if (currentDestination != targetRoute) {
@@ -214,8 +283,14 @@ fun DashboardScreen(
             openVideoPlayer = openVideoPlayer,
             updateTopBarVisibility = { isTopBarVisible = it },
             updateTopBarFocusable = { isTopBarFocusable = it },
+            updateTopBarDownNavigationEnabled = { isTopBarDownNavigationEnabled = it },
             searchPrefillQuery = searchPrefillQuery,
             onSearchPrefillConsumed = onSearchPrefillConsumed,
+            topBarSelectedFocusRequester = currentTopBarFocusRequester,
+            homeRestoreFocusToken = homeRestoreFocusToken,
+            libraryRestoreFocusToken = libraryRestoreFocusToken,
+            homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
+            libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
             navController = navController,
             modifier = Modifier.padding(top = navHostTopPaddingDp),
         )
@@ -250,8 +325,14 @@ private fun Body(
     openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
+    updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
     searchPrefillQuery: String?,
     onSearchPrefillConsumed: () -> Unit,
+    topBarSelectedFocusRequester: FocusRequester,
+    homeRestoreFocusToken: Int,
+    libraryRestoreFocusToken: Int,
+    homeFeedGridRestoreFocusToken: Int,
+    libraryFeedGridRestoreFocusToken: Int,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
@@ -299,7 +380,9 @@ private fun Body(
                     HomeFeedGridSelectionStore.setSelectedFeed(feed)
                     navController.navigate(Screens.HomeFeedGrid())
                 },
-                onScroll = updateTopBarVisibility
+                onScroll = updateTopBarVisibility,
+                topBarFocusRequester = topBarSelectedFocusRequester,
+                restoreFocusToken = homeRestoreFocusToken
             )
         }
         composable(Screens.HomeFeedGrid()) {
@@ -322,7 +405,8 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                onScroll = updateTopBarVisibility
+                onScroll = updateTopBarVisibility,
+                restoreFocusToken = homeFeedGridRestoreFocusToken
             )
         }
         composable(Screens.Library()) {
@@ -344,7 +428,8 @@ private fun Body(
                     LibraryFeedGridSelectionStore.setSelectedSection(section)
                     navController.navigate(Screens.LibraryFeedGrid())
                 },
-                onScroll = updateTopBarVisibility
+                onScroll = updateTopBarVisibility,
+                restoreFocusToken = libraryRestoreFocusToken
             )
         }
         composable(Screens.LibraryFeedGrid()) {
@@ -365,7 +450,8 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                onScroll = updateTopBarVisibility
+                onScroll = updateTopBarVisibility,
+                restoreFocusToken = libraryFeedGridRestoreFocusToken
             )
         }
         composable(Screens.Downloads()) {
@@ -430,7 +516,9 @@ private fun Body(
                         PlayerScreenNavigation.buildDownloadedEpisodeData(item.episodeId)
                     )
                 },
-                onScroll = updateTopBarVisibility
+                onScroll = updateTopBarVisibility,
+                topBarFocusRequester = topBarSelectedFocusRequester,
+                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled
             )
         }
         composable(Screens.Search()) {
@@ -481,10 +569,12 @@ private fun Body(
                 onExitSettings = {
                     updateTopBarVisibility(true)
                     updateTopBarFocusable(true)
+                    updateTopBarDownNavigationEnabled(true)
                 },
                 onTopBarFocusableChanged = { focusable ->
                     updateTopBarFocusable(focusable)
-                }
+                },
+                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled
             )
         }
     }

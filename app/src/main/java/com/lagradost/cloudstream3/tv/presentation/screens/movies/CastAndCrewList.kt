@@ -10,33 +10,31 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ClassicCard
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.data.entities.MovieCast
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamBorderWidth
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
-import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamSurfaceDefaults
 import com.lagradost.cloudstream3.tv.presentation.utils.ourColors
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -46,15 +44,26 @@ fun CastAndCrewList(
     title: String? = null
 ) {
     val childPadding = rememberChildPadding()
+    val (rowFocusRequester, firstItemFocusRequester) = remember { FocusRequester.createRefs() }
 
     LazyRow(
         modifier = Modifier
             .padding(top = 16.dp)
-            .focusRestorer(),
+            .focusRequester(rowFocusRequester)
+            .focusRestorer(firstItemFocusRequester),
         contentPadding = PaddingValues(start = childPadding.start)
     ) {
-        items(castAndCrew, key = { it.id }) {
-            CastAndCrewItem(it, modifier = Modifier.width(144.dp))
+        itemsIndexed(castAndCrew, key = { _, item -> item.id }) { index, castMember ->
+            val itemModifier = if (index == 0) {
+                Modifier.focusRequester(firstItemFocusRequester)
+            } else {
+                Modifier
+            }
+
+            CastAndCrewItem(
+                castMember = castMember,
+                modifier = itemModifier.width(144.dp)
+            )
         }
     }
 }

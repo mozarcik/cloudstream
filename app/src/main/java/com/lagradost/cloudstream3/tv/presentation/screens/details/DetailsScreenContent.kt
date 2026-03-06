@@ -45,6 +45,7 @@ import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.presentation.common.PosterMoviesRow
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.BookmarkStatusSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.CastAndCrewList
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieActionsSidePanel
@@ -113,9 +114,13 @@ internal fun DetailsScreenContent(
     var selectedSeasonId by rememberSaveable(details.id) {
         mutableStateOf(resolveInitialSeasonId(seasons, details.currentSeason))
     }
+    val seasonTabFocusRequesters = rememberFocusRequesters(count = seasons.size)
 
     val selectedSeason = seasons.firstOrNull { season -> season.id == selectedSeasonId } ?: seasons.firstOrNull()
     val selectedEpisodes = selectedSeason?.episodes.orEmpty()
+    val selectedSeasonTabIndex = seasons.indexOfFirst { season -> season.id == selectedSeasonId }
+        .takeIf { it >= 0 } ?: 0
+    val selectedSeasonFocusRequester = seasonTabFocusRequesters.getOrNull(selectedSeasonTabIndex)
     val defaultActionsCompat = remember(
         sourceUrl,
         apiName,
@@ -631,6 +636,7 @@ internal fun DetailsScreenContent(
                     ),
                     titleMetadata = detailsTitleMetadata(details),
                     downloadActionState = downloadActionState,
+                    downFocusRequester = selectedSeasonFocusRequester,
                     onPrimaryActionsFocused = {
                         if (listState.firstVisibleItemIndex == 0 &&
                             listState.firstVisibleItemScrollOffset == 0
@@ -678,6 +684,7 @@ internal fun DetailsScreenContent(
                         SeasonSelectorRow(
                             seasons = seasons,
                             selectedSeasonId = selectedSeasonId,
+                            focusRequesters = seasonTabFocusRequesters,
                             onSeasonSelected = { season -> selectedSeasonId = season.id },
                             modifier = Modifier
                                 .padding(start = childPadding.start, end = childPadding.end)

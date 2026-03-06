@@ -19,10 +19,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.ClickableSurfaceScale
 import androidx.tv.material3.Glow
@@ -32,10 +35,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamSurfaceDefaults
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreHoriz
 
 @Composable
 fun FeedMiniGrid(
@@ -46,8 +48,14 @@ fun FeedMiniGrid(
     cardWidth: Dp,
     cardHeight: Dp,
     cardPosterHeight: Dp,
+    pendingRestoreFocusTargetId: String? = null,
+    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
+    sectionFocusKey: String? = null,
+    onItemFocused: ((MediaItemCompat) -> Unit)? = null,
+    onShowMoreFocused: (() -> Unit)? = null,
+    onRestoreFocusConsumed: ((String) -> Unit)? = null,
 ) {
     val gridConfig = remember(items) { resolveFeedMiniGridConfig(items) }
     val gridHeight = gridHeightForRows(cardHeight, gridConfig.rowCount)
@@ -73,6 +81,45 @@ fun FeedMiniGrid(
         }
         return internalRequesters[index]
     }
+
+    fun focusTargetIdFor(index: Int): String? {
+        val key = sectionFocusKey ?: return null
+        return if (gridConfig.showMore && index == gridConfig.totalSlots - 1) {
+            "$key:show_more"
+        } else {
+            val item = gridConfig.displayItems[index]
+            "$key:item:${item.apiName}|${item.id}|${item.url}"
+        }
+    }
+
+    val restoreFocusIndex = remember(
+        pendingRestoreFocusTargetId,
+        restoreFocusToken,
+        sectionFocusKey,
+        gridConfig.totalSlots,
+        items
+    ) {
+        if (restoreFocusToken <= 0 || pendingRestoreFocusTargetId == null) {
+            null
+        } else {
+            (0 until gridConfig.totalSlots).firstOrNull { index ->
+                focusTargetIdFor(index) == pendingRestoreFocusTargetId
+            }
+        }
+    }
+
+    FocusRequestEffect(
+        requester = restoreFocusIndex?.let(::requesterFor),
+        requestKey = restoreFocusToken to pendingRestoreFocusTargetId,
+        enabled = restoreFocusIndex != null && restoreFocusToken > 0,
+        onFocused = {
+            restoreFocusIndex
+                ?.let(::focusTargetIdFor)
+                ?.let { targetId ->
+                    onRestoreFocusConsumed?.invoke(targetId)
+                }
+        }
+    )
 
     Column(
         verticalArrangement = Arrangement.spacedBy(FeedGridRowSpacing),
@@ -108,6 +155,7 @@ fun FeedMiniGrid(
                         gridConfig.showMore && index == gridConfig.totalSlots - 1 -> {
                             ShowMoreCard(
                                 onClick = onShowMoreClick,
+                                onFocused = onShowMoreFocused,
                                 modifier = Modifier
                                     .width(cardWidth)
                                     .height(cardPosterHeight)
@@ -120,6 +168,9 @@ fun FeedMiniGrid(
                             FeedPosterCard(
                                 item = item,
                                 onClick = { onMediaClick(item) },
+                                onFocused = {
+                                    onItemFocused?.invoke(item)
+                                },
                                 modifier = Modifier
                                     .width(cardWidth)
                                     .height(cardHeight)
@@ -136,6 +187,7 @@ fun FeedMiniGrid(
 @Composable
 fun ShowMoreCard(
     onClick: () -> Unit,
+    onFocused: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -145,7 +197,13 @@ fun ShowMoreCard(
         border = CloudStreamSurfaceDefaults.border(shape = CloudStreamCardShape),
         colors = CloudStreamSurfaceDefaults.colors(),
         scale = CloudStreamSurfaceDefaults.scale(focusedScale = 1.04f),
-        modifier = modifier.focusProperties { canFocus = true }
+        modifier = modifier
+            .focusProperties { canFocus = true }
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused) {
+                    onFocused?.invoke()
+                }
+            }
     ) {
         Column(
             verticalArrangement = Arrangement.Center,

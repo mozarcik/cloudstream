@@ -56,12 +56,18 @@ fun SettingsHost(
     hostState: SettingsHostState,
     onExitSettings: () -> Unit,
     onTopBarFocusableChanged: (Boolean) -> Unit,
+    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     showDebugOverlay: Boolean = false
 ) {
     val onExitSettingsState by rememberUpdatedState(onExitSettings)
     val onTopBarFocusableChangedState by rememberUpdatedState(onTopBarFocusableChanged)
+    val onTopBarDownNavigationEnabledChangedState by rememberUpdatedState(
+        onTopBarDownNavigationEnabledChanged
+    )
     val activeInstance = hostState.activeInstance
+    val activeScreen = hostState.screen(activeInstance.id)
+    val activeScreenData = hostState.dataState(activeInstance.id)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val inactivePreviewColor = remember(surfaceColor) {
         Color.Black.copy(alpha = 0.30f).compositeOver(surfaceColor)
@@ -78,6 +84,25 @@ fun SettingsHost(
 
     LaunchedEffect(hostState.depth) {
         onTopBarFocusableChangedState(hostState.depth == 1)
+    }
+
+    val isTopBarDownNavigationEnabled = remember(activeInstance.id, activeScreen, activeScreenData) {
+        if (activeScreen.hasCustomContent) {
+            true
+        } else {
+            when (activeScreenData) {
+                is SettingsScreenDataState.Ready ->
+                    activeScreenData.entries.any { entry ->
+                        entry.type != SettingsEntryType.Header
+                    }
+
+                else -> false
+            }
+        }
+    }
+
+    LaunchedEffect(activeInstance.id, isTopBarDownNavigationEnabled) {
+        onTopBarDownNavigationEnabledChangedState(isTopBarDownNavigationEnabled)
     }
 
     Box(

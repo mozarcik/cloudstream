@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
@@ -70,6 +69,7 @@ import com.lagradost.cloudstream3.tv.data.util.StringConstants
 import com.lagradost.cloudstream3.tv.icons.CustomDownload
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconSpec
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPill
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 import kotlin.math.roundToInt
@@ -115,18 +115,20 @@ fun MovieDetails(
     playButtonLabel: String? = null,
     titleMetadata: List<String> = emptyList(),
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
+    downFocusRequester: FocusRequester? = null,
     onPrimaryActionsFocused: () -> Unit = {},
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val childPadding = rememberChildPadding()
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    val focusRequester = remember { FocusRequester() }
+    val playButtonFocusRequester = remember { FocusRequester() }
     val heroSectionHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    FocusRequestEffect(
+        requester = playButtonFocusRequester,
+        requestKey = movieDetails.id,
+    )
 
     Box(
         modifier = modifier
@@ -179,12 +181,18 @@ fun MovieDetails(
                 modifier = Modifier
                     .padding(start = childPadding.start)
                     .padding(bottom = 24.dp),
+                playButtonModifier = Modifier
+                    .focusRequester(playButtonFocusRequester)
+                    .focusProperties {
+                        down = downFocusRequester ?: FocusRequester.Default
+                    },
                 onPlayClick = goToMoviePlayer,
                 playButtonLabel = playButtonLabel,
                 isFavorite = movieDetails.isFavorite,
                 isBookmarked = movieDetails.isBookmarked,
                 bookmarkLabelRes = movieDetails.bookmarkLabelRes,
                 downloadActionState = downloadActionState,
+                downFocusRequester = downFocusRequester,
                 onFocused = onPrimaryActionsFocused,
                 onQuickActionClick = onQuickActionClick
             )
@@ -196,11 +204,13 @@ fun MovieDetails(
 private fun DetailsActionsRow(
     onPlayClick: () -> Unit,
     modifier: Modifier = Modifier,
+    playButtonModifier: Modifier = Modifier,
     playButtonLabel: String? = null,
     isFavorite: Boolean = false,
     isBookmarked: Boolean = false,
     bookmarkLabelRes: Int? = null,
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
+    downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
 ) {
@@ -217,7 +227,8 @@ private fun DetailsActionsRow(
     ) {
         PrimaryPlayButton(
             goToMoviePlayer = onPlayClick,
-            playButtonLabel = playButtonLabel
+            playButtonLabel = playButtonLabel,
+            modifier = playButtonModifier
         )
 
         val favoriteLabel = stringResource(R.string.favorite)
@@ -297,6 +308,9 @@ private fun DetailsActionsRow(
 
         ActionIconsPill(
             actions = actions,
+            modifier = Modifier.focusProperties {
+                down = downFocusRequester ?: FocusRequester.Default
+            },
             onActionClick = onQuickActionClick
         )
     }

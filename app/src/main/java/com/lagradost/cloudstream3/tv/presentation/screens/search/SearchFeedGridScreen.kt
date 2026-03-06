@@ -8,13 +8,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.home.MediaGridStatic
 
 @Composable
@@ -34,10 +37,17 @@ fun SearchFeedGridScreen(
 
     val section = selectedSection ?: return
     val gridState = rememberLazyGridState()
+    val firstItemFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         onScroll(true)
     }
+
+    FocusRequestEffect(
+        requester = firstItemFocusRequester,
+        requestKey = section.id,
+        enabled = true
+    )
 
     HaloHost(
         modifier = Modifier.fillMaxSize()
@@ -58,6 +68,7 @@ fun SearchFeedGridScreen(
                 items = section.items,
                 onMediaClick = onMediaClick,
                 gridState = gridState,
+                firstItemFocusRequester = firstItemFocusRequester,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 56.dp)

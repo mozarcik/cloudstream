@@ -24,11 +24,13 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -49,6 +51,9 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.presentation.common.TvConfirmDialog
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
+import com.lagradost.cloudstream3.tv.presentation.focus.resolveAdjacentFocusKey
 
 private const val BackdropCrossfadeDurationMs = 300
 private const val DebugTag = "TvDownloadsScreen"
@@ -58,6 +63,8 @@ fun DownloadsScreen(
     onOpenDetails: (DownloadItemUiModel) -> Unit,
     onPlayDownloaded: (DownloadItemUiModel) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
+    topBarFocusRequester: FocusRequester? = null,
+    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = viewModel(),
 ) {
@@ -68,9 +75,14 @@ fun DownloadsScreen(
     val allItems = remember(uiState.downloadingItems, uiState.downloadedItems) {
         uiState.downloadingItems + uiState.downloadedItems
     }
+    val itemIds = remember(allItems) { allItems.map(DownloadItemUiModel::id) }
+    val itemFocusRequesters = rememberFocusRequesterMap(itemIds)
 
     var focusedItemId by remember { mutableStateOf<String?>(null) }
     var pendingDeleteItem by remember { mutableStateOf<DownloadItemUiModel?>(null) }
+    var pendingRestoreFocusId by remember { mutableStateOf<String?>(null) }
+    var topBarFocusFallbackToken by remember { mutableIntStateOf(0) }
+    val restoreFocusTargetId = pendingRestoreFocusId
 
     val focusedItem = remember(allItems, focusedItemId) {
         allItems.firstOrNull { it.id == focusedItemId } ?: allItems.firstOrNull()
@@ -86,6 +98,38 @@ fun DownloadsScreen(
     LaunchedEffect(Unit) {
         onScroll(true)
     }
+
+    LaunchedEffect(allItems.isNotEmpty()) {
+        onTopBarDownNavigationEnabledChanged(allItems.isNotEmpty())
+    }
+
+    LaunchedEffect(itemIds, restoreFocusTargetId) {
+        if (restoreFocusTargetId != null && restoreFocusTargetId !in itemFocusRequesters) {
+            pendingRestoreFocusId = null
+        }
+    }
+
+    FocusRequestEffect(
+        requester = restoreFocusTargetId?.let(itemFocusRequesters::get),
+        requestKey = restoreFocusTargetId,
+        enabled = pendingDeleteItem == null && restoreFocusTargetId != null,
+        onFocused = {
+            focusedItemId = restoreFocusTargetId
+            pendingRestoreFocusId = null
+        }
+    )
+
+    FocusRequestEffect(
+        requester = topBarFocusRequester,
+        requestKey = topBarFocusFallbackToken,
+        enabled = topBarFocusRequester != null &&
+            topBarFocusFallbackToken > 0 &&
+            pendingDeleteItem == null &&
+            allItems.isEmpty(),
+        onFocused = {
+            topBarFocusFallbackToken = 0
+        }
+    )
 
     BoxWithConstraints(
         modifier = modifier
@@ -131,13 +175,14 @@ fun DownloadsScreen(
                 itemsIndexed(
                     items = allItems,
                     key = { _, item -> item.id }
-                ) { index, item ->
+                ) { _, item ->
                     DownloadItemCard(
                         item = item,
                         onCardClick = { onOpenDetails(item) },
                         onPlayClick = { playDownloadedItem(item, onPlayDownloaded) },
                         onDeleteClick = { pendingDeleteItem = item },
                         onCardFocused = { focusedItemId = item.id },
+                        focusRequester = itemFocusRequesters.getValue(item.id),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -149,6 +194,14 @@ fun DownloadsScreen(
                 itemTitle = itemToDelete.title,
                 onDismiss = { pendingDeleteItem = null },
                 onConfirm = {
+                    val nextFocusId = resolveNextDownloadsFocusId(
+                        items = itemIds,
+                        removedItemId = itemToDelete.id
+                    )
+                    pendingRestoreFocusId = nextFocusId
+                    if (nextFocusId == null) {
+                        topBarFocusFallbackToken += 1
+                    }
                     viewModel.deleteItem(
                         context = context,
                         item = itemToDelete
@@ -320,4 +373,11 @@ private fun playDownloadedItem(
         DebugTag,
         "playDownloadedItem routed to compose player id=${item.episodeId} parentId=${item.parentId}"
     )
+}
+
+private fun resolveNextDownloadsFocusId(
+    items: List<String>,
+    removedItemId: String,
+): String? {
+    return resolveAdjacentFocusKey(keys = items, removedKey = removedItemId)
 }

@@ -19,6 +19,11 @@ internal fun LazyListScope.homeFeedSections(
     firstFeedCardFocusRequester: FocusRequester,
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
+    pendingRestoreFocusTargetId: String? = null,
+    restoreFocusToken: Int = 0,
+    onItemFocused: ((FeedCategory, MediaItemCompat) -> Unit)? = null,
+    onShowMoreFocused: ((FeedCategory) -> Unit)? = null,
+    onRestoreFocusConsumed: ((String) -> Unit)? = null,
 ) {
     if (feedsUiState.feedSections.isEmpty() && feedsUiState.isFeedListLoading) {
         items(count = 4) {
@@ -56,7 +61,17 @@ internal fun LazyListScope.homeFeedSections(
                     firstFeedCardFocusRequester
                 } else {
                     null
-                }
+                },
+                sectionFocusKey = "home:feed:${section.feed.id}",
+                pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
+                restoreFocusToken = restoreFocusToken,
+                onItemFocused = { item ->
+                    onItemFocused?.invoke(section.feed, item)
+                },
+                onShowMoreFocused = {
+                    onShowMoreFocused?.invoke(section.feed)
+                },
+                onRestoreFocusConsumed = onRestoreFocusConsumed,
             )
         }
     }

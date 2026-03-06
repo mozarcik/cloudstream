@@ -36,6 +36,7 @@ fun SourcesMorePanel(
     onSourceSelected: (MainAPI) -> Unit,
     onTogglePin: (MainAPI) -> Unit,
     onCloseRequested: () -> Unit,
+    onExitUpRequested: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val selectedSourceId = selectedSource?.sourceId()
@@ -64,6 +65,7 @@ fun SourcesMorePanel(
         items = menuItems,
         panelWidth = 340.dp,
         initialFocusedItemId = selectedSourceId ?: menuItems.firstOrNull()?.id,
+        onExitUpRequested = onExitUpRequested,
         modifier = modifier,
         panelTestTag = "sources_panel",
         emptyContent = {

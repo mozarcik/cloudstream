@@ -24,7 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,25 +55,31 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconContent
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPillDefaults
-import kotlinx.coroutines.delay
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
+import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import kotlinx.coroutines.launch
 
 @Composable
 internal fun ContinueWatchingHeroLoadedState(
     items: List<MediaItemCompat>,
     resumeFocusRequester: FocusRequester,
+    cardsFocusRequester: FocusRequester,
+    upFocusRequester: FocusRequester,
     sourceButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
+    pendingRestoreFocusTargetId: String? = null,
+    restoreFocusToken: Int = 0,
     onResumeClick: (MediaItemCompat) -> Unit,
     onDetailsClick: (MediaItemCompat) -> Unit,
     onRemoveClick: (MediaItemCompat) -> Unit,
     onCardClick: (MediaItemCompat) -> Unit,
-    onMoveDownFromCards: () -> Unit,
     onHeroContentFocused: () -> Unit,
+    onFocusTargetFocused: (String) -> Unit,
+    onRestoreFocusConsumed: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val rowState = rememberLazyListState()
-    val cardFocusRequesters = remember { mutableStateMapOf<Int, FocusRequester>() }
     val detailsFocusRequester = remember { FocusRequester() }
     val removeFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
@@ -91,6 +96,46 @@ internal fun ContinueWatchingHeroLoadedState(
         lastFocusedCardIndex = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
     }
 
+    fun cardTargetId(item: MediaItemCompat): String {
+        return HomeFocusStore.continueWatchingCard(item)
+    }
+
+    val cardTargetIds = remember(items) { items.map(::cardTargetId) }
+    val cardFocusRequesters = rememberFocusRequesterMap(cardTargetIds)
+
+    val restoreFocusRequester = remember(
+        pendingRestoreFocusTargetId,
+        restoreFocusToken,
+        items,
+        lastFocusedCardIndex
+    ) {
+        when (pendingRestoreFocusTargetId) {
+            HomeFocusStore.ContinueWatchingResume -> resumeFocusRequester
+            HomeFocusStore.ContinueWatchingDetails -> detailsFocusRequester
+            HomeFocusStore.ContinueWatchingRemove -> removeFocusRequester
+            null -> null
+            else -> items
+                .indexOfFirst { item -> cardTargetId(item) == pendingRestoreFocusTargetId }
+                .takeIf { it >= 0 }
+                ?.let { index ->
+                    if (index == lastFocusedCardIndex) {
+                        cardsFocusRequester
+                    } else {
+                        cardFocusRequesters[cardTargetId(items[index])]
+                    }
+                }
+        }
+    }
+
+    FocusRequestEffect(
+        requester = restoreFocusRequester,
+        requestKey = restoreFocusToken to pendingRestoreFocusTargetId,
+        enabled = restoreFocusRequester != null && restoreFocusToken > 0,
+        onFocused = {
+            pendingRestoreFocusTargetId?.let(onRestoreFocusConsumed)
+        }
+    )
+
     fun requestCardsFocus() {
         if (!isInteractive) return
 
@@ -99,12 +144,13 @@ internal fun ContinueWatchingHeroLoadedState(
             if (rowState.isItemOutsideViewport(targetIndex)) {
                 rowState.scrollToItem(targetIndex)
             }
-            repeat(18) {
-                val requester = cardFocusRequesters[targetIndex]
-                if (requester != null && requester.requestFocus()) {
-                    return@launch
-                }
-                delay(16)
+            val requester = if (targetIndex == lastFocusedCardIndex) {
+                cardsFocusRequester
+            } else {
+                cardFocusRequesters[cardTargetId(items[targetIndex])]
+            }
+            if (requester != null && requester.requestFocusWithRetry(attempts = 18)) {
+                return@launch
             }
         }
     }
@@ -124,6 +170,7 @@ internal fun ContinueWatchingHeroLoadedState(
             item = selectedItem,
             remainingSuffix = remainingSuffix,
             isInteractive = isInteractive,
+            upFocusRequester = upFocusRequester,
             resumeFocusRequester = resumeFocusRequester,
             detailsFocusRequester = detailsFocusRequester,
             removeFocusRequester = removeFocusRequester,
@@ -137,6 +184,7 @@ internal fun ContinueWatchingHeroLoadedState(
                 onRemoveClick(it)
             },
             onRequestCardsFocus = ::requestCardsFocus,
+            onFocusTargetFocused = onFocusTargetFocused,
             modifier = Modifier.align(Alignment.BottomStart)
         )
 
@@ -159,10 +207,14 @@ internal fun ContinueWatchingHeroLoadedState(
                 items = items,
                 key = { index, item -> "${item.id}_${item.apiName}_${item.url}_$index" }
             ) { index, item ->
-                val cardFocusRequester = cardFocusRequesters.getOrPut(index) { FocusRequester() }
+                val cardFocusRequester = cardFocusRequesters[cardTargetId(item)] ?: return@itemsIndexed
                 ContinueWatchingHeroCard(
                     item = item,
-                    focusRequester = cardFocusRequester,
+                    focusRequester = if (index == lastFocusedCardIndex) {
+                        cardsFocusRequester
+                    } else {
+                        cardFocusRequester
+                    },
                     upFocusRequester = resumeFocusRequester,
                     downFocusRequester = sourceButtonFocusRequester,
                     isInteractive = isInteractive,
@@ -170,9 +222,9 @@ internal fun ContinueWatchingHeroLoadedState(
                         selectedIndex = index
                         lastFocusedCardIndex = index
                         onHeroContentFocused()
+                        onFocusTargetFocused(cardTargetId(item))
                     },
                     onClick = { onCardClick(item) },
-                    onMoveDown = onMoveDownFromCards,
                 )
             }
         }
@@ -184,6 +236,7 @@ private fun ContinueWatchingHeroInfo(
     item: MediaItemCompat,
     remainingSuffix: String,
     isInteractive: Boolean,
+    upFocusRequester: FocusRequester,
     resumeFocusRequester: FocusRequester,
     detailsFocusRequester: FocusRequester,
     removeFocusRequester: FocusRequester,
@@ -192,6 +245,7 @@ private fun ContinueWatchingHeroInfo(
     onDetailsClick: (MediaItemCompat) -> Unit,
     onRemoveClick: (MediaItemCompat) -> Unit,
     onRequestCardsFocus: () -> Unit,
+    onFocusTargetFocused: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val removeInteractionSource = remember { MutableInteractionSource() }
@@ -242,11 +296,13 @@ private fun ContinueWatchingHeroInfo(
                     .focusRequester(resumeFocusRequester)
                     .focusProperties {
                         canFocus = isInteractive
+                        up = upFocusRequester
                         right = detailsFocusRequester
                     }
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {
                             onHeroContentFocused()
+                            onFocusTargetFocused(HomeFocusStore.ContinueWatchingResume)
                         }
                     }
                     .onPreviewKeyEvent { event ->
@@ -281,11 +337,13 @@ private fun ContinueWatchingHeroInfo(
                     .focusProperties {
                         canFocus = isInteractive
                         left = resumeFocusRequester
+                        up = upFocusRequester
                         right = removeFocusRequester
                     }
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {
                             onHeroContentFocused()
+                            onFocusTargetFocused(HomeFocusStore.ContinueWatchingDetails)
                         }
                     }
                     .onPreviewKeyEvent { event ->
@@ -325,10 +383,12 @@ private fun ContinueWatchingHeroInfo(
                     .focusProperties {
                         canFocus = isInteractive
                         left = detailsFocusRequester
+                        up = upFocusRequester
                     }
                     .onFocusChanged { focusState ->
                         if (focusState.isFocused) {
                             onHeroContentFocused()
+                            onFocusTargetFocused(HomeFocusStore.ContinueWatchingRemove)
                         }
                     }
                     .onPreviewKeyEvent { event ->

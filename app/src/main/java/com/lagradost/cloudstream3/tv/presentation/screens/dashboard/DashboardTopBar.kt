@@ -51,9 +51,6 @@ import kotlinx.coroutines.delay
 
 val TopBarTabs = Screens.entries.toList().filter { it.isTabItem && it != Screens.Sources }
 
-// +1 for ProfileTab
-val TopBarFocusRequesters = List(size = TopBarTabs.size + 1) { FocusRequester() }
-
 private const val PROFILE_SCREEN_INDEX = -1
 private const val TopBarFocusNavigationDelayMs = 300L
 
@@ -63,14 +60,25 @@ fun DashboardTopBar(
     modifier: Modifier = Modifier,
     selectedTabIndex: Int,
     screens: List<Screens> = TopBarTabs,
-    focusRequesters: List<FocusRequester> = remember { TopBarFocusRequesters },
+    focusRequesters: List<FocusRequester>,
     isFocusable: Boolean = true,
+    isDownNavigationEnabled: Boolean = true,
     onScreenSelection: (screen: Screens) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     val onScreenSelectionState by rememberUpdatedState(onScreenSelection)
     var pendingFocusedScreen by remember { mutableStateOf<Screens?>(null) }
+    var isAccountFocused by remember { mutableStateOf(false) }
+    var isHomeTabFocused by remember { mutableStateOf(false) }
+    val homeTabIndex = remember(screens) { screens.indexOf(Screens.Home).coerceAtLeast(0) }
+    val isAccountFocusable = isFocusable && (isAccountFocused || isHomeTabFocused)
     val selectedScreen = screens.getOrNull(selectedTabIndex)
+    val selectedTopBarItemIndex = if (selectedTabIndex >= 0) {
+        (selectedTabIndex + 1).coerceAtMost(focusRequesters.lastIndex)
+    } else {
+        0
+    }
+    val restoreFocusRequester = focusRequesters[selectedTopBarItemIndex]
 
     LaunchedEffect(pendingFocusedScreen, selectedScreen) {
         val targetScreen = pendingFocusedScreen ?: return@LaunchedEffect
@@ -87,14 +95,25 @@ fun DashboardTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(MaterialTheme.colorScheme.surface)
-                .focusRestorer(),
+                .focusRestorer(restoreFocusRequester),
             verticalAlignment = Alignment.CenterVertically
         ) {
             UserAvatar(
                 modifier = Modifier
                     .size(32.dp)
                     .focusRequester(focusRequesters[0])
-                    .focusProperties { canFocus = isFocusable }
+                    .onFocusChanged { focusState ->
+                        isAccountFocused = focusState.isFocused
+                    }
+                    .focusProperties {
+                        canFocus = isAccountFocusable
+                        right = focusRequesters[homeTabIndex + 1]
+                        down = if (isDownNavigationEnabled) {
+                            FocusRequester.Default
+                        } else {
+                            FocusRequester.Cancel
+                        }
+                    }
                     .semantics {
                         contentDescription =
                             StringConstants.Composable.ContentDescription.UserAvatar
@@ -133,7 +152,31 @@ fun DashboardTopBar(
                                 modifier = Modifier
                                     .height(32.dp)
                                     .focusRequester(focusRequesters[index + 1])
-                                    .focusProperties { canFocus = isFocusable },
+                                    .onFocusChanged { focusState ->
+                                        if (index == homeTabIndex) {
+                                            isHomeTabFocused = focusState.isFocused
+                                        } else if (focusState.isFocused) {
+                                            isHomeTabFocused = false
+                                        }
+                                    }
+                                    .focusProperties {
+                                        canFocus = isFocusable
+                                        left = when {
+                                            index == homeTabIndex -> focusRequesters[0]
+                                            index > 0 -> focusRequesters[index]
+                                            else -> FocusRequester.Default
+                                        }
+                                        right = if (index < screens.lastIndex) {
+                                            focusRequesters[index + 2]
+                                        } else {
+                                            FocusRequester.Default
+                                        }
+                                        down = if (isDownNavigationEnabled) {
+                                            FocusRequester.Default
+                                        } else {
+                                            FocusRequester.Cancel
+                                        }
+                                    },
                                 selected = index == selectedTabIndex,
                                 onFocus = { pendingFocusedScreen = screen },
                                 onClick = { focusManager.moveFocus(FocusDirection.Down) },

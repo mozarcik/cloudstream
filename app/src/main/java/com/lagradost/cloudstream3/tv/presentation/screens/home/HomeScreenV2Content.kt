@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,9 +29,9 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
+import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -39,6 +41,12 @@ private val ContinueWatchingToSourcesExtraTopPadding =
     ContinueWatchingToSourcesSpacing - HomeScreenSectionSpacing
 private const val HomeContinueWatchingListIndex = 0
 private const val HomeFeaturedListIndex = 2
+private const val HomeFocusDebugTag = "TvHomeFocus"
+
+private enum class MorePanelCloseTarget {
+    MoreButton,
+    ContinueWatching,
+}
 
 @Composable
 fun HomeScreenV2Content(
@@ -50,13 +58,16 @@ fun HomeScreenV2Content(
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
+    topBarFocusRequester: FocusRequester,
     onSourceSelected: (MainAPI) -> Unit,
     onMorePanelOpenChange: (Boolean) -> Unit,
     onTogglePin: (MainAPI) -> Unit,
     onRemoveContinueWatching: (MediaItemCompat) -> Unit,
+    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     val resumeFocusRequester = remember { FocusRequester() }
+    val continueWatchingCardsFocusRequester = remember { FocusRequester() }
     val quickSourcesEntryFocusRequester = remember { FocusRequester() }
     val moreButtonFocusRequester = remember { FocusRequester() }
     val featuredFocusRequester = remember { FocusRequester() }
@@ -65,62 +76,48 @@ fun HomeScreenV2Content(
     val coroutineScope = rememberCoroutineScope()
 
     var hasInitialFocusBeenRequested by rememberSaveable { mutableStateOf(false) }
-    var isMovingDownFromCards by remember { mutableStateOf(false) }
-    var shouldRestoreHeroOnFocus by remember { mutableStateOf(false) }
+    var moreButtonFocusRequestToken by remember { mutableIntStateOf(0) }
+    var continueWatchingCardsFocusRequestToken by remember { mutableIntStateOf(0) }
+    var feedSectionsRestoreFocusToken by remember { mutableIntStateOf(0) }
+    var armedRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var armedRestoreTargetId by rememberSaveable { mutableStateOf<String?>(null) }
     var wasMorePanelOpen by rememberSaveable { mutableStateOf(false) }
+    var morePanelCloseTarget by rememberSaveable { mutableStateOf(MorePanelCloseTarget.MoreButton) }
     var featuredCenterJob by remember { mutableStateOf<Job?>(null) }
 
     val isMorePanelOpen = sourcesUiState.isMorePanelOpen
     val hasContinueWatchingItems = (continueWatchingUiState.state as? HomeFeedLoadState.Success)
         ?.items
         ?.isNotEmpty() == true
+    val hasQuickSourceTargets = sourcesUiState.quickSources.isNotEmpty()
     val featuredItems = (featuredUiState.state as? HomeFeaturedLoadState.Success)?.items
     val hasFeaturedItems = featuredItems?.isNotEmpty() == true
     val loadingLabel = stringResource(id = R.string.loading)
     val noFeedsLabel = stringResource(id = R.string.tv_home_no_feeds)
+    val pendingRestoreTargetId = HomeFocusStore.pendingRestoreTargetId
+    val homeFeedRestoreListIndex = remember(
+        armedRestoreTargetId,
+        feedsUiState.feedSections,
+        hasFeaturedItems
+    ) {
+        val feedId = HomeFocusStore.feedIdFromTarget(armedRestoreTargetId) ?: return@remember null
+        val sectionIndex = feedsUiState.feedSections.indexOfFirst { section ->
+            section.feed.id == feedId
+        }.takeIf { it >= 0 } ?: return@remember null
 
-    LaunchedEffect(Unit) {
-        onScroll(true)
-    }
-
-    LaunchedEffect(isMorePanelOpen) {
-        if (!isMorePanelOpen && wasMorePanelOpen) {
-            delay(80)
-            moreButtonFocusRequester.requestFocus()
+        val feedSectionsStartIndex = if (hasFeaturedItems) {
+            HomeFeaturedListIndex + 1
+        } else {
+            2
         }
-        wasMorePanelOpen = isMorePanelOpen
+        feedSectionsStartIndex + sectionIndex
     }
 
-    LaunchedEffect(hasContinueWatchingItems, isMorePanelOpen, hasInitialFocusBeenRequested) {
-        if (!hasContinueWatchingItems || isMorePanelOpen || hasInitialFocusBeenRequested) {
-            return@LaunchedEffect
-        }
-
-        repeat(20) {
-            if (resumeFocusRequester.requestFocus()) {
-                hasInitialFocusBeenRequested = true
-                return@LaunchedEffect
-            }
-            delay(16)
-        }
-    }
-
-    BackHandler(enabled = isMorePanelOpen) {
-        onMorePanelOpenChange(false)
-    }
-
-    fun markHeroForScrollRestore() {
-        shouldRestoreHeroOnFocus = true
-    }
-
-    fun restoreHeroScrollIfNeeded() {
-        if (!shouldRestoreHeroOnFocus) return
+    fun restoreContinueWatchingToTop() {
+        if (listState.isScrolledToTop() || listState.isScrollInProgress) return
 
         coroutineScope.launch {
-            if (!listState.isScrolledToTop()) {
-                listState.scrollToItem(HomeContinueWatchingListIndex)
-            }
-            shouldRestoreHeroOnFocus = false
+            listState.animateScrollToItem(HomeContinueWatchingListIndex)
         }
     }
 
@@ -131,6 +128,128 @@ fun HomeScreenV2Content(
         featuredCenterJob = coroutineScope.launch {
             listState.centerItemInViewport(itemIndex = HomeFeaturedListIndex)
         }
+    }
+
+    LaunchedEffect(Unit) {
+        onScroll(true)
+    }
+
+    LaunchedEffect(restoreFocusToken) {
+        if (restoreFocusToken <= 0 || restoreFocusToken == armedRestoreFocusToken) {
+            return@LaunchedEffect
+        }
+
+        armedRestoreFocusToken = restoreFocusToken
+        armedRestoreTargetId = HomeFocusStore.pendingRestoreTargetId
+        Log.d(
+            HomeFocusDebugTag,
+            "home arm restore token=$armedRestoreFocusToken target=$armedRestoreTargetId"
+        )
+    }
+
+    LaunchedEffect(isMorePanelOpen) {
+        if (!isMorePanelOpen && wasMorePanelOpen) {
+            when (morePanelCloseTarget) {
+                MorePanelCloseTarget.MoreButton -> {
+                    Log.d(HomeFocusDebugTag, "more panel close -> more button")
+                    moreButtonFocusRequestToken += 1
+                }
+
+                MorePanelCloseTarget.ContinueWatching -> {
+                    if (hasContinueWatchingItems) {
+                        Log.d(HomeFocusDebugTag, "more panel close -> continue watching")
+                        listState.animateScrollToItem(HomeContinueWatchingListIndex)
+                        continueWatchingCardsFocusRequestToken += 1
+                    } else {
+                        Log.d(HomeFocusDebugTag, "more panel close fallback -> more button")
+                        moreButtonFocusRequestToken += 1
+                    }
+                }
+            }
+            morePanelCloseTarget = MorePanelCloseTarget.MoreButton
+        }
+        wasMorePanelOpen = isMorePanelOpen
+    }
+
+    FocusRequestEffect(
+        requester = moreButtonFocusRequester,
+        requestKey = moreButtonFocusRequestToken,
+        enabled = moreButtonFocusRequestToken > 0
+    )
+
+    FocusRequestEffect(
+        requester = continueWatchingCardsFocusRequester,
+        requestKey = continueWatchingCardsFocusRequestToken,
+        enabled = continueWatchingCardsFocusRequestToken > 0,
+        onFocused = {
+            restoreContinueWatchingToTop()
+        }
+    )
+
+    FocusRequestEffect(
+        requester = resumeFocusRequester,
+        requestKey = hasContinueWatchingItems to isMorePanelOpen,
+        enabled = hasContinueWatchingItems &&
+            !isMorePanelOpen &&
+            !hasInitialFocusBeenRequested &&
+            pendingRestoreTargetId == null &&
+            armedRestoreTargetId == null,
+        onFocused = {
+            hasInitialFocusBeenRequested = true
+        }
+    )
+
+    LaunchedEffect(armedRestoreFocusToken, armedRestoreTargetId, homeFeedRestoreListIndex) {
+        if (armedRestoreFocusToken <= 0) return@LaunchedEffect
+        Log.d(
+            HomeFocusDebugTag,
+            "home restore token=$armedRestoreFocusToken target=$armedRestoreTargetId feedIndex=$homeFeedRestoreListIndex"
+        )
+        if (HomeFocusStore.isContinueWatchingTarget(armedRestoreTargetId)) {
+            listState.scrollToItem(HomeContinueWatchingListIndex)
+            Log.d(HomeFocusDebugTag, "home restore scroll -> continue watching")
+            return@LaunchedEffect
+        }
+        if (armedRestoreTargetId == HomeFocusStore.Featured) {
+            listState.scrollToItem(HomeFeaturedListIndex)
+            Log.d(HomeFocusDebugTag, "home restore scroll -> featured")
+            return@LaunchedEffect
+        }
+        if (homeFeedRestoreListIndex != null) {
+            listState.scrollToItem(homeFeedRestoreListIndex)
+            feedSectionsRestoreFocusToken = armedRestoreFocusToken
+            Log.d(
+                HomeFocusDebugTag,
+                "home restore scroll -> feed section index=$homeFeedRestoreListIndex token=$feedSectionsRestoreFocusToken"
+            )
+        }
+    }
+
+    fun consumeArmedRestore(targetId: String) {
+        if (armedRestoreTargetId != targetId) {
+            return
+        }
+        HomeFocusStore.clearPendingRestore(targetId)
+        armedRestoreTargetId = null
+    }
+
+    FocusRequestEffect(
+        requester = if (armedRestoreTargetId == HomeFocusStore.Featured) {
+            featuredFocusRequester
+        } else {
+            null
+        },
+        requestKey = armedRestoreFocusToken to armedRestoreTargetId,
+        enabled = armedRestoreFocusToken > 0 && armedRestoreTargetId == HomeFocusStore.Featured,
+        onFocused = {
+            centerFeaturedInViewport()
+            consumeArmedRestore(HomeFocusStore.Featured)
+        }
+    )
+
+    BackHandler(enabled = isMorePanelOpen) {
+        morePanelCloseTarget = MorePanelCloseTarget.MoreButton
+        onMorePanelOpenChange(false)
     }
 
     HaloHost(
@@ -151,31 +270,31 @@ fun HomeScreenV2Content(
                     ContinueWatchingHeroSection(
                         state = continueWatchingUiState.state,
                         resumeFocusRequester = resumeFocusRequester,
+                        cardsFocusRequester = continueWatchingCardsFocusRequester,
+                        upFocusRequester = topBarFocusRequester,
                         sourceButtonFocusRequester = quickSourcesEntryFocusRequester,
                         isInteractive = !isMorePanelOpen,
+                        pendingRestoreFocusTargetId = armedRestoreTargetId,
+                        restoreFocusToken = armedRestoreFocusToken,
                         modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
-                        onResumeClick = onContinueWatchingPlay,
-                        onDetailsClick = onMediaClick,
-                        onRemoveClick = onRemoveContinueWatching,
-                        onCardClick = onMediaClick,
-                        onMoveDownFromCards = {
-                            if (isMovingDownFromCards) return@ContinueWatchingHeroSection
-                            coroutineScope.launch {
-                                isMovingDownFromCards = true
-                                markHeroForScrollRestore()
-                                repeat(16) {
-                                    if (quickSourcesEntryFocusRequester.requestFocus()) {
-                                        isMovingDownFromCards = false
-                                        return@launch
-                                    }
-                                    delay(16)
-                                }
-                                isMovingDownFromCards = false
-                            }
+                        onResumeClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onContinueWatchingPlay(item)
                         },
-                        onHeroContentFocused = {
-                            restoreHeroScrollIfNeeded()
-                        }
+                        onDetailsClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onMediaClick(item)
+                        },
+                        onRemoveClick = onRemoveContinueWatching,
+                        onCardClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onMediaClick(item)
+                        },
+                        onHeroContentFocused = ::restoreContinueWatchingToTop,
+                        onFocusTargetFocused = HomeFocusStore::onTargetFocused,
+                        onRestoreFocusConsumed = { targetId ->
+                            consumeArmedRestore(targetId)
+                        },
                     )
                 }
 
@@ -190,6 +309,11 @@ fun HomeScreenV2Content(
                             rowEntryFocusRequester = quickSourcesEntryFocusRequester,
                             moreButtonFocusRequester = moreButtonFocusRequester,
                             isInteractive = !isMorePanelOpen,
+                            upFocusRequester = if (hasContinueWatchingItems) {
+                                continueWatchingCardsFocusRequester
+                            } else {
+                                topBarFocusRequester
+                            },
                             downFocusRequester = if (hasFeaturedItems) {
                                 featuredFocusRequester
                             } else if (feedsUiState.feedSections.isNotEmpty()) {
@@ -197,22 +321,9 @@ fun HomeScreenV2Content(
                             } else {
                                 null
                             },
-                            onMoveDown = if (hasFeaturedItems) {
-                                {
-                                    coroutineScope.launch {
-                                        repeat(12) {
-                                            if (featuredFocusRequester.requestFocus()) {
-                                                return@launch
-                                            }
-                                            delay(16)
-                                        }
-                                    }
-                                }
-                            } else {
-                                null
-                            },
                             onSourceSelected = onSourceSelected,
                             onMoreClick = {
+                                morePanelCloseTarget = MorePanelCloseTarget.MoreButton
                                 onMorePanelOpenChange(true)
                             }
                         )
@@ -224,7 +335,11 @@ fun HomeScreenV2Content(
                         FeaturedCarousel(
                             items = featuredItems.orEmpty(),
                             focusRequester = featuredFocusRequester,
-                            upFocusRequester = quickSourcesEntryFocusRequester,
+                            upFocusRequester = if (hasQuickSourceTargets) {
+                                quickSourcesEntryFocusRequester
+                            } else {
+                                topBarFocusRequester
+                            },
                             downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
                                 firstFeedCardFocusRequester
                             } else {
@@ -232,8 +347,14 @@ fun HomeScreenV2Content(
                             },
                             isInteractive = !isMorePanelOpen,
                             modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
-                            onFocused = ::centerFeaturedInViewport,
-                            onItemClick = onMediaClick
+                            onFocused = {
+                                HomeFocusStore.onTargetFocused(HomeFocusStore.Featured)
+                                centerFeaturedInViewport()
+                            },
+                            onItemClick = { item ->
+                                HomeFocusStore.scheduleRestoreToLastFocused()
+                                onMediaClick(item)
+                            }
                         )
                     }
                 }
@@ -244,8 +365,29 @@ fun HomeScreenV2Content(
                     noFeedsLabel = noFeedsLabel,
                     isMorePanelOpen = isMorePanelOpen,
                     firstFeedCardFocusRequester = firstFeedCardFocusRequester,
-                    onMediaClick = onMediaClick,
-                    onOpenFeedGrid = onOpenFeedGrid,
+                    onMediaClick = { item ->
+                        HomeFocusStore.scheduleRestoreToLastFocused()
+                        onMediaClick(item)
+                    },
+                    onOpenFeedGrid = { feed ->
+                        HomeFocusStore.scheduleRestoreToLastFocused()
+                        onOpenFeedGrid(feed)
+                    },
+                    pendingRestoreFocusTargetId = armedRestoreTargetId,
+                    restoreFocusToken = feedSectionsRestoreFocusToken,
+                    onItemFocused = { feed, item ->
+                        HomeFocusStore.onTargetFocused(
+                            HomeFocusStore.feedPoster(feed.id, item)
+                        )
+                    },
+                    onShowMoreFocused = { feed ->
+                        HomeFocusStore.onTargetFocused(
+                            HomeFocusStore.feedShowMore(feed.id)
+                        )
+                    },
+                    onRestoreFocusConsumed = { targetId ->
+                        consumeArmedRestore(targetId)
+                    }
                 )
             }
 
@@ -261,6 +403,11 @@ fun HomeScreenV2Content(
                 },
                 onTogglePin = onTogglePin,
                 onCloseRequested = {
+                    morePanelCloseTarget = MorePanelCloseTarget.MoreButton
+                    onMorePanelOpenChange(false)
+                },
+                onExitUpRequested = {
+                    morePanelCloseTarget = MorePanelCloseTarget.ContinueWatching
                     onMorePanelOpenChange(false)
                 }
             )

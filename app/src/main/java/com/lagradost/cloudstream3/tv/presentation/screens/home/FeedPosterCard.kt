@@ -17,6 +17,7 @@ import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 internal fun FeedPosterCard(
     item: MediaItemCompat,
     onClick: () -> Unit,
+    onFocused: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haloController = LocalHaloController.current
@@ -32,6 +33,10 @@ internal fun FeedPosterCard(
         shape = CloudStreamCardShape,
         onClick = onClick,
         onFocus = { focusInfo ->
+            if (focusInfo.isFocused) {
+                onFocused?.invoke()
+            }
+
             if (!isHaloEnabled) {
                 return@PosterCard
             }

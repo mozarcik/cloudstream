@@ -18,11 +18,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -43,7 +38,6 @@ internal fun ContinueWatchingHeroCard(
     isInteractive: Boolean,
     onFocused: () -> Unit,
     onClick: () -> Unit,
-    onMoveDown: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -71,18 +65,6 @@ internal fun ContinueWatchingHeroCard(
                 isFocused = focusState.isFocused
                 if (focusState.isFocused) {
                     onFocused()
-                }
-            }
-            .onPreviewKeyEvent { event ->
-                if (!isInteractive || event.type != KeyEventType.KeyDown) {
-                    return@onPreviewKeyEvent false
-                }
-
-                if (event.key == Key.DirectionDown) {
-                    onMoveDown()
-                    true
-                } else {
-                    false
                 }
             }
             .focusProperties {

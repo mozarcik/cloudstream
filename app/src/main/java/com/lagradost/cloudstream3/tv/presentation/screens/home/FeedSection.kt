@@ -26,6 +26,12 @@ fun FeedSection(
     errorMessage: String? = null,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
+    sectionFocusKey: String? = null,
+    pendingRestoreFocusTargetId: String? = null,
+    restoreFocusToken: Int = 0,
+    onItemFocused: ((MediaItemCompat) -> Unit)? = null,
+    onShowMoreFocused: (() -> Unit)? = null,
+    onRestoreFocusConsumed: ((String) -> Unit)? = null,
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val cardWidth = (
@@ -89,6 +95,12 @@ fun FeedSection(
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         cardPosterHeight = cardPosterHeight,
+                        pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
+                        restoreFocusToken = restoreFocusToken,
+                        sectionFocusKey = sectionFocusKey,
+                        onItemFocused = onItemFocused,
+                        onShowMoreFocused = onShowMoreFocused,
+                        onRestoreFocusConsumed = onRestoreFocusConsumed,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
