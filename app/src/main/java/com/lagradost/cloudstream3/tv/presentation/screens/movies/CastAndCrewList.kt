@@ -73,6 +73,14 @@ private fun CastAndCrewItem(
     castMember: MovieCast,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val imageRequest = remember(context, castMember.avatarUrl) {
+        ImageRequest.Builder(context)
+            .data(castMember.avatarUrl)
+            .crossfade(false)
+            .build()
+    }
+
     ClassicCard(
         modifier = modifier
             .padding(end = 20.dp, bottom = 16.dp)
@@ -118,8 +126,7 @@ private fun CastAndCrewItem(
                     .fillMaxWidth()
                     .fillMaxHeight(0.725f)
                     .background(ourColors.random()),
-                model = ImageRequest.Builder(LocalContext.current).data(castMember.avatarUrl)
-                    .crossfade(true).build(),
+                model = imageRequest,
                 contentDescription = StringConstants
                     .Composable
                     .ContentDescription

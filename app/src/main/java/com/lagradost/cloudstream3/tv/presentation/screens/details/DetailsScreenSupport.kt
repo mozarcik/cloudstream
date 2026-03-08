@@ -9,6 +9,8 @@ import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatDownloadSnapshot
 import com.lagradost.cloudstream3.tv.compat.downloads.calculateDownloadProgressFraction
 import com.lagradost.cloudstream3.tv.compat.downloads.resolveNormalizedDownloadStatus
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
+import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
@@ -119,6 +121,22 @@ internal fun calculateProgressFraction(
     return calculateDownloadProgressFraction(
         downloadedBytes = downloadedBytes,
         totalBytes = totalBytes,
+    )
+}
+
+internal fun resolveDetailsEpisodeSeason(
+    episode: TvEpisode,
+    selectedSeason: TvSeason?,
+): Int? {
+    return episode.seasonNumber
+        ?: selectedSeason?.displaySeasonNumber
+        ?: selectedSeason?.seasonNumber
+}
+
+internal fun DetailsDownloadButtonUiState.toMovieDetailsDownloadActionState(): MovieDetailsDownloadActionState {
+    return resolveDownloadActionState(
+        status = status,
+        progressFraction = progressFraction,
     )
 }
 

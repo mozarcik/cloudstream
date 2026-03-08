@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.tvseries
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -178,6 +178,13 @@ internal fun EpisodeCard(
     modifier: Modifier = Modifier
 ) {
     val actionFocusRequester = remember { FocusRequester() }
+    val context = LocalContext.current
+    val posterRequest = remember(context, episode.posterUri) {
+        ImageRequest.Builder(context)
+            .data(episode.posterUri)
+            .crossfade(false)
+            .build()
+    }
 
     var hasCardOrChildFocus by remember { mutableStateOf(false) }
 
@@ -211,10 +218,7 @@ internal fun EpisodeCard(
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(episode.posterUri)
-                    .crossfade(true)
-                    .build(),
+                model = posterRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -253,19 +257,18 @@ internal fun EpisodeCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                AnimatedVisibility(visible = hasCardOrChildFocus) {
-                    DetailsActionsRow(
-                        onPlayClick = { onEpisodeSelected(episode) },
-                        playButtonLabel = stringResource(R.string.home_play),
-                        onPlayLongClick = { },
-                        isWatched = isWatched,
-                        downloadActionState = downloadActionState,
-                        onQuickActionClick = { action ->
-                            onEpisodeQuickActionClick(episode, action)
-                        },
-                        playButtonModifier = Modifier.focusRequester(actionFocusRequester)
-                    )
-                }
+                DetailsActionsRow(
+                    onPlayClick = { onEpisodeSelected(episode) },
+                    playButtonLabel = stringResource(R.string.home_play),
+                    onPlayLongClick = { },
+                    isWatched = isWatched,
+                    downloadActionState = downloadActionState,
+                    onQuickActionClick = { action ->
+                        onEpisodeQuickActionClick(episode, action)
+                    },
+                    playButtonModifier = Modifier.focusRequester(actionFocusRequester),
+                    modifier = Modifier.alpha(if (hasCardOrChildFocus) 1f else 0f)
+                )
             }
         }
     }
@@ -336,10 +339,13 @@ private fun SectionHeaderText(
 @Composable
 private fun seasonChipLabel(season: TvSeason): String {
     val seasonLabel = stringResource(R.string.season)
+    val extrasLabel = stringResource(R.string.extras)
     val seasonNumber = season.displaySeasonNumber ?: season.seasonNumber
     val customTitle = season.title.orEmpty().trim()
 
     return when {
+        seasonNumber == 0 && customTitle.isNotBlank() -> customTitle
+        seasonNumber == 0 -> extrasLabel
         seasonNumber != null && customTitle.isNotBlank() -> "$seasonLabel $seasonNumber $customTitle"
         seasonNumber != null -> "$seasonLabel $seasonNumber"
         customTitle.isNotBlank() -> customTitle
@@ -356,6 +362,7 @@ private fun episodeTitle(episode: TvEpisode): String {
 
 @Composable
 private fun episodeMetadataLine(episode: TvEpisode): String? {
+    val dateFormatter = remember { DateFormat.getDateInstance(DateFormat.MEDIUM) }
     val texts = mutableListOf<String>()
 
     episode.episodeNumber?.let { episodeNumber ->
@@ -374,7 +381,7 @@ private fun episodeMetadataLine(episode: TvEpisode): String? {
 
     episode.releaseDateMillis?.let { releaseDateMillis ->
         texts.add(
-            DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(releaseDateMillis))
+            dateFormatter.format(Date(releaseDateMillis))
         )
     }
 

@@ -1,5 +1,8 @@
 package com.lagradost.cloudstream3.tv.data.entities
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class TvEpisode(
     val id: String,
     val data: String,
@@ -13,6 +16,7 @@ data class TvEpisode(
     val posterUri: String,
 )
 
+@Immutable
 data class TvSeason(
     val id: String,
     val seasonNumber: Int?,

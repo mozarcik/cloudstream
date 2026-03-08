@@ -127,6 +127,8 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 androidx-tv-material = { module = "androidx.tv:tv-material", version.ref = "tv-material" }
 androidx-compose-material-icons-extended = { module = "androidx.compose.material:material-icons-extended" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 
 paging-runtime = { module = "androidx.paging:paging-runtime", version.ref = "paging" }

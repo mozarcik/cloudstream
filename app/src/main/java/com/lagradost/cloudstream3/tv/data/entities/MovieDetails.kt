@@ -1,5 +1,8 @@
 package com.lagradost.cloudstream3.tv.data.entities
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class MovieDetails(
     val id: String,
     val isFavorite: Boolean = false,

@@ -12,6 +12,8 @@ import com.lagradost.cloudstream3.tv.data.entities.MovieCast
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.data.repositories.DetailsSecondaryLoadResult
+import com.lagradost.cloudstream3.tv.data.repositories.mergeSecondary
 import com.lagradost.cloudstream3.ui.result.VideoWatchState
 import com.lagradost.cloudstream3.ui.result.getId
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getVideoWatchState
@@ -25,21 +27,31 @@ private const val DebugTag = "TvDetailsMapper"
 fun LoadResponse.toMovieDetails(): MovieDetails {
     Log.d(DebugTag, "map:start input=${this::class.java.simpleName} type=${this.type}")
 
+    return toPrimaryMovieDetails().mergeSecondary(toSecondaryMovieDetails())
+}
+
+fun LoadResponse.toPrimaryMovieDetails(): MovieDetails {
     return when (this) {
-        is MovieLoadResponse -> this.toMovieDetails()
-        is TvSeriesLoadResponse -> this.toMovieDetails()
-        is AnimeLoadResponse -> this.toMovieDetails()
-        else -> this.toGenericMovieDetails()
+        is MovieLoadResponse -> this.toPrimaryMovieDetails()
+        is TvSeriesLoadResponse -> this.toPrimaryMovieDetails()
+        is AnimeLoadResponse -> this.toPrimaryMovieDetails()
+        else -> this.toPrimaryGenericMovieDetails()
     }
 }
 
-/**
- * Converts MovieLoadResponse to MovieDetails
- */
-private fun MovieLoadResponse.toMovieDetails(): MovieDetails {
+fun LoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    return when (this) {
+        is MovieLoadResponse -> this.toSecondaryMovieDetails()
+        is TvSeriesLoadResponse -> this.toSecondaryMovieDetails()
+        is AnimeLoadResponse -> this.toSecondaryMovieDetails()
+        else -> this.toSecondaryGenericMovieDetails()
+    }
+}
+
+private fun MovieLoadResponse.toPrimaryMovieDetails(): MovieDetails {
     Log.d(
         DebugTag,
-        "map:movie name=${this.name} type=${this.type} year=${this.year} recommendations=${this.recommendations?.size ?: 0}"
+        "map:movie:primary name=${this.name} type=${this.type} year=${this.year}"
     )
 
     return MovieDetails(
@@ -56,37 +68,21 @@ private fun MovieLoadResponse.toMovieDetails(): MovieDetails {
         director = "",
         screenplay = "",
         music = "",
-        cast = this.actors?.mapIndexed { index, actorData ->
-            MovieCast(
-                id = index.toString(),
-                characterName = actorData.roleString ?: "",
-                realName = actorData.actor.name,
-                avatarUrl = actorData.actor.image ?: ""
-            )
-        } ?: emptyList(),
-        status = "",
-        originalLanguage = "",
-        budget = "",
-        revenue = "",
-        similarMovies = this.recommendations?.mapIndexed {index, response ->
-            Movie(
-                id = index.toString(),
-                posterUri = response.posterUrl ?: "",
-                name = response.name,
-                description = "",
-            )
-        } ?: emptyList(),
     )
 }
 
-/**
- * Converts TvSeriesLoadResponse to MovieDetails
- */
-private fun TvSeriesLoadResponse.toMovieDetails(): MovieDetails {
+private fun MovieLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+    )
+}
+
+private fun TvSeriesLoadResponse.toPrimaryMovieDetails(): MovieDetails {
     val episodes = this.episodes
     val seasonCount = episodes.extractSeasonCount(this.seasonNames?.mapNotNull { it.displaySeason ?: it.season })
     val episodeCount = episodes.extractEpisodeCount()
-    val currentEpisode = episodes.findCurrentEpisode(mainId = this.getId())
+    val currentEpisode = episodes.findCurrentEpisode()
     val seasons = episodes.toTvSeasons(
         seasonNames = this.seasonNames,
         defaultPosterUri = this.backgroundPosterUrl ?: this.posterUrl ?: ""
@@ -95,9 +91,10 @@ private fun TvSeriesLoadResponse.toMovieDetails(): MovieDetails {
         val seasonNumber = season.displaySeasonNumber ?: season.seasonNumber ?: -1
         "S${seasonNumber}:${season.episodes.size}"
     }
+    val rawSeasonSummary = episodes.toRawSeasonSummary()
     Log.d(
         DebugTag,
-        "map:tvSeries name=${this.name} rawEpisodes=${episodes.size} seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
+        "map:tvSeries:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
     )
 
     return MovieDetails(
@@ -119,33 +116,20 @@ private fun TvSeriesLoadResponse.toMovieDetails(): MovieDetails {
         director = "",
         screenplay = "",
         music = "",
-        cast = this.actors?.mapIndexed { index, actorData ->
-            MovieCast(
-                id = index.toString(),
-                characterName = actorData.roleString ?: "",
-                realName = actorData.actor.name,
-                avatarUrl = actorData.actor.image ?: ""
-            )
-        } ?: emptyList(),
-        status = "",
-        originalLanguage = "",
-        budget = "",
-        revenue = "",
-        similarMovies = this.recommendations?.mapIndexed {index, response ->
-            Movie(
-                id = index.toString(),
-                posterUri = response.posterUrl ?: "",
-                name = response.name,
-                description = "",
-            )
-        } ?: emptyList(),
     )
 }
 
-/**
- * Converts AnimeLoadResponse to MovieDetails
- */
-private fun AnimeLoadResponse.toMovieDetails(): MovieDetails {
+private fun TvSeriesLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    val resumeEpisode = this.episodes.findCurrentEpisode(mainId = this.getId())
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+        currentSeason = resumeEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = resumeEpisode?.episode,
+    )
+}
+
+private fun AnimeLoadResponse.toPrimaryMovieDetails(): MovieDetails {
     val episodes = this.episodes.values.flatten()
     val seasonCount = episodes.extractSeasonCount()
     val episodeCount = episodes.extractEpisodeCount()
@@ -159,9 +143,10 @@ private fun AnimeLoadResponse.toMovieDetails(): MovieDetails {
         val seasonNumber = season.displaySeasonNumber ?: season.seasonNumber ?: -1
         "S${seasonNumber}:${season.episodes.size}"
     }
+    val rawSeasonSummary = episodes.toRawSeasonSummary()
     Log.d(
         DebugTag,
-        "map:anime name=${this.name} rawEpisodes=${episodes.size} seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
+        "map:anime:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
     )
 
     return MovieDetails(
@@ -183,34 +168,18 @@ private fun AnimeLoadResponse.toMovieDetails(): MovieDetails {
         director = "",
         screenplay = "",
         music = "",
-        cast = this.actors?.mapIndexed { index, actorData ->
-            MovieCast(
-                id = index.toString(),
-                characterName = actorData.roleString ?: "",
-                realName = actorData.actor.name,
-                avatarUrl = actorData.actor.image ?: ""
-            )
-        } ?: emptyList(),
-        status = "",
-        originalLanguage = "",
-        budget = "",
-        revenue = "",
-        similarMovies = this.recommendations?.mapIndexed {index, response ->
-            Movie(
-                id = index.toString(),
-                posterUri = response.posterUrl ?: "",
-                name = response.name,
-                description = "",
-            )
-        } ?: emptyList(),
     )
 }
 
-/**
- * Generic converter for other LoadResponse types
- */
-private fun LoadResponse.toGenericMovieDetails(): MovieDetails {
-    Log.d(DebugTag, "map:generic name=${this.name} type=${this.type}")
+private fun AnimeLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+    )
+}
+
+private fun LoadResponse.toPrimaryGenericMovieDetails(): MovieDetails {
+    Log.d(DebugTag, "map:generic:primary name=${this.name} type=${this.type}")
 
     return MovieDetails(
         id = this.url,
@@ -226,19 +195,12 @@ private fun LoadResponse.toGenericMovieDetails(): MovieDetails {
         director = "",
         screenplay = "",
         music = "",
-        cast = emptyList(),
-        status = "",
-        originalLanguage = "",
-        budget = "",
-        revenue = "",
-        similarMovies = this.recommendations?.mapIndexed {index, response ->
-            Movie(
-                id = index.toString(),
-                posterUri = response.posterUrl ?: "",
-                name = response.name,
-                description = "",
-            )
-        } ?: emptyList(),
+    )
+}
+
+private fun LoadResponse.toSecondaryGenericMovieDetails(): DetailsSecondaryLoadResult {
+    return DetailsSecondaryLoadResult(
+        similarMovies = this.recommendations.toMovieList(),
     )
 }
 
@@ -272,19 +234,31 @@ private fun List<Episode>.extractEpisodeCount(): Int? {
 }
 
 private fun List<Episode>.findCurrentEpisode(): Episode? {
+    val missingSeasonBucket = resolveMissingSeasonBucket()
     val sortedEpisodes = this
         .asSequence()
         .filter { episode -> episode.season != null || episode.episode != null }
-        .sortedWith(compareBy<Episode>({ it.season ?: 0 }, { it.episode ?: Int.MAX_VALUE }))
+        .sortedWith(
+            compareBy<Episode>(
+                { episode -> episode.seasonSortOrder(missingSeasonBucket) },
+                { it.episode ?: Int.MAX_VALUE }
+            )
+        )
         .toList()
     return sortedEpisodes.firstOrNull()
 }
 
 private fun List<Episode>.findCurrentEpisode(mainId: Int): Episode? {
+    val missingSeasonBucket = resolveMissingSeasonBucket()
     val sortedEpisodes = this
         .asSequence()
         .filter { episode -> episode.season != null || episode.episode != null }
-        .sortedWith(compareBy<Episode>({ it.season ?: 0 }, { it.episode ?: Int.MAX_VALUE }))
+        .sortedWith(
+            compareBy<Episode>(
+                { episode -> episode.seasonSortOrder(missingSeasonBucket) },
+                { it.episode ?: Int.MAX_VALUE }
+            )
+        )
         .toList()
 
     val watchedFlags = sortedEpisodes.mapIndexed { index, episode ->
@@ -305,9 +279,10 @@ private fun List<Episode>.toTvSeasons(
     if (this.isEmpty()) return emptyList()
 
     val sourceEpisodes = if (deduplicateBySeasonAndEpisode) {
+        val missingSeasonBucket = resolveMissingSeasonBucket()
         this.distinctBy { episode ->
             Triple(
-                episode.season?.takeIf { it > 0 } ?: 1,
+                episode.normalizedSeasonBucket(missingSeasonBucket),
                 episode.episode ?: Int.MAX_VALUE,
                 episode.name.orEmpty()
             )
@@ -316,15 +291,20 @@ private fun List<Episode>.toTvSeasons(
         this
     }
 
+    val missingSeasonBucket = sourceEpisodes.resolveMissingSeasonBucket()
     val seasonDataBySeason = seasonNames.orEmpty().associateBy { it.season }
     val episodesBySeason = sourceEpisodes.groupBy { episode ->
-        episode.season?.takeIf { it > 0 } ?: 1
+        episode.normalizedSeasonBucket(missingSeasonBucket)
     }
 
     val mappedSeasons = episodesBySeason
         .entries
         .sortedBy { (seasonNumber, _) ->
-            seasonDataBySeason[seasonNumber]?.displaySeason?.takeIf { it > 0 } ?: seasonNumber
+            val seasonOrder = seasonDataBySeason[seasonNumber]
+                ?.displaySeason
+                ?.takeIf { it > 0 }
+                ?: seasonNumber
+            seasonOrder.toSeasonSortOrder()
         }
         .map { (seasonNumber, episodesForSeason) ->
             val seasonData = seasonDataBySeason[seasonNumber]
@@ -343,7 +323,7 @@ private fun List<Episode>.toTvSeasons(
                             index.toString()
                         ).joinToString("-"),
                         data = episode.data,
-                        seasonNumber = episode.season?.takeIf { it > 0 } ?: seasonNumber,
+                        seasonNumber = episode.season?.takeIf { it > 0 } ?: seasonNumber.takeIf { it > 0 },
                         episodeNumber = episodeNumber,
                         title = episode.name.orEmpty(),
                         description = episode.description.orEmpty(),
@@ -365,10 +345,48 @@ private fun List<Episode>.toTvSeasons(
 
     Log.d(
         DebugTag,
-        "map:toTvSeasons sourceEpisodes=${sourceEpisodes.size} dedupe=$deduplicateBySeasonAndEpisode outputSeasons=${mappedSeasons.size}"
+        "map:toTvSeasons sourceEpisodes=${sourceEpisodes.size} dedupe=$deduplicateBySeasonAndEpisode missingSeasonBucket=$missingSeasonBucket rawSeasons=${sourceEpisodes.toRawSeasonSummary()} outputSeasons=${mappedSeasons.size} mapped=${mappedSeasons.toSeasonDebugSummary()}"
     )
 
     return mappedSeasons
+}
+
+private fun List<Episode>.resolveMissingSeasonBucket(): Int {
+    return if (any { episode -> (episode.season ?: 0) > 0 }) 0 else 1
+}
+
+private fun Episode.normalizedSeasonBucket(missingSeasonBucket: Int): Int {
+    return season?.takeIf { it > 0 } ?: missingSeasonBucket
+}
+
+private fun Episode.seasonSortOrder(missingSeasonBucket: Int): Int {
+    return normalizedSeasonBucket(missingSeasonBucket).toSeasonSortOrder()
+}
+
+private fun Int.toSeasonSortOrder(): Int {
+    return takeIf { it > 0 } ?: Int.MAX_VALUE
+}
+
+private fun List<Episode>.toRawSeasonSummary(): String {
+    return groupBy { episode -> episode.season }
+        .entries
+        .sortedBy { (season, _) -> season ?: Int.MAX_VALUE }
+        .joinToString(separator = ",") { (season, episodes) ->
+            val label = season?.toString() ?: "null"
+            "$label:${episodes.size}"
+        }
+}
+
+private fun List<TvSeason>.toSeasonDebugSummary(): String {
+    return joinToString(separator = ",") { season ->
+        val seasonLabel = season.displaySeasonNumber ?: season.seasonNumber
+        val episodePreview = season.episodes
+            .take(4)
+            .joinToString(separator = "|") { episode ->
+                "${episode.seasonNumber ?: "null"}:${episode.episodeNumber ?: "null"}:${episode.title.take(18)}"
+            }
+        "bucket=${season.seasonNumber ?: "null"} display=${seasonLabel ?: "null"} count=${season.episodes.size} preview=[$episodePreview]"
+    }
 }
 
 private fun Episode.extractDurationMinutes(): Int? {
@@ -386,4 +404,26 @@ private fun Episode.extractRatingText(): String? {
     return this.score
         ?.toString(maxScore = 10, decimals = 1, removeTrailingZeros = true)
         ?.takeIf { rating -> rating.isNotBlank() }
+}
+
+private fun List<com.lagradost.cloudstream3.ActorData>?.toMovieCastList(): List<MovieCast> {
+    return this?.mapIndexed { index, actorData ->
+        MovieCast(
+            id = index.toString(),
+            characterName = actorData.roleString ?: "",
+            realName = actorData.actor.name,
+            avatarUrl = actorData.actor.image ?: ""
+        )
+    } ?: emptyList()
+}
+
+private fun List<com.lagradost.cloudstream3.SearchResponse>?.toMovieList(): List<Movie> {
+    return this?.mapIndexed { index, response ->
+        Movie(
+            id = index.toString(),
+            posterUri = response.posterUrl ?: "",
+            name = response.name,
+            description = "",
+        )
+    } ?: emptyList()
 }

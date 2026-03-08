@@ -10,17 +10,26 @@ import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.tv.compat.FavoritesCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.MovieList
-import com.lagradost.cloudstream3.tv.data.mappers.toMovieDetails
+import com.lagradost.cloudstream3.tv.data.mappers.toPrimaryMovieDetails
+import com.lagradost.cloudstream3.tv.data.mappers.toSecondaryMovieDetails
+import com.lagradost.cloudstream3.tv.util.tvTraceAsyncSection
+import com.lagradost.cloudstream3.tv.util.tvTraceSection
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.WatchType
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class MovieRepositoryImpl : MovieRepository {
     private companion object {
         const val DebugTag = "TvDetailsRepo"
     }
+
     private val loadResponseCache = mutableMapOf<String, LoadResponse>()
+    private val cacheMutex = Mutex()
 
     override fun getTrendingMovies(): Flow<MovieList> {
         // TODO: Implement with actual data from CloudStream providers
@@ -37,9 +46,55 @@ class MovieRepositoryImpl : MovieRepository {
         return flowOf(emptyList())
     }
 
+    override suspend fun getPrimaryDetails(
+        url: String,
+        apiName: String,
+    ): DetailsPrimaryLoadResult = withContext(Dispatchers.IO) {
+        Log.d(DebugTag, "entry:getPrimaryDetails api=$apiName url=$url")
+        val loadResponse = getOrLoadResponse(url = url, apiName = apiName)
+        logLoadedResponse(loadResponse)
+
+        val details = tvTraceSection("details_map_primary") {
+            FavoritesCompat.markLibraryState(
+                movieDetails = loadResponse.toPrimaryMovieDetails(),
+                loadResponse = loadResponse,
+            )
+        }
+
+        Log.d(
+            DebugTag,
+            "map:primary id=${details.id} name=${details.name} isFavorite=${details.isFavorite} isBookmarked=${details.isBookmarked} seasonCount=${details.seasonCount} episodeCount=${details.episodeCount} seasons=${details.seasons.size} currentSeason=${details.currentSeason} currentEpisode=${details.currentEpisode}"
+        )
+
+        DetailsPrimaryLoadResult(
+            details = details,
+            loadResponse = loadResponse,
+        )
+    }
+
+    override suspend fun getSecondaryDetails(
+        url: String,
+        apiName: String,
+    ): DetailsSecondaryLoadResult = withContext(Dispatchers.IO) {
+        Log.d(DebugTag, "entry:getSecondaryDetails api=$apiName url=$url")
+        val loadResponse = getOrLoadResponse(url = url, apiName = apiName)
+        val secondary = tvTraceSection("details_map_secondary") {
+            loadResponse.toSecondaryMovieDetails()
+        }
+
+        Log.d(
+            DebugTag,
+            "map:secondary cast=${secondary.cast.size} similar=${secondary.similarMovies.size} currentSeason=${secondary.currentSeason} currentEpisode=${secondary.currentEpisode}"
+        )
+
+        secondary
+    }
+
     override suspend fun getDetails(url: String, apiName: String): MovieDetails {
-        Log.d(DebugTag, "entry:getDetails api=$apiName url=$url")
-        return getDetailsInternal(url, apiName)
+        val primary = getPrimaryDetails(url = url, apiName = apiName)
+        return primary.details.mergeSecondary(
+            getSecondaryDetails(url = url, apiName = apiName)
+        )
     }
 
     override suspend fun ensureMediaInFavorites(url: String, apiName: String) {
@@ -47,12 +102,8 @@ class MovieRepositoryImpl : MovieRepository {
     }
 
     override suspend fun setMediaFavorite(url: String, apiName: String, isFavorite: Boolean) {
-        val cacheKey = cacheKey(url = url, apiName = apiName)
-        val loadResponse = loadResponseCache[cacheKey] ?: loadResponseInternal(
-            url = url,
-            apiName = apiName
-        ).also { loadedResponse ->
-            loadResponseCache[cacheKey] = loadedResponse
+        val loadResponse = withContext(Dispatchers.IO) {
+            getOrLoadResponse(url = url, apiName = apiName)
         }
 
         if (isFavorite) {
@@ -63,61 +114,60 @@ class MovieRepositoryImpl : MovieRepository {
     }
 
     override suspend fun setMediaBookmarkStatus(url: String, apiName: String, status: WatchType) {
-        val cacheKey = cacheKey(url = url, apiName = apiName)
-        val loadResponse = loadResponseCache[cacheKey] ?: loadResponseInternal(
-            url = url,
-            apiName = apiName
-        ).also { loadedResponse ->
-            loadResponseCache[cacheKey] = loadedResponse
+        val loadResponse = withContext(Dispatchers.IO) {
+            getOrLoadResponse(url = url, apiName = apiName)
         }
 
         FavoritesCompat.setBookmarkStatus(loadResponse, status)
     }
 
-    private suspend fun getDetailsInternal(url: String, apiName: String): MovieDetails {
+    private suspend fun getOrLoadResponse(
+        url: String,
+        apiName: String,
+    ): LoadResponse {
         Log.d(DebugTag, "load:start api=$apiName url=$url")
         val cacheKey = cacheKey(url = url, apiName = apiName)
 
-        val loadResponse = loadResponseCache[cacheKey] ?: loadResponseInternal(
-            url = url,
-            apiName = apiName
-        ).also { loadedResponse ->
-            loadResponseCache[cacheKey] = loadedResponse
+        cacheMutex.withLock {
+            loadResponseCache[cacheKey]?.let { return it }
         }
 
-        Log.d(
-            DebugTag,
-            "load:success response=${loadResponse::class.java.simpleName} type=${loadResponse.type} ${loadResponse.debugEpisodeSummary()}"
+        val loadedResponse = loadResponseInternal(
+            url = url,
+            apiName = apiName
         )
 
-        val details = FavoritesCompat.markLibraryState(
-            movieDetails = loadResponse.toMovieDetails(),
-            loadResponse = loadResponse,
-        )
-        val firstSeasonEpisodes = details.seasons.firstOrNull()?.episodes?.size ?: 0
-
-        Log.d(
-            DebugTag,
-            "map:done id=${details.id} name=${details.name} isFavorite=${details.isFavorite} isBookmarked=${details.isBookmarked} bookmarkLabelRes=${details.bookmarkLabelRes} seasonCount=${details.seasonCount} episodeCount=${details.episodeCount} seasons=${details.seasons.size} firstSeasonEpisodes=$firstSeasonEpisodes currentSeason=${details.currentSeason} currentEpisode=${details.currentEpisode}"
-        )
-
-        return details
+        cacheMutex.withLock {
+            return loadResponseCache.getOrPut(cacheKey) { loadedResponse }
+        }
     }
 
     private suspend fun loadResponseInternal(url: String, apiName: String): LoadResponse {
-        val api = APIHolder.getApiFromNameNull(apiName)
-            ?: throw IllegalArgumentException("API provider not found: $apiName")
-        val repo = APIRepository(api)
+        return tvTraceAsyncSection(
+            sectionName = "details_load_provider",
+            cookie = cacheKey(url = url, apiName = apiName).hashCode(),
+        ) {
+            val api = APIHolder.getApiFromNameNull(apiName)
+                ?: throw IllegalArgumentException("API provider not found: $apiName")
+            val repo = APIRepository(api)
 
-        return when (val result = repo.load(url)) {
-            is Resource.Success -> result.value
-            is Resource.Failure -> throw Exception("Failed to load movie details: ${result.errorString}")
-            is Resource.Loading -> throw IllegalStateException("Unexpected loading state")
+            when (val result = repo.load(url)) {
+                is Resource.Success -> result.value
+                is Resource.Failure -> throw Exception("Failed to load movie details: ${result.errorString}")
+                is Resource.Loading -> throw IllegalStateException("Unexpected loading state")
+            }
         }
     }
 
     private fun cacheKey(url: String, apiName: String): String {
         return "$apiName::$url"
+    }
+
+    private fun logLoadedResponse(loadResponse: LoadResponse) {
+        Log.d(
+            DebugTag,
+            "load:success response=${loadResponse::class.java.simpleName} type=${loadResponse.type} ${loadResponse.debugEpisodeSummary()}"
+        )
     }
 }
 

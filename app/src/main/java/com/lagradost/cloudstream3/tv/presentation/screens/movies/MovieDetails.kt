@@ -36,7 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -326,7 +326,7 @@ private fun PrimaryPlayButton(
 
     Button(
         onClick = goToMoviePlayer,
-        modifier = modifier,
+        modifier = modifier.testTag("details_play_button"),
         contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
         colors = ButtonDefaults.colors(
             containerColor = MaterialTheme.colorScheme.primary,
@@ -403,28 +403,28 @@ fun MovieDetailsBackdrop(
             .ContentDescription
             .moviePoster(title),
         contentScale = ContentScale.Crop,
-        modifier = backdropModifier.drawWithContent {
-            drawContent()
-            drawRect(
-                Brush.verticalGradient(
-                    colors = listOf(Color.Transparent, gradientColor),
-                    startY = size.height * 0.6f
-                )
+        modifier = backdropModifier.drawWithCache {
+            val verticalGradient = Brush.verticalGradient(
+                colors = listOf(Color.Transparent, gradientColor),
+                startY = size.height * 0.6f
             )
-            drawRect(
-                Brush.horizontalGradient(
-                    colors = listOf(gradientColor, Color.Transparent),
-                    endX = size.width * 0.5f,
-                    startX = 0f
-                )
+            val horizontalGradient = Brush.horizontalGradient(
+                colors = listOf(gradientColor, Color.Transparent),
+                endX = size.width * 0.5f,
+                startX = 0f
             )
-            drawRect(
-                Brush.linearGradient(
-                    colors = listOf(gradientColor, Color.Transparent),
-                    start = Offset(x = 0f, y = size.height),
-                    end = Offset(x = size.width * 0.7f, y = size.height * 0.3f)
-                )
+            val diagonalGradient = Brush.linearGradient(
+                colors = listOf(gradientColor, Color.Transparent),
+                start = Offset(x = 0f, y = size.height),
+                end = Offset(x = size.width * 0.7f, y = size.height * 0.3f)
             )
+
+            onDrawWithContent {
+                drawContent()
+                drawRect(verticalGradient)
+                drawRect(horizontalGradient)
+                drawRect(diagonalGradient)
+            }
         }
     )
 }

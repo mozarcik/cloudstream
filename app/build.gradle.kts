@@ -162,9 +162,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.json)
     androidTestImplementation(libs.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     implementation(libs.junit.ktx)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Android Core & Lifecycle
     implementation(libs.core.ktx)
