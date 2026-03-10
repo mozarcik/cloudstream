@@ -44,6 +44,7 @@
     <string name="no_data">No Data</string>
     <string name="episode_more_options_des">More Options</string>
     <string name="next_episode">Next episode</string>
+    <string name="details_original_title_format">Original title: %1$s</string>
     <string name="result_tags">Genres</string>
     <string name="result_share">Share</string>
     <string name="result_open_in_browser">Open In Browser</string>
@@ -405,6 +406,7 @@
     <string name="category_ui">Layout</string>
     <string name="automatic">Auto</string>
     <string name="tv_layout">TV layout</string>
+    <string name="tv_material_layout">TV Material</string>
     <string name="phone_layout">Phone layout</string>
     <string name="emulator_layout">Emulator layout</string>
     <string name="primary_color_settings">Primary color</string>

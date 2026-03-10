@@ -34,7 +34,6 @@ internal fun DetailsScreenBody(
     selectedSeasonId: String?,
     selectedEpisodes: List<TvEpisode>,
     seasonTabFocusRequesters: List<FocusRequester>,
-    selectedSeasonFocusRequester: FocusRequester?,
     heroState: DetailsHeroUiState,
     downloadButtonState: DetailsDownloadButtonUiState,
     hasAdditionalInfo: Boolean,
@@ -56,8 +55,9 @@ internal fun DetailsScreenBody(
 
     Box(modifier = modifier) {
         MovieDetailsBackdrop(
-            posterUri = details.posterUri,
+            posterUri = details.backdropUri.ifBlank { details.posterUri },
             title = details.name,
+            headers = details.posterHeaders,
             modifier = Modifier.fillMaxSize(),
             gradientColor = MaterialTheme.colorScheme.background
         )
@@ -72,9 +72,7 @@ internal fun DetailsScreenBody(
                     movieDetails = details,
                     goToMoviePlayer = { goToPlayer(resolveDefaultEpisodeData(details)) },
                     playButtonLabel = heroState.playButtonLabel,
-                    titleMetadata = heroState.titleMetadata,
                     downloadActionState = heroState.downloadActionState,
-                    downFocusRequester = selectedSeasonFocusRequester,
                     onPrimaryActionsFocused = {
                         if (listState.firstVisibleItemIndex == 0 &&
                             listState.firstVisibleItemScrollOffset == 0

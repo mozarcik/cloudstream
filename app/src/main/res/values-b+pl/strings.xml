@@ -281,6 +281,7 @@
     <string name="category_ui">Układ interfejsu</string>
     <string name="automatic">Automatyczny</string>
     <string name="tv_layout">Układ dla telewizorów</string>
+    <string name="tv_material_layout">TV Material</string>
     <string name="phone_layout">Układ dla telefonów</string>
     <string name="emulator_layout">Układ dla emulatorów</string>
     <string name="primary_color_settings">Kolor podstawowy</string>

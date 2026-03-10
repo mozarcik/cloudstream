@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,9 +148,11 @@ internal fun SeasonSelectorRow(
                 selected = index == selectedTabIndex,
                 onFocus = { onSeasonSelected(season) },
                 onClick = { onSeasonSelected(season) },
-                modifier = Modifier.focusRequester(
-                    tabFocusRequesters.getOrElse(index) { fallbackTabFocusRequester }
-                ),
+                modifier = Modifier
+                    .testTag("details_season_tab_${season.id}")
+                    .focusRequester(
+                        tabFocusRequesters.getOrElse(index) { fallbackTabFocusRequester }
+                    ),
             ) {
                 Text(
                     text = seasonChipLabel(season = season),

@@ -54,21 +54,7 @@ private fun MovieLoadResponse.toPrimaryMovieDetails(): MovieDetails {
         "map:movie:primary name=${this.name} type=${this.type} year=${this.year}"
     )
 
-    return MovieDetails(
-        id = this.url,
-        videoUri = "",
-        subtitleUri = null,
-        posterUri = this.backgroundPosterUrl ?: "",
-        name = this.name,
-        description = this.plot ?: "",
-        pgRating = this.contentRating ?: "",
-        releaseDate = this.year?.toString() ?: "",
-        categories = this.tags ?: emptyList(),
-        duration = this.duration?.let { "${it}min" } ?: "",
-        director = "",
-        screenplay = "",
-        music = "",
-    )
+    return createBaseMovieDetails()
 }
 
 private fun MovieLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
@@ -97,25 +83,14 @@ private fun TvSeriesLoadResponse.toPrimaryMovieDetails(): MovieDetails {
         "map:tvSeries:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
     )
 
-    return MovieDetails(
-        id = this.url,
-        videoUri = "",
-        subtitleUri = null,
-        posterUri = this.backgroundPosterUrl ?: "",
-        name = this.name,
-        description = this.plot ?: "",
+    return createBaseMovieDetails(
         seasons = seasons,
         seasonCount = seasonCount,
         episodeCount = episodeCount,
         currentSeason = currentEpisode?.season?.takeIf { it > 0 },
         currentEpisode = currentEpisode?.episode,
-        pgRating = this.contentRating ?: "",
-        releaseDate = this.year?.toString() ?: "",
-        categories = this.tags ?: emptyList(),
-        duration = this.duration?.let { "${it}min" } ?: "",
-        director = "",
-        screenplay = "",
-        music = "",
+        showStatus = this.showStatus,
+        nextAiring = this.nextAiring,
     )
 }
 
@@ -149,25 +124,15 @@ private fun AnimeLoadResponse.toPrimaryMovieDetails(): MovieDetails {
         "map:anime:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
     )
 
-    return MovieDetails(
-        id = this.url,
-        videoUri = "",
-        subtitleUri = null,
-        posterUri = this.backgroundPosterUrl ?: "",
-        name = this.name,
-        description = this.plot ?: "",
+    return createBaseMovieDetails(
         seasons = seasons,
         seasonCount = seasonCount,
         episodeCount = episodeCount,
         currentSeason = currentEpisode?.season?.takeIf { it > 0 },
         currentEpisode = currentEpisode?.episode,
-        pgRating = this.contentRating ?: "",
-        releaseDate = this.year?.toString() ?: "",
-        categories = this.tags ?: emptyList(),
-        duration = this.duration?.let { "${it}min" } ?: "",
-        director = "",
-        screenplay = "",
-        music = "",
+        showStatus = this.showStatus,
+        nextAiring = this.nextAiring,
+        originalTitle = resolveOriginalTitle(),
     )
 }
 
@@ -181,21 +146,7 @@ private fun AnimeLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadRes
 private fun LoadResponse.toPrimaryGenericMovieDetails(): MovieDetails {
     Log.d(DebugTag, "map:generic:primary name=${this.name} type=${this.type}")
 
-    return MovieDetails(
-        id = this.url,
-        videoUri = "",
-        subtitleUri = null,
-        posterUri = this.backgroundPosterUrl ?: "",
-        name = this.name,
-        description = this.plot ?: "",
-        pgRating = "",
-        releaseDate = "",
-        categories = this.tags ?: emptyList(),
-        duration = "",
-        director = "",
-        screenplay = "",
-        music = "",
-    )
+    return createBaseMovieDetails()
 }
 
 private fun LoadResponse.toSecondaryGenericMovieDetails(): DetailsSecondaryLoadResult {
@@ -215,6 +166,81 @@ private fun List<Episode>.extractSeasonCount(extraSeasons: List<Int>? = null): I
         this.isNotEmpty() -> 1
         else -> null
     }
+}
+
+private fun LoadResponse.createBaseMovieDetails(
+    seasons: List<TvSeason> = emptyList(),
+    seasonCount: Int? = null,
+    episodeCount: Int? = null,
+    currentSeason: Int? = null,
+    currentEpisode: Int? = null,
+    showStatus: com.lagradost.cloudstream3.ShowStatus? = null,
+    nextAiring: com.lagradost.cloudstream3.NextAiring? = null,
+    originalTitle: String? = null,
+): MovieDetails {
+    return MovieDetails(
+        id = url,
+        videoUri = "",
+        subtitleUri = null,
+        providerName = apiName,
+        type = type,
+        score = score,
+        showStatus = showStatus,
+        nextAiring = nextAiring,
+        comingSoon = comingSoon,
+        logoUri = logoUrl?.takeIf { logo -> logo.isNotBlank() },
+        originalTitle = originalTitle,
+        posterHeaders = posterHeaders.orEmpty(),
+        posterUri = preferredPosterUri(),
+        backdropUri = preferredBackdropUri(),
+        name = name,
+        description = plot.orEmpty(),
+        seasons = seasons,
+        seasonCount = seasonCount,
+        episodeCount = episodeCount,
+        currentSeason = currentSeason,
+        currentEpisode = currentEpisode,
+        pgRating = contentRating.orEmpty(),
+        releaseDate = year?.toString().orEmpty(),
+        categories = tags.orEmpty(),
+        duration = duration?.let { "${it}min" }.orEmpty(),
+        director = "",
+        screenplay = "",
+        music = "",
+    )
+}
+
+private fun LoadResponse.preferredPosterUri(): String {
+    return posterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: backgroundPosterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: ""
+}
+
+private fun LoadResponse.preferredBackdropUri(): String {
+    return backgroundPosterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: posterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: ""
+}
+
+private fun AnimeLoadResponse.resolveOriginalTitle(): String? {
+    val normalizedName = name.trim()
+
+    val candidates = buildList {
+        add(japName)
+        add(engName)
+        addAll(synonyms.orEmpty())
+    }
+
+    return candidates
+        .asSequence()
+        .mapNotNull { candidate ->
+            candidate
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }
+        .firstOrNull { candidate ->
+            !candidate.equals(normalizedName, ignoreCase = true)
+        }
 }
 
 private fun List<Episode>.extractEpisodeCount(): Int? {

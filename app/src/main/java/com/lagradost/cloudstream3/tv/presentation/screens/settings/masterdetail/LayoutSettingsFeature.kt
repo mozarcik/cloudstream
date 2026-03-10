@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -15,7 +14,8 @@ import com.lagradost.cloudstream3.ui.home.HomeChildItemAdapter
 import com.lagradost.cloudstream3.ui.home.ParentItemAdapter
 import com.lagradost.cloudstream3.ui.search.SearchAdapter
 import com.lagradost.cloudstream3.ui.search.SearchResultBuilder
-import com.lagradost.cloudstream3.ui.settings.Globals.updateTv
+import com.lagradost.cloudstream3.ui.settings.appLayoutOptions
+import com.lagradost.cloudstream3.ui.settings.restartIntoSelectedAppLayout
 import com.lagradost.cloudstream3.tv.compat.theme.resolveLegacyPrimaryPreviewColor
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
 
@@ -370,7 +370,7 @@ class LayoutSettingsFeature(
                                     settingsManager.edit {
                                         putString(primaryColorKey, option.value)
                                     }
-                                    (context as? Activity)?.recreate()
+                                    context.getActivity()?.recreate()
                                 }.onFailure(::logError)
                             }
                         )
@@ -402,7 +402,7 @@ class LayoutSettingsFeature(
                                     settingsManager.edit {
                                         putString(appThemeKey, option.value)
                                     }
-                                    (context as? Activity)?.recreate()
+                                    context.getActivity()?.recreate()
                                 }.onFailure(::logError)
                             }
                         )
@@ -431,8 +431,7 @@ class LayoutSettingsFeature(
                                     settingsManager.edit {
                                         putInt(appLayoutKey, option.value)
                                     }
-                                    context.updateTv()
-                                    (context as? Activity)?.recreate()
+                                    context.getActivity()?.restartIntoSelectedAppLayout()
                                 }.onFailure(::logError)
                             }
                         )
@@ -540,10 +539,12 @@ class LayoutSettingsFeature(
     }
 
     private fun appLayoutOptions(): List<LayoutIntOption> {
-        return intOptions(
-            namesRes = R.array.app_layout,
-            valuesRes = R.array.app_layout_values
-        )
+        return context.appLayoutOptions().map { option ->
+            LayoutIntOption(
+                value = option.value,
+                label = option.label,
+            )
+        }
     }
 
     private fun confirmExitOptions(): List<LayoutIntOption> {

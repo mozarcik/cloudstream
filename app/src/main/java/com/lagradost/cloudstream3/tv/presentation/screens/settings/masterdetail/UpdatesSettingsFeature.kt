@@ -8,6 +8,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.AutoDownloadMode
 import com.lagradost.cloudstream3.BuildConfig
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.CommonActivity.showToast
 import com.lagradost.cloudstream3.R
@@ -122,7 +123,7 @@ class UpdatesSettingsFeature(
                         subtitle = BuildConfig.VERSION_NAME,
                         fallbackIconRes = R.drawable.ic_baseline_system_update_24,
                         action = {
-                            val activity = context as? Activity ?: return@itemEntry
+                            val activity = context.getActivity() ?: return@itemEntry
                             ioSafe {
                                 if (!activity.runAutoUpdate(checkAutoUpdate = false)) {
                                     activity.runOnUiThread {
@@ -141,7 +142,7 @@ class UpdatesSettingsFeature(
                             subtitle = null,
                             fallbackIconRes = R.drawable.ic_baseline_developer_mode_24,
                             action = {
-                                (context as? Activity)?.installPreReleaseIfNeeded()
+                                context.getActivity()?.installPreReleaseIfNeeded()
                             }
                         )
                     )
@@ -203,7 +204,7 @@ class UpdatesSettingsFeature(
                         subtitle = null,
                         fallbackIconRes = R.drawable.baseline_restore_page_24,
                         action = {
-                            (context as? FragmentActivity)?.restorePrompt()
+                            (context.getActivity() as? FragmentActivity)?.restorePrompt()
                         }
                     )
                 )
@@ -253,7 +254,7 @@ class UpdatesSettingsFeature(
                         subtitle = context.getString(R.string.update_plugins_manually),
                         fallbackIconRes = R.drawable.ic_baseline_extension_24,
                         action = {
-                            val activity = context as? Activity ?: return@itemEntry
+                            val activity = context.getActivity() ?: return@itemEntry
                             reloadAndUpdatePlugins(activity)
                         }
                     )
@@ -282,7 +283,7 @@ class UpdatesSettingsFeature(
                         fallbackIconRes = R.drawable.ic_baseline_construction_24,
                         action = {
                             setKey(HAS_DONE_SETUP_KEY, false)
-                            (context as? Activity)?.recreate()
+                            context.getActivity()?.recreate()
                         }
                     )
                 )

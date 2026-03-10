@@ -19,7 +19,6 @@ import com.lagradost.cloudstream3.ui.search.SearchResultBuilder
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
-import com.lagradost.cloudstream3.ui.settings.Globals.updateTv
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.getPref
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.hideOn
 import com.lagradost.cloudstream3.ui.settings.SettingsFragment.Companion.setPaddingBottom
@@ -94,8 +93,9 @@ class SettingsUI : BasePreferenceFragmentCompat() {
         }
 
         getPref(R.string.app_layout_key)?.setOnPreferenceClickListener {
-            val prefNames = resources.getStringArray(R.array.app_layout)
-            val prefValues = resources.getIntArray(R.array.app_layout_values)
+            val appLayoutOptions = requireContext().appLayoutOptions()
+            val prefNames = appLayoutOptions.map(AppLayoutOption::label)
+            val prefValues = appLayoutOptions.map(AppLayoutOption::value)
 
             val currentLayout =
                 settingsManager.getInt(getString(R.string.app_layout_key), -1)
@@ -111,8 +111,7 @@ class SettingsUI : BasePreferenceFragmentCompat() {
                         settingsManager.edit {
                             putInt(getString(R.string.app_layout_key), prefValues[it])
                         }
-                        context?.updateTv()
-                        activity?.recreate()
+                        activity?.restartIntoSelectedAppLayout()
                     } catch (e: Exception) {
                         logError(e)
                     }

@@ -29,10 +29,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.CommonActivity
+import com.lagradost.cloudstream3.CommonActivity.setActivityInstance
 import com.lagradost.cloudstream3.network.initClient
-import com.lagradost.cloudstream3.plugins.PluginManager
+import com.lagradost.cloudstream3.tv.compat.TvPluginBootstrap
 import com.lagradost.cloudstream3.tv.presentation.TvApp
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamTheme
+import com.lagradost.cloudstream3.utils.BackupUtils.setUpBackup
 import com.lagradost.nicehttp.Requests
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -47,21 +49,17 @@ class TvMainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         CommonActivity.loadThemes(this)
         super.onCreate(savedInstanceState)
-        
+
+        setActivityInstance(this)
+        setUpBackup()
+
         // CRITICAL: Initialize HTTP client (same as MainActivity)
         app.initClient(this)
 
         // Load plugins asynchronously
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                // Load online plugins first
-                PluginManager.___DO_NOT_CALL_FROM_A_PLUGIN_loadAllOnlinePlugins(this@TvMainActivity)
-
-                // Then load local plugins
-                PluginManager.___DO_NOT_CALL_FROM_A_PLUGIN_loadAllLocalPlugins(
-                    this@TvMainActivity,
-                    false
-                )
+                TvPluginBootstrap.bootstrap(this@TvMainActivity)
             } catch (e: Exception) {
                 Log.e("TvMainActivity", "Failed to load plugins", e)
             }

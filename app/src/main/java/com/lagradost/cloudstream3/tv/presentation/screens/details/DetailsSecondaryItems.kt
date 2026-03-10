@@ -36,7 +36,7 @@ internal fun LazyListScope.detailsSecondaryItems(
         return
     }
 
-    if (cast.isNotEmpty()) {
+    if (cast.any { castMember -> castMember.avatarUrl.isNotBlank() }) {
         item {
             CastAndCrewList(castAndCrew = cast)
         }

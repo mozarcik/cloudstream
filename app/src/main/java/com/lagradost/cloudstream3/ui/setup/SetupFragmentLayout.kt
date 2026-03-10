@@ -11,6 +11,8 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.FragmentSetupLayoutBinding
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.ui.BaseFragment
+import com.lagradost.cloudstream3.ui.settings.AppLayoutOption
+import com.lagradost.cloudstream3.ui.settings.appLayoutOptions
 import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
 
 class SetupFragmentLayout : BaseFragment<FragmentSetupLayoutBinding>(
@@ -27,8 +29,9 @@ class SetupFragmentLayout : BaseFragment<FragmentSetupLayoutBinding>(
 
             val settingsManager = PreferenceManager.getDefaultSharedPreferences(ctx)
 
-            val prefNames = resources.getStringArray(R.array.app_layout)
-            val prefValues = resources.getIntArray(R.array.app_layout_values)
+            val appLayoutOptions = ctx.appLayoutOptions(setupOptionsOnly = true)
+            val prefNames = appLayoutOptions.map(AppLayoutOption::label)
+            val prefValues = appLayoutOptions.map(AppLayoutOption::value)
 
             val currentLayout =
                 settingsManager.getInt(getString(R.string.app_layout_key), -1)
@@ -40,9 +43,10 @@ class SetupFragmentLayout : BaseFragment<FragmentSetupLayoutBinding>(
             binding.apply {
                 listview1.adapter = arrayAdapter
                 listview1.choiceMode = AbsListView.CHOICE_MODE_SINGLE
-                listview1.setItemChecked(
-                    prefValues.indexOf(currentLayout), true
-                )
+                val selectedIndex = prefValues.indexOf(currentLayout)
+                if (selectedIndex >= 0) {
+                    listview1.setItemChecked(selectedIndex, true)
+                }
 
                 listview1.setOnItemClickListener { _, _, position, _ ->
                     settingsManager.edit {

@@ -51,12 +51,17 @@ class MovieRepositoryImpl : MovieRepository {
         apiName: String,
     ): DetailsPrimaryLoadResult = withContext(Dispatchers.IO) {
         Log.d(DebugTag, "entry:getPrimaryDetails api=$apiName url=$url")
+        val api = APIHolder.getApiFromNameNull(apiName)
+            ?: throw IllegalArgumentException("API provider not found: $apiName")
         val loadResponse = getOrLoadResponse(url = url, apiName = apiName)
         logLoadedResponse(loadResponse)
 
         val details = tvTraceSection("details_map_primary") {
             FavoritesCompat.markLibraryState(
-                movieDetails = loadResponse.toPrimaryMovieDetails(),
+                movieDetails = loadResponse.toPrimaryMovieDetails().copy(
+                    providerType = api.providerType,
+                    vpnStatus = api.vpnStatus,
+                ),
                 loadResponse = loadResponse,
             )
         }

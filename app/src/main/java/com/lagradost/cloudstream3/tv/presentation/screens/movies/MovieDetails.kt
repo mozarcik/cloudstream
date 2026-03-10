@@ -20,7 +20,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
@@ -36,33 +40,54 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Glow
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import coil3.compose.AsyncImage
 import coil3.compose.rememberAsyncImagePainter
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.lagradost.cloudstream3.APIHolder.unixTime
+import com.lagradost.cloudstream3.ProviderType
+import com.lagradost.cloudstream3.Score
+import com.lagradost.cloudstream3.ShowStatus
+import com.lagradost.cloudstream3.USER_AGENT
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.util.StringConstants
@@ -70,11 +95,23 @@ import com.lagradost.cloudstream3.tv.icons.CustomDownload
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconSpec
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPill
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamBorderWidth
+import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
+import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamSurfaceDefaults
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
+import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
+
+private const val DetailsDescriptionCollapsedState = "collapsed"
+private const val DetailsDescriptionExpandedState = "expanded"
+private const val DetailsDescriptionCollapsedMaxLines = 5
+private const val DetailsTitleMaxWidthFraction = 0.55f
+private const val DetailsLogoMaxWidthFraction = 0.72f
+private val DetailsLogoHeight = 92.dp
+private val DetailsDescriptionFocusInset = 8.dp
 
 enum class MovieDetailsQuickAction {
     Bookmark,
@@ -113,9 +150,7 @@ fun MovieDetails(
     movieDetails: MovieDetails,
     goToMoviePlayer: () -> Unit,
     playButtonLabel: String? = null,
-    titleMetadata: List<String> = emptyList(),
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
-    downFocusRequester: FocusRequester? = null,
     onPrimaryActionsFocused: () -> Unit = {},
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -124,6 +159,79 @@ fun MovieDetails(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val playButtonFocusRequester = remember { FocusRequester() }
     val heroSectionHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
+    val ratingLabel = detailsRatingLabel(movieDetails.score)
+    val statusLabel = detailsStatusLabel(movieDetails.showStatus)
+    val nextAiringLabel = detailsNextAiringLabel(movieDetails.nextAiring)
+    val providerNotice = if (movieDetails.providerType == ProviderType.MetaProvider) {
+        stringResource(R.string.provider_info_meta)
+    } else {
+        null
+    }
+    val vpnNotice = when (movieDetails.vpnStatus) {
+        com.lagradost.cloudstream3.VPNStatus.None -> null
+        com.lagradost.cloudstream3.VPNStatus.MightBeNeeded -> stringResource(R.string.vpn_might_be_needed)
+        com.lagradost.cloudstream3.VPNStatus.Torrent -> stringResource(R.string.vpn_torrent)
+    }
+    val descriptionText = movieDetails.description.ifBlank {
+        stringResource(R.string.normal_no_plot)
+    }
+    val comingSoonLabel = if (movieDetails.comingSoon) {
+        stringResource(R.string.coming_soon)
+    } else {
+        null
+    }
+    val castSummary = remember(movieDetails.cast) {
+        if (movieDetails.cast.any { castMember -> castMember.avatarUrl.isNotBlank() }) {
+            null
+        } else {
+            movieDetails.cast
+                .asSequence()
+                .map { castMember -> castMember.realName.trim() }
+                .filter { castName -> castName.isNotBlank() }
+                .distinct()
+                .joinToString()
+                .takeIf { castNames -> castNames.isNotBlank() }
+        }
+    }?.let { castNames ->
+        stringResource(R.string.cast_format, castNames)
+    }
+    val primaryMetadataTexts = remember(
+        movieDetails.providerName,
+        ratingLabel,
+        statusLabel,
+        movieDetails.pgRating,
+    ) {
+        listOfNotNull(
+            movieDetails.providerName.takeIf { providerName -> providerName.isNotBlank() },
+            ratingLabel,
+            statusLabel,
+            movieDetails.pgRating.takeIf { rating -> rating.isNotBlank() },
+        )
+    }
+    val detailsRowTexts = remember(
+        movieDetails.releaseDate,
+        movieDetails.duration,
+        movieDetails.categories,
+    ) {
+        listOfNotNull(
+            movieDetails.releaseDate.takeIf { releaseDate -> releaseDate.isNotBlank() },
+            movieDetails.duration.takeIf { duration -> duration.isNotBlank() },
+            movieDetails.categories
+                .joinToString(separator = ", ")
+                .takeIf { categoriesLabel -> categoriesLabel.isNotBlank() },
+        )
+    }
+    val supportingMessages = remember(
+        comingSoonLabel,
+        castSummary,
+        vpnNotice,
+    ) {
+        buildList {
+            comingSoonLabel?.let(::add)
+            castSummary?.let(::add)
+            vpnNotice?.let(::add)
+        }
+    }
 
     FocusRequestEffect(
         requester = playButtonFocusRequester,
@@ -144,34 +252,65 @@ fun MovieDetails(
 
             Column(
                 modifier = Modifier
-                    .fillMaxWidth(0.55f)
+                    .fillMaxWidth(DetailsTitleMaxWidthFraction)
                     .padding(start = childPadding.start)
             ) {
-                MovieLargeTitle(movieTitle = movieDetails.name)
+                MovieHeroTitle(movieDetails = movieDetails)
 
-                if (titleMetadata.isNotEmpty()) {
+                movieDetails.originalTitle
+                    ?.takeIf { originalTitle -> originalTitle.isNotBlank() }
+                    ?.let { originalTitle ->
+                        Text(
+                            text = stringResource(R.string.details_original_title_format, originalTitle),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 10.dp)
+                        )
+                    }
+
+                if (primaryMetadataTexts.isNotEmpty()) {
                     DotSeparatedRow(
-                        modifier = Modifier.padding(top = 8.dp),
-                        texts = titleMetadata
+                        modifier = Modifier.padding(top = 10.dp),
+                        texts = primaryMetadataTexts
                     )
                 }
 
-                Column(
-                    modifier = Modifier.alpha(0.75f)
-                ) {
-                    val detailsRowTexts = listOf(
-                        movieDetails.releaseDate,
-                        movieDetails.duration,
-                        movieDetails.categories.joinToString(", ")
-                    ).filter { it.isNotBlank() }
+                if (detailsRowTexts.isNotEmpty()) {
+                    DotSeparatedRow(
+                        modifier = Modifier
+                            .padding(top = 16.dp)
+                            .alpha(0.75f),
+                        texts = detailsRowTexts
+                    )
+                }
 
-                    if (detailsRowTexts.isNotEmpty()) {
-                        DotSeparatedRow(
-                            modifier = Modifier.padding(top = 20.dp),
-                            texts = detailsRowTexts
-                        )
-                    }
-                    MovieDescription(description = movieDetails.description)
+                nextAiringLabel?.let { label ->
+                    MovieSupportingText(
+                        text = label,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+
+                MovieDescription(
+                    detailsId = movieDetails.id,
+                    description = descriptionText,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+
+                supportingMessages.forEach { message ->
+                    MovieSupportingText(
+                        text = message,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                providerNotice?.let { notice ->
+                    MovieSupportingText(
+                        text = notice,
+                        modifier = Modifier.padding(top = 8.dp),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                    )
                 }
             }
 
@@ -181,18 +320,13 @@ fun MovieDetails(
                 modifier = Modifier
                     .padding(start = childPadding.start)
                     .padding(bottom = 24.dp),
-                playButtonModifier = Modifier
-                    .focusRequester(playButtonFocusRequester)
-                    .focusProperties {
-                        down = downFocusRequester ?: FocusRequester.Default
-                    },
+                playButtonModifier = Modifier.focusRequester(playButtonFocusRequester),
                 onPlayClick = goToMoviePlayer,
                 playButtonLabel = playButtonLabel,
                 isFavorite = movieDetails.isFavorite,
                 isBookmarked = movieDetails.isBookmarked,
                 bookmarkLabelRes = movieDetails.bookmarkLabelRes,
                 downloadActionState = downloadActionState,
-                downFocusRequester = downFocusRequester,
                 onFocused = onPrimaryActionsFocused,
                 onQuickActionClick = onQuickActionClick
             )
@@ -210,7 +344,6 @@ private fun DetailsActionsRow(
     isBookmarked: Boolean = false,
     bookmarkLabelRes: Int? = null,
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
-    downFocusRequester: FocusRequester? = null,
     onFocused: () -> Unit = {},
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
 ) {
@@ -308,9 +441,6 @@ private fun DetailsActionsRow(
 
         ActionIconsPill(
             actions = actions,
-            modifier = Modifier.focusProperties {
-                down = downFocusRequester ?: FocusRequester.Default
-            },
             onActionClick = onQuickActionClick
         )
     }
@@ -350,43 +480,239 @@ private fun PrimaryPlayButton(
 }
 
 @Composable
-private fun MovieDescription(description: String) {
+private fun MovieHeroTitle(
+    movieDetails: MovieDetails,
+) {
+    var shouldShowTextTitle by remember(movieDetails.id, movieDetails.logoUri) {
+        mutableStateOf(movieDetails.logoUri.isNullOrBlank())
+    }
+    val logoRequest = rememberMovieDetailsImageRequest(
+        imageUrl = movieDetails.logoUri.orEmpty(),
+        headers = movieDetails.posterHeaders,
+    )
+
+    if (!shouldShowTextTitle && logoRequest != null) {
+        AsyncImage(
+            model = logoRequest,
+            contentDescription = movieDetails.name,
+            contentScale = ContentScale.Fit,
+            alignment = Alignment.CenterStart,
+            onError = { shouldShowTextTitle = true },
+            modifier = Modifier
+                .testTag("details_title_logo")
+                .fillMaxWidth(DetailsLogoMaxWidthFraction)
+                .height(DetailsLogoHeight)
+                .clip(CloudStreamCardShape)
+        )
+    } else {
+        MovieLargeTitle(
+            movieTitle = movieDetails.name,
+            modifier = Modifier.testTag("details_title_text")
+        )
+    }
+}
+
+@Composable
+private fun MovieDescription(
+    detailsId: String,
+    description: String,
+    modifier: Modifier = Modifier,
+) {
+    var isExpanded by rememberSaveable(detailsId) {
+        mutableStateOf(false)
+    }
+    var hasFocus by remember(detailsId) {
+        mutableStateOf(false)
+    }
+    val focusInset = DetailsDescriptionFocusInset
+    val focusBackgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f)
+    val focusBorderColor = MaterialTheme.colorScheme.primary
+    val focusBorderWidth = CloudStreamBorderWidth
+
+    Box(
+        modifier = modifier
+            .drawBehind {
+                if (!hasFocus) {
+                    return@drawBehind
+                }
+
+                drawExpandedFocusDecoration(
+                    shape = CloudStreamCardShape,
+                    insetPx = focusInset.toPx(),
+                    backgroundColor = focusBackgroundColor,
+                    borderColor = focusBorderColor,
+                    borderWidthPx = focusBorderWidth.toPx(),
+                )
+            }
+    ) {
+        Surface(
+            onClick = { isExpanded = !isExpanded },
+            shape = ClickableSurfaceDefaults.shape(shape = CloudStreamCardShape),
+            border = ClickableSurfaceDefaults.border(
+                focusedBorder = Border.None,
+                pressedBorder = Border.None,
+            ),
+            glow = ClickableSurfaceDefaults.glow(
+                glow = Glow.None,
+                focusedGlow = Glow.None,
+                pressedGlow = Glow.None,
+            ),
+            colors = CloudStreamSurfaceDefaults.colors(
+                containerColor = Color.Transparent,
+                focusedContainerColor = Color.Transparent,
+            ),
+            scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
+            modifier = Modifier
+                .testTag("details_description")
+                .onFocusChanged { focusState ->
+                    hasFocus = focusState.hasFocus
+                }
+                .semantics {
+                    stateDescription = if (isExpanded) {
+                        DetailsDescriptionExpandedState
+                    } else {
+                        DetailsDescriptionCollapsedState
+                    }
+                }
+        ) {
+            Text(
+                text = description,
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Normal
+                ),
+                maxLines = if (isExpanded) Int.MAX_VALUE else DetailsDescriptionCollapsedMaxLines,
+                overflow = if (isExpanded) TextOverflow.Clip else TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun MovieSupportingText(
+    text: String,
+    modifier: Modifier = Modifier,
+    textStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.bodyMedium,
+    color: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
     Text(
-        text = description,
-        style = MaterialTheme.typography.titleSmall.copy(
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Normal
-        ),
-        modifier = Modifier.padding(top = 8.dp),
-        maxLines = 10
+        text = text,
+        style = textStyle,
+        color = color,
+        modifier = modifier,
     )
 }
 
 @Composable
-private fun MovieLargeTitle(movieTitle: String) {
+private fun MovieLargeTitle(
+    movieTitle: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = movieTitle,
         style = MaterialTheme.typography.displayMedium.copy(
             fontWeight = FontWeight.Bold
         ),
+        modifier = modifier,
         maxLines = 2,
         overflow = TextOverflow.Ellipsis
     )
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawExpandedFocusDecoration(
+    shape: Shape,
+    insetPx: Float,
+    backgroundColor: Color,
+    borderColor: Color,
+    borderWidthPx: Float,
+) {
+    val expandedSize = Size(
+        width = size.width + (insetPx * 2f),
+        height = size.height + (insetPx * 2f),
+    )
+    val outline = shape.createOutline(
+        size = expandedSize,
+        layoutDirection = layoutDirection,
+        density = this,
+    )
+
+    withTransform({
+        translate(
+            left = -insetPx,
+            top = -insetPx,
+        )
+    }) {
+        when (outline) {
+            is Outline.Generic -> {
+                drawPath(
+                    path = outline.path,
+                    color = backgroundColor,
+                )
+                drawPath(
+                    path = outline.path,
+                    color = borderColor,
+                    style = Stroke(width = borderWidthPx),
+                )
+            }
+
+            is Outline.Rectangle -> {
+                drawRect(
+                    color = backgroundColor,
+                    topLeft = outline.rect.topLeft,
+                    size = outline.rect.size,
+                )
+                drawRect(
+                    color = borderColor,
+                    topLeft = outline.rect.topLeft,
+                    size = outline.rect.size,
+                    style = Stroke(width = borderWidthPx),
+                )
+            }
+
+            is Outline.Rounded -> {
+                val outlinePath = Path().apply {
+                    addRoundRect(outline.roundRect)
+                }
+                drawPath(
+                    path = outlinePath,
+                    color = backgroundColor,
+                )
+                drawPath(
+                    path = outlinePath,
+                    color = borderColor,
+                    style = Stroke(width = borderWidthPx),
+                )
+            }
+        }
+    }
 }
 
 @Composable
 fun MovieDetailsBackdrop(
     posterUri: String,
     title: String,
+    headers: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier,
     gradientColor: Color = MaterialTheme.colorScheme.surface,
     applyBlur: Boolean = false,
 ) {
     val context = LocalContext.current
-    val imageRequest = remember(context, posterUri) {
+    val imageRequest = remember(context, posterUri, headers) {
         ImageRequest.Builder(context)
             .data(posterUri)
             .crossfade(true)
+            .apply {
+                if (headers.isNotEmpty()) {
+                    httpHeaders(
+                        NetworkHeaders.Builder().apply {
+                            this["User-Agent"] = USER_AGENT
+                            headers.forEach { (key, value) ->
+                                this[key] = value
+                            }
+                        }.build()
+                    )
+                }
+            }
             .build()
     }
     val painter = rememberAsyncImagePainter(model = imageRequest)
@@ -538,6 +864,83 @@ fun MovieDetailsLoadingPlaceholder(
             }
         }
     }
+}
+
+@Composable
+private fun rememberMovieDetailsImageRequest(
+    imageUrl: String,
+    headers: Map<String, String>,
+): ImageRequest? {
+    val context = LocalContext.current
+
+    return remember(context, imageUrl, headers) {
+        imageUrl
+            .takeIf { url -> url.isNotBlank() }
+            ?.let { url ->
+                ImageRequest.Builder(context)
+                    .data(url)
+                    .crossfade(false)
+                    .apply {
+                        if (headers.isNotEmpty()) {
+                            httpHeaders(
+                                NetworkHeaders.Builder().apply {
+                                    this["User-Agent"] = USER_AGENT
+                                    headers.forEach { (key, value) ->
+                                        this[key] = value
+                                    }
+                                }.build()
+                            )
+                        }
+                    }
+                    .build()
+            }
+    }
+}
+
+@Composable
+private fun detailsRatingLabel(score: Score?): String? {
+    val scoreLabel = score?.toStringNull(
+        minScore = 0.1,
+        maxScore = 10,
+        decimals = 1,
+        removeTrailingZeros = false,
+        decimalChar = '.',
+    ) ?: return null
+
+    return stringResource(R.string.rating_format, scoreLabel)
+}
+
+@Composable
+private fun detailsStatusLabel(showStatus: ShowStatus?): String? {
+    return when (showStatus) {
+        ShowStatus.Completed -> stringResource(R.string.status_completed)
+        ShowStatus.Ongoing -> stringResource(R.string.status_ongoing)
+        null -> null
+    }
+}
+
+@Composable
+private fun detailsNextAiringLabel(nextAiring: com.lagradost.cloudstream3.NextAiring?): String? {
+    if (nextAiring == null || nextAiring.unixTime <= unixTime) {
+        return null
+    }
+
+    val seconds = nextAiring.unixTime - unixTime
+    val days = TimeUnit.SECONDS.toDays(seconds)
+    val hours = TimeUnit.SECONDS.toHours(seconds) - days * 24
+    val minutes = TimeUnit.SECONDS.toMinutes(seconds) - TimeUnit.SECONDS.toHours(seconds) * 60
+    val timeLabel = when {
+        days > 0 -> stringResource(R.string.next_episode_time_day_format, days, hours, minutes)
+        hours > 0 -> stringResource(R.string.next_episode_time_hour_format, hours, minutes)
+        minutes > 0 -> stringResource(R.string.next_episode_time_min_format, minutes)
+        else -> return null
+    }
+    val episodeLabel = when (val season = nextAiring.season) {
+        null -> stringResource(R.string.next_episode_format, nextAiring.episode)
+        else -> stringResource(R.string.next_season_episode_format, season, nextAiring.episode)
+    }
+
+    return "$episodeLabel $timeLabel"
 }
 
 @Composable

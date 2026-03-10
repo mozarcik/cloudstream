@@ -7,13 +7,10 @@ import androidx.compose.ui.res.stringResource
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.toImmutableList
 
 @Immutable
 internal data class DetailsHeroUiState(
     val playButtonLabel: String,
-    val titleMetadata: ImmutableList<String>,
     val downloadActionState: MovieDetailsDownloadActionState,
 )
 
@@ -29,8 +26,6 @@ internal fun rememberDetailsHeroUiState(
     val episodeLabel = stringResource(R.string.episode)
     val movieFallback = stringResource(R.string.movies_singular)
     val seriesFallback = stringResource(R.string.tv_series_singular)
-    val seasonLabel = stringResource(R.string.season)
-    val episodesLabel = stringResource(R.string.episodes)
 
     val playButtonLabel = remember(
         mode,
@@ -61,18 +56,6 @@ internal fun rememberDetailsHeroUiState(
         }
     }
 
-    val titleMetadata = remember(
-        details.seasonCount,
-        details.episodeCount,
-        seasonLabel,
-        episodesLabel,
-    ) {
-        listOfNotNull(
-            details.seasonCount?.let { "$seasonLabel $it" },
-            details.episodeCount?.let { "$episodesLabel $it" },
-        ).toImmutableList()
-    }
-
     val downloadActionState = remember(
         downloadButtonState.status,
         downloadButtonState.progressFraction,
@@ -85,12 +68,10 @@ internal fun rememberDetailsHeroUiState(
 
     return remember(
         playButtonLabel,
-        titleMetadata,
         downloadActionState,
     ) {
         DetailsHeroUiState(
             playButtonLabel = playButtonLabel,
-            titleMetadata = titleMetadata,
             downloadActionState = downloadActionState,
         )
     }

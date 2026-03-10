@@ -201,8 +201,9 @@
         </activity>
 
         <activity
-            android:name=".tv.TvMainActivity"
+            android:name=".tv.TvLaunchRouterActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+            android:excludeFromRecents="true"
             android:exported="true"
             android:theme="@style/Theme.AppCompat.NoActionBar">
             <intent-filter>
@@ -210,6 +211,12 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".tv.TvMainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
+            android:exported="true"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
 
         <activity
             android:name=".tv.compat.PluginSettingsHostActivity"

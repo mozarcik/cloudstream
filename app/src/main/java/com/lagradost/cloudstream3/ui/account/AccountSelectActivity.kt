@@ -10,17 +10,19 @@ import androidx.recyclerview.widget.GridLayoutManager
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.CommonActivity.loadThemes
 import com.lagradost.cloudstream3.CommonActivity.showToast
-import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.databinding.ActivityAccountSelectBinding
 import com.lagradost.cloudstream3.mvvm.observe
 import com.lagradost.cloudstream3.ui.AutofitRecyclerView
 import com.lagradost.cloudstream3.ui.account.AccountAdapter.Companion.VIEW_TYPE_EDIT_ACCOUNT
 import com.lagradost.cloudstream3.ui.account.AccountAdapter.Companion.VIEW_TYPE_SELECT_ACCOUNT
+import com.lagradost.cloudstream3.ui.settings.AppLayoutMode
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+import com.lagradost.cloudstream3.ui.settings.createSelectedHostIntent
+import com.lagradost.cloudstream3.ui.settings.selectedAppLayoutMode
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.BiometricCallback
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.biometricPrompt
@@ -33,7 +35,6 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper.selectedKeyIndex
 import com.lagradost.cloudstream3.utils.DataStoreHelper.setAccount
 import com.lagradost.cloudstream3.utils.UIHelper.enableEdgeToEdgeCompat
 import com.lagradost.cloudstream3.utils.UIHelper.fixSystemBarsPadding
-import com.lagradost.cloudstream3.utils.UIHelper.openActivity
 import com.lagradost.cloudstream3.utils.UIHelper.setNavigationBarColorCompat
 
 class AccountSelectActivity : FragmentActivity(), BiometricCallback {
@@ -44,6 +45,12 @@ class AccountSelectActivity : FragmentActivity(), BiometricCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         loadThemes(this)
+
+        if (selectedAppLayoutMode() == AppLayoutMode.TvMaterial) {
+            startActivity(createSelectedHostIntent(clearTask = true))
+            finish()
+            return
+        }
 
         enableEdgeToEdgeCompat()
         setNavigationBarColorCompat(R.attr.primaryBlackBackground)
@@ -189,8 +196,8 @@ class AccountSelectActivity : FragmentActivity(), BiometricCallback {
     }
 
     private fun navigateToMainActivity() {
-        openActivity(MainActivity::class.java)
-        finish() // Finish the account selection activity
+        startActivity(createSelectedHostIntent(clearTask = true))
+        finish()
     }
 
     override fun onAuthenticationSuccess() {

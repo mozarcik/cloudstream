@@ -55,9 +55,6 @@ internal fun DetailsScreenContent(
     val selectedSeasonId = episodesStateHolder.selectedSeasonId
     val selectedSeason = seasons.firstOrNull { season -> season.id == selectedSeasonId } ?: seasons.firstOrNull()
     val selectedEpisodes = selectedSeason?.episodes.orEmpty()
-    val selectedSeasonIndex = seasons.indexOfFirst { season -> season.id == selectedSeasonId }
-        .takeIf { it >= 0 } ?: 0
-    val selectedSeasonFocusRequester = seasonTabFocusRequesters.getOrNull(selectedSeasonIndex)
     val isSeriesContent = mode.isSeriesContent(details)
     val heroState = rememberDetailsHeroUiState(
         mode = mode,
@@ -113,7 +110,6 @@ internal fun DetailsScreenContent(
         selectedSeason = selectedSeason,
         selectedEpisodes = selectedEpisodes,
         seasonTabFocusRequesters = seasonTabFocusRequesters,
-        selectedSeasonFocusRequester = selectedSeasonFocusRequester,
         heroState = heroState,
         downloadButtonState = downloadButtonState,
         episodesStateHolder = episodesStateHolder,
