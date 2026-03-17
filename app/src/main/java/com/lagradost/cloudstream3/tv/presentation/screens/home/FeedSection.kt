@@ -26,6 +26,7 @@ fun FeedSection(
     errorMessage: String? = null,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
     sectionFocusKey: String? = null,
     pendingRestoreFocusTargetId: String? = null,
     restoreFocusToken: Int = 0,
@@ -82,6 +83,7 @@ fun FeedSection(
                         text = resolvedErrorMessage,
                         modifier = Modifier.fillMaxWidth(),
                         firstItemFocusRequester = firstItemFocusRequester,
+                        upFocusRequester = upFocusRequester,
                     )
                 }
 
@@ -92,6 +94,7 @@ fun FeedSection(
                         onShowMoreClick = onShowMoreClick,
                         isInteractive = isInteractive,
                         firstItemFocusRequester = firstItemFocusRequester,
+                        upFocusRequester = upFocusRequester,
                         cardWidth = cardWidth,
                         cardHeight = cardHeight,
                         cardPosterHeight = cardPosterHeight,

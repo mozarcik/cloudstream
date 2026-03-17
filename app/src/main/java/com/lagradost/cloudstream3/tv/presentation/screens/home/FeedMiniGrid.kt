@@ -20,6 +20,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -52,6 +53,7 @@ fun FeedMiniGrid(
     restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
     sectionFocusKey: String? = null,
     onItemFocused: ((MediaItemCompat) -> Unit)? = null,
     onShowMoreFocused: (() -> Unit)? = null,
@@ -66,7 +68,8 @@ fun FeedMiniGrid(
             isInteractive = isInteractive,
             text = stringResource(R.string.tv_feed_empty),
             modifier = modifier.fillMaxWidth(),
-            firstItemFocusRequester = firstItemFocusRequester
+            firstItemFocusRequester = firstItemFocusRequester,
+            upFocusRequester = upFocusRequester,
         )
         return
     }
@@ -147,7 +150,9 @@ fun FeedMiniGrid(
                             canFocus = isInteractive
                             left = leftIndex?.let(::requesterFor) ?: FocusRequester.Default
                             right = rightIndex?.let(::requesterFor) ?: FocusRequester.Default
-                            up = upIndex?.let(::requesterFor) ?: FocusRequester.Default
+                            up = upIndex?.let(::requesterFor)
+                                ?: upFocusRequester
+                                ?: FocusRequester.Default
                             down = downIndex?.let(::requesterFor) ?: FocusRequester.Default
                         }
 
@@ -159,6 +164,11 @@ fun FeedMiniGrid(
                                 modifier = Modifier
                                     .width(cardWidth)
                                     .height(cardPosterHeight)
+                                    .then(
+                                        sectionFocusKey?.let { key ->
+                                            Modifier.testTag("$key:slot:$index")
+                                        } ?: Modifier
+                                    )
                                     .then(focusModifier)
                             )
                         }
@@ -170,6 +180,9 @@ fun FeedMiniGrid(
                                 onClick = { onMediaClick(item) },
                                 onFocused = {
                                     onItemFocused?.invoke(item)
+                                },
+                                focusableTestTag = sectionFocusKey?.let { key ->
+                                    "$key:slot:$index"
                                 },
                                 modifier = Modifier
                                     .width(cardWidth)
@@ -236,6 +249,7 @@ internal fun FeedMiniGridEmptyOrError(
     text: String,
     modifier: Modifier = Modifier,
     firstItemFocusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
 ) {
     Surface(
         onClick = { },
@@ -258,7 +272,10 @@ internal fun FeedMiniGridEmptyOrError(
                     Modifier
                 }
             )
-            .focusProperties { canFocus = isInteractive }
+            .focusProperties {
+                canFocus = isInteractive
+                up = upFocusRequester ?: FocusRequester.Default
+            }
     ) {
         Box(
             contentAlignment = Alignment.Center,

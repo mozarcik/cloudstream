@@ -20,21 +20,16 @@ class HomeSourceBootstrapper(
 
         repeat(pollAttempts) {
             val availableSources = SourceRepository.getAvailableApis()
+            resolveImmediateHomeSelection(
+                availableSources = availableSources,
+                savedSourceName = savedSourceName
+            )?.let { selectedSource ->
+                return HomeInitialSourceSelection(
+                    source = selectedSource,
+                )
+            }
+
             if (availableSources.isNotEmpty()) {
-                if (savedSourceName.isNullOrBlank()) {
-                    return HomeInitialSourceSelection(
-                        source = availableSources.firstOrNull(),
-                    )
-                }
-
-                availableSources.firstOrNull { source ->
-                    source.name == savedSourceName
-                }?.let { matchedSource ->
-                    return HomeInitialSourceSelection(
-                        source = matchedSource,
-                    )
-                }
-
                 if (fallbackSource == null) {
                     fallbackSource = availableSources.firstOrNull()
                 }
@@ -44,20 +39,26 @@ class HomeSourceBootstrapper(
         }
 
         val finalAvailableSources = SourceRepository.getAvailableApis()
-        val resolvedSource = when {
-            savedSourceName.isNullOrBlank() -> {
-                finalAvailableSources.firstOrNull()
-            }
-
-            else -> {
-                finalAvailableSources.firstOrNull { source ->
-                    source.name == savedSourceName
-                } ?: fallbackSource ?: finalAvailableSources.firstOrNull()
-            }
-        }
+        val resolvedSource = resolveImmediateHomeSelection(
+            availableSources = finalAvailableSources,
+            savedSourceName = savedSourceName
+        ) ?: fallbackSource ?: finalAvailableSources.firstOrNull()
 
         return HomeInitialSourceSelection(
             source = resolvedSource,
         )
+    }
+}
+
+internal fun resolveImmediateHomeSelection(
+    availableSources: List<MainAPI>,
+    savedSourceName: String?,
+): MainAPI? {
+    if (availableSources.isEmpty()) return null
+    if (availableSources.size == 1) return availableSources.first()
+    if (savedSourceName.isNullOrBlank()) return availableSources.firstOrNull()
+
+    return availableSources.firstOrNull { source ->
+        source.name == savedSourceName
     }
 }

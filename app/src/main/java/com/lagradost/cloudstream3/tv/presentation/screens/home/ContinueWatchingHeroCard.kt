@@ -19,6 +19,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -61,6 +62,7 @@ internal fun ContinueWatchingHeroCard(
         modifier = modifier
             .width(ContinueWatchingCardWidth)
             .height(ContinueWatchingCardHeight)
+            .testTag("continue_watching_card_${item.id}")
             .onFocusChanged { focusState ->
                 isFocused = focusState.isFocused
                 if (focusState.isFocused) {

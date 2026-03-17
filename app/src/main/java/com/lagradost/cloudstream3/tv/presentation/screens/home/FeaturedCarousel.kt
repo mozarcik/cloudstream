@@ -27,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.tv.material3.Carousel
 import androidx.tv.material3.CarouselDefaults
 import androidx.tv.material3.CarouselState
@@ -93,6 +94,7 @@ internal fun FeaturedCarousel(
         modifier = modifier
             .fillMaxWidth()
             .height(FeaturedCarouselHeight)
+            .testTag("home_featured_carousel")
             .focusRequester(focusRequester)
             .focusProperties {
                 canFocus = isInteractive

@@ -10,18 +10,23 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Source
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.outlined.AudioFile
+import androidx.compose.material.icons.outlined.HighQuality
+import androidx.compose.material.icons.outlined.Source
+import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.Dp
 import com.lagradost.cloudstream3.R
 
@@ -151,7 +156,7 @@ internal fun PlayerBottomTrailingControls(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PlayerControlButton(
-            icon = Icons.Default.Subtitles,
+            icon = Icons.Outlined.Subtitles,
             tooltipText = stringResource(R.string.player_subtitles_settings),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -165,7 +170,7 @@ internal fun PlayerBottomTrailingControls(
         )
         if (config.showSyncButton) {
             PlayerControlButton(
-                icon = Icons.Default.Sync,
+                icon = ImageVector.vectorResource(id = R.drawable.subtitles_gear_24px),
                 tooltipText = stringResource(R.string.subtitle_offset),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -180,7 +185,7 @@ internal fun PlayerBottomTrailingControls(
         }
         if (config.showAudioTracksButton) {
             PlayerControlButton(
-                icon = Icons.Default.Audiotrack,
+                icon = Icons.Outlined.AudioFile,
                 tooltipText = stringResource(R.string.audio_tracks),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -247,7 +252,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
             .offset(x = offsets.sourceOffsetX),
     ) {
         PlayerControlButton(
-            icon = Icons.Default.Source,
+            icon = Icons.Outlined.Source,
             tooltipText = stringResource(R.string.sources),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -268,7 +273,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
                 .offset(x = offsets.videoOffsetX),
         ) {
             PlayerControlButton(
-                icon = Icons.Default.HighQuality,
+                icon = Icons.Outlined.HighQuality,
                 tooltipText = stringResource(R.string.video_tracks),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,

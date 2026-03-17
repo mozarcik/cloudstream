@@ -437,6 +437,7 @@ private fun Body(
                     navController.navigate(Screens.LibraryFeedGrid())
                 },
                 onScroll = updateTopBarVisibility,
+                topBarFocusRequester = topBarSelectedFocusRequester,
                 restoreFocusToken = libraryRestoreFocusToken
             )
         }
@@ -459,6 +460,7 @@ private fun Body(
                     navController.popBackStack()
                 },
                 onScroll = updateTopBarVisibility,
+                topBarFocusRequester = topBarSelectedFocusRequester,
                 restoreFocusToken = libraryFeedGridRestoreFocusToken
             )
         }

@@ -32,6 +32,7 @@ fun LibraryScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (LibrarySectionUiState) -> Unit,
     onScroll: (isTopBarVisible: Boolean) -> Unit,
+    topBarFocusRequester: FocusRequester,
     restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     viewModel: LibraryViewModel = viewModel(),
@@ -39,11 +40,16 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val firstFeedCardFocusRequester = remember { FocusRequester() }
+    val sourceRowEntryFocusRequester = remember { FocusRequester() }
 
     val loadingLabel = stringResource(id = R.string.loading)
     val emptyLibraryLabel = stringResource(id = R.string.empty_library_logged_in_message)
     val noLibraryAccountsLabel = stringResource(id = R.string.empty_library_no_accounts_message)
     val pendingRestoreTargetId = LibraryFocusStore.pendingRestoreTargetId
+    val showSourceSelector = uiState.availableSources.size > 1
+    val selectedSourceName = uiState.currentApiName.ifBlank {
+        uiState.availableSources.firstOrNull().orEmpty()
+    }
 
     LaunchedEffect(Unit) {
         onScroll(true)
@@ -71,6 +77,21 @@ fun LibraryScreen(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
+                if (showSourceSelector) {
+                    item(key = "library_source_selector") {
+                        LibrarySourceSelectorRow(
+                            sources = uiState.availableSources,
+                            selectedSource = selectedSourceName,
+                            rowEntryFocusRequester = sourceRowEntryFocusRequester,
+                            isInteractive = true,
+                            upFocusRequester = topBarFocusRequester,
+                            downFocusRequester = firstFeedCardFocusRequester
+                                .takeIf { uiState.sections.isNotEmpty() },
+                            onSourceSelected = viewModel::switchSource,
+                        )
+                    }
+                }
+
                 when {
                     uiState.isLoading -> {
                         items(count = LIBRARY_PLACEHOLDER_COUNT) {
@@ -107,7 +128,7 @@ fun LibraryScreen(
                         ) { index, section ->
                             FeedSection(
                                 title = section.title,
-                                state = HomeFeedLoadState.Success(section.items),
+                                state = HomeFeedLoadState.Success(section.previewItems),
                                 onMediaClick = openDetailsWithRestore,
                                 onShowMoreClick = {
                                     openFeedGridWithRestore(section)
@@ -115,6 +136,15 @@ fun LibraryScreen(
                                 isInteractive = true,
                                 firstItemFocusRequester = if (index == 0) {
                                     firstFeedCardFocusRequester
+                                } else {
+                                    null
+                                },
+                                upFocusRequester = if (index == 0) {
+                                    if (showSourceSelector) {
+                                        sourceRowEntryFocusRequester
+                                    } else {
+                                        topBarFocusRequester
+                                    }
                                 } else {
                                     null
                                 },

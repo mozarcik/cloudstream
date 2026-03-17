@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -55,6 +56,7 @@ fun MediaGrid(
     onMediaClick: (MediaItemCompat) -> Unit,
     gridState: LazyGridState,
     firstItemFocusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
     focusKeyPrefix: String? = null,
     pendingRestoreFocusTargetId: String? = null,
     pendingRestoreFocusIndex: Int? = null,
@@ -180,6 +182,11 @@ fun MediaGrid(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
+                        .focusProperties {
+                            if (index < MEDIA_GRID_COLUMNS && upFocusRequester != null) {
+                                up = upFocusRequester
+                            }
+                        }
                         .then(
                             if (focusRequester != null) {
                                 Modifier.focusRequester(focusRequester)
@@ -219,6 +226,7 @@ fun MediaGridStatic(
     gridState: LazyGridState,
     duplicatesMode: MediaGridDuplicatesMode = MediaGridDuplicatesMode.Keep,
     firstItemFocusRequester: FocusRequester? = null,
+    upFocusRequester: FocusRequester? = null,
     focusKeyPrefix: String? = null,
     pendingRestoreFocusTargetId: String? = null,
     restoreFocusToken: Int = 0,
@@ -325,6 +333,11 @@ fun MediaGridStatic(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
+                    .focusProperties {
+                        if (index < MEDIA_GRID_COLUMNS && upFocusRequester != null) {
+                            up = upFocusRequester
+                        }
+                    }
                     .then(
                         if (focusRequester != null) {
                             Modifier.focusRequester(focusRequester)

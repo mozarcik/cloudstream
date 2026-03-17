@@ -18,6 +18,7 @@ internal fun FeedPosterCard(
     item: MediaItemCompat,
     onClick: () -> Unit,
     onFocused: (() -> Unit)? = null,
+    focusableTestTag: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val haloController = LocalHaloController.current
@@ -32,6 +33,7 @@ internal fun FeedPosterCard(
         ratingLabel = item.ratingLabelOrNull(),
         shape = CloudStreamCardShape,
         onClick = onClick,
+        focusableTestTag = focusableTestTag,
         onFocus = { focusInfo ->
             if (focusInfo.isFocused) {
                 onFocused?.invoke()

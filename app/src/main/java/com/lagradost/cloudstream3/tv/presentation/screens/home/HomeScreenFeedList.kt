@@ -17,6 +17,7 @@ internal fun LazyListScope.homeFeedSections(
     noFeedsLabel: String,
     isMorePanelOpen: Boolean,
     firstFeedCardFocusRequester: FocusRequester,
+    firstSectionUpFocusRequester: FocusRequester? = null,
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
     pendingRestoreFocusTargetId: String? = null,
@@ -59,6 +60,11 @@ internal fun LazyListScope.homeFeedSections(
                 isInteractive = !isMorePanelOpen,
                 firstItemFocusRequester = if (index == 0) {
                     firstFeedCardFocusRequester
+                } else {
+                    null
+                },
+                upFocusRequester = if (index == 0) {
+                    firstSectionUpFocusRequester
                 } else {
                     null
                 },

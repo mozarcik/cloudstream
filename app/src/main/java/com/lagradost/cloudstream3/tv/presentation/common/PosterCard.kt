@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
@@ -108,6 +109,7 @@ fun PosterCard(
     onClick: () -> Unit,
     onFocus: (PosterFocusInfo) -> Unit,
     modifier: Modifier = Modifier,
+    focusableTestTag: String? = null,
     onLongClick: (() -> Unit)? = null,
     paletteCache: PaletteCache = DefaultPosterPaletteCache,
 ) {
@@ -270,6 +272,11 @@ fun PosterCard(
                 .fillMaxWidth()
                 .aspectRatio(POSTER_IMAGE_ASPECT_RATIO)
                 .align(Alignment.TopCenter)
+                .then(
+                    focusableTestTag?.let { testTag ->
+                        Modifier.testTag(testTag)
+                    } ?: Modifier
+                )
                 .onFocusChanged { focusState ->
                     if (layoutState.isFocused == focusState.isFocused) {
                         return@onFocusChanged
