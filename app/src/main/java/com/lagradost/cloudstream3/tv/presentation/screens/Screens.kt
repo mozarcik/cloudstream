@@ -27,7 +27,7 @@ enum class Screens(
     MovieDetails(args = listOf("url", "apiName")),
     TvSeriesDetails(args = listOf("url", "apiName")),
     MediaDetails(args = listOf("url", "apiName")),
-    TvPlayer(args = listOf("url", "apiName", "episodeData"));
+    TvPlayer(args = listOf("url", "apiName", "playbackTarget"));
 
     operator fun invoke(): String {
         val argList = StringBuilder()

@@ -19,13 +19,18 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSy
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.toTvPlayerPlaybackErrorDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.player.overlay.PlayerOverlayStateHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelEffect
-import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.extractEmbeddedSubtitleSnapshots
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.availableRuntimeSubtitleIds
 import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerRuntimeTracksStateHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.applyRuntimeSubtitleSelection
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.resolveRuntimeSubtitleSelectionState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
+
+private const val ControlsStartupAutoHideDelayMs = 750L
+private const val ControlsInactivityAutoHideDelayMs = 4_500L
 
 @Composable
 internal fun PlayerPlaybackListenerEffect(
@@ -56,6 +61,17 @@ internal fun PlayerPlaybackListenerEffect(
                 }
                 if (playbackState == Player.STATE_READY) {
                     currentActions.onPlaybackReady()
+                } else if (playbackState == Player.STATE_ENDED) {
+                    val rawDuration = exoPlayer.duration
+                    val finalDurationMs = if (rawDuration == C.TIME_UNSET || rawDuration < 0L) {
+                        0L
+                    } else {
+                        rawDuration
+                    }
+                    currentActions.onPlaybackEnded(
+                        exoPlayer.currentPosition.coerceAtLeast(0L),
+                        finalDurationMs,
+                    )
                 }
             }
 
@@ -66,6 +82,28 @@ internal fun PlayerPlaybackListenerEffect(
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 val extractedAudioTracks = currentRuntimeTracksState.refresh(tracks)
                 currentRuntimeTracksState.applyInitialAudioSelectionIfNeeded(extractedAudioTracks)
+                currentActions.onEmbeddedSubtitlesChanged(
+                    extractEmbeddedSubtitleSnapshots(tracks),
+                )
+                val selectedSubtitleId = currentSelectedSubtitleId
+                if (selectedSubtitleId != null) {
+                    val selectionState = resolveRuntimeSubtitleSelectionState(
+                        tracks = tracks,
+                        subtitleId = selectedSubtitleId,
+                    )
+                    if (selectionState.exists && !selectionState.isSelected) {
+                        val runtimeApplied = applyRuntimeSubtitleSelection(
+                            player = exoPlayer,
+                            subtitleId = selectedSubtitleId,
+                        )
+                        subtitleSyncDebugLog(
+                            "PlayerPlaybackListenerEffect: reconciled selected subtitle after tracks change" +
+                                " subtitleId=$selectedSubtitleId" +
+                                " runtimeApplied=$runtimeApplied" +
+                                " availableRuntimeSubtitleIds=${availableRuntimeSubtitleIds(tracks)}",
+                        )
+                    }
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -111,31 +149,33 @@ internal fun PlayerPlaybackLoadEffect(
     isCurrentSourceReady: Boolean,
     subtitleSelectionSource: TvPlayerSubtitleSelectionSource,
     initialSubtitleDelayMs: Long,
-    initialPlayerPositionMs: Long,
-    initialPlayerPlayWhenReady: Boolean,
+    playbackRestoreRequest: PlayerPlaybackRestoreRequest?,
+    playbackRestoreRequestKey: Long?,
+    defaultPlayerPositionMs: Long,
+    defaultPlayerPlayWhenReady: Boolean,
     playerSessionController: PlayerSessionController,
     overlayState: PlayerOverlayStateHolder,
     runtimeTracksState: PlayerRuntimeTracksStateHolder,
-    onPlaybackRestoreConsumed: () -> Unit,
+    onPlaybackRestoreConsumed: (Long?) -> Unit,
 ) {
     var lastLoadedLinkUrl by remember { mutableStateOf<String?>(null) }
     var lastLoadedSubtitleId by remember { mutableStateOf<String?>(null) }
     var lastLoadedSubtitleDelayMs by remember { mutableStateOf<Long?>(null) }
     var lastLoadedStartPositionMs by remember { mutableStateOf<Long?>(null) }
     var lastLoadedPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
+    val startPositionMs = playbackRestoreRequest?.positionMs ?: defaultPlayerPositionMs
+    val startPlayWhenReady = playbackRestoreRequest?.playWhenReady ?: defaultPlayerPlayWhenReady
 
     LaunchedEffect(
         state.link.url,
         selectedSubtitleId,
-        initialSubtitleDelayMs,
-        initialPlayerPositionMs,
-        initialPlayerPlayWhenReady,
+        playbackRestoreRequestKey,
     ) {
         val isLinkChanged = lastLoadedLinkUrl != state.link.url
         val isSubtitleChanged = lastLoadedSubtitleId != selectedSubtitleId
         val isSubtitleDelayChanged = lastLoadedSubtitleDelayMs != initialSubtitleDelayMs
-        val isStartPositionChanged = lastLoadedStartPositionMs != initialPlayerPositionMs
-        val isPlayWhenReadyChanged = lastLoadedPlayWhenReady != initialPlayerPlayWhenReady
+        val isStartPositionChanged = lastLoadedStartPositionMs != startPositionMs
+        val isPlayWhenReadyChanged = lastLoadedPlayWhenReady != startPlayWhenReady
         val loadReason = buildString {
             if (isLinkChanged) append("link_changed ")
             if (isSubtitleChanged) append("subtitle_changed ")
@@ -151,52 +191,45 @@ internal fun PlayerPlaybackLoadEffect(
                 " subtitleSelectionSource=$subtitleSelectionSource" +
                 " sourceReady=$isCurrentSourceReady" +
                 " subtitleDelayMs=$initialSubtitleDelayMs" +
-                " startPositionMs=$initialPlayerPositionMs" +
-                " playWhenReady=$initialPlayerPlayWhenReady",
+                " restoreRequestId=${playbackRestoreRequest?.requestId ?: "null"}" +
+                " startPositionMs=$startPositionMs" +
+                " playWhenReady=$startPlayWhenReady",
         )
 
-        if (!isLinkChanged && isSubtitleChanged) {
-            when (subtitleSelectionSource) {
-                TvPlayerSubtitleSelectionSource.User -> {
-                    val runtimeApplied = applyRuntimeSubtitleSelection(
-                        player = playerSessionController.player,
-                        subtitleId = selectedSubtitleId,
-                    )
-                    subtitleSyncDebugLog(
-                        "PlayerPlaybackLoadEffect: user subtitle change runtimeApplied=$runtimeApplied" +
-                            " subtitleId=${selectedSubtitleId ?: "null"}",
-                    )
-                    if (runtimeApplied) {
-                        overlayState.syncFromPlayer(playerSessionController.player)
-                        runtimeTracksState.refresh()
-                        onPlaybackRestoreConsumed()
-                        lastLoadedSubtitleId = selectedSubtitleId
-                        return@LaunchedEffect
-                    }
-                }
-
-                TvPlayerSubtitleSelectionSource.Auto -> {
-                    if (isCurrentSourceReady) {
-                        val runtimeApplied = applyRuntimeSubtitleSelection(
-                            player = playerSessionController.player,
-                            subtitleId = selectedSubtitleId,
-                        )
-                        subtitleSyncDebugLog(
-                            "PlayerPlaybackLoadEffect: auto subtitle change after start runtimeApplied=$runtimeApplied" +
-                                " subtitleId=${selectedSubtitleId ?: "null"}",
-                        )
-                        if (runtimeApplied) {
-                            overlayState.syncFromPlayer(playerSessionController.player)
-                            runtimeTracksState.refresh()
-                        }
-                        onPlaybackRestoreConsumed()
-                        lastLoadedSubtitleId = selectedSubtitleId
-                        return@LaunchedEffect
-                    }
-                }
-
-                TvPlayerSubtitleSelectionSource.None,
-                TvPlayerSubtitleSelectionSource.PlaybackErrorRecovery -> Unit
+        if (
+            shouldAttemptRuntimeSubtitleSelection(
+                isLinkChanged = isLinkChanged,
+                isSubtitleChanged = isSubtitleChanged,
+                selectedSubtitle = selectedSubtitle,
+                subtitleSelectionSource = subtitleSelectionSource,
+                isCurrentSourceReady = isCurrentSourceReady,
+            )
+        ) {
+            val availableSubtitleIds = availableRuntimeSubtitleIds(
+                playerSessionController.player.currentTracks,
+            )
+            val runtimeApplied = applyRuntimeSubtitleSelection(
+                player = playerSessionController.player,
+                subtitleId = selectedSubtitleId,
+            )
+            subtitleSyncDebugLog(
+                "PlayerPlaybackLoadEffect: runtime subtitle update" +
+                    " runtimeApplied=$runtimeApplied" +
+                    " subtitleId=${selectedSubtitleId ?: "null"}" +
+                    " subtitleOrigin=${selectedSubtitle?.origin ?: "null"}" +
+                    " source=$subtitleSelectionSource" +
+                    " availableRuntimeSubtitleIds=$availableSubtitleIds",
+            )
+            if (runtimeApplied) {
+                overlayState.syncFromPlayer(playerSessionController.player)
+                runtimeTracksState.refresh()
+                onPlaybackRestoreConsumed(playbackRestoreRequest?.requestId)
+                lastLoadedLinkUrl = state.link.url
+                lastLoadedSubtitleId = selectedSubtitleId
+                lastLoadedSubtitleDelayMs = initialSubtitleDelayMs
+                lastLoadedStartPositionMs = startPositionMs
+                lastLoadedPlayWhenReady = startPlayWhenReady
+                return@LaunchedEffect
             }
         }
 
@@ -206,17 +239,30 @@ internal fun PlayerPlaybackLoadEffect(
             subtitle = selectedSubtitle,
             audioTracks = state.link.audioTracks,
             subtitleDelayMs = initialSubtitleDelayMs,
-            startPositionMs = initialPlayerPositionMs,
-            startPlayWhenReady = initialPlayerPlayWhenReady,
+            startPositionMs = startPositionMs,
+            startPlayWhenReady = startPlayWhenReady,
         )
         overlayState.syncFromPlayer(playerSessionController.player)
         runtimeTracksState.refresh()
-        onPlaybackRestoreConsumed()
+        onPlaybackRestoreConsumed(playbackRestoreRequest?.requestId)
         lastLoadedLinkUrl = state.link.url
         lastLoadedSubtitleId = selectedSubtitleId
         lastLoadedSubtitleDelayMs = initialSubtitleDelayMs
-        lastLoadedStartPositionMs = initialPlayerPositionMs
-        lastLoadedPlayWhenReady = initialPlayerPlayWhenReady
+        lastLoadedStartPositionMs = startPositionMs
+        lastLoadedPlayWhenReady = startPlayWhenReady
+    }
+}
+
+@Composable
+internal fun PlayerPlaybackSubtitleDelayEffect(
+    subtitleDelayMs: Long,
+    playerSessionController: PlayerSessionController,
+) {
+    LaunchedEffect(subtitleDelayMs, playerSessionController) {
+        playerSessionController.subtitleSyncController.setSubtitleDelayMs(
+            player = playerSessionController.player,
+            newSubtitleDelayMs = subtitleDelayMs,
+        )
     }
 }
 
@@ -235,12 +281,13 @@ internal fun PlayerExtractorVerificationEffect(
 internal fun PlayerPlaybackFocusEffects(
     overlayState: PlayerOverlayStateHolder,
     hasSidePanel: Boolean,
-    activePanel: TvPlayerSidePanel,
-    runtimeTracksState: PlayerRuntimeTracksStateHolder,
     controlsInteractionEvents: MutableSharedFlow<Unit>,
     playPauseFocusRequester: androidx.compose.ui.focus.FocusRequester,
     rootFocusRequester: androidx.compose.ui.focus.FocusRequester,
 ) {
+    val currentOverlayState by rememberUpdatedState(overlayState)
+    val currentHasSidePanel by rememberUpdatedState(hasSidePanel)
+
     LaunchedEffect(overlayState.controlsVisible, hasSidePanel) {
         if (overlayState.controlsVisible && !hasSidePanel) {
             val focused = requestFocusWithRetry(playPauseFocusRequester)
@@ -253,26 +300,30 @@ internal fun PlayerPlaybackFocusEffects(
     }
 
     LaunchedEffect(
+        overlayState.startupAutoHideArmed,
         overlayState.controlsVisible,
-        overlayState.playerWantsToPlay,
-        activePanel,
-        runtimeTracksState.audioPanelVisible,
-        runtimeTracksState.videoPanelVisible,
-        controlsInteractionEvents,
+        overlayState.isPlaying,
+        hasSidePanel,
     ) {
-        if (!overlayState.controlsVisible ||
-            !overlayState.playerWantsToPlay ||
-            activePanel != TvPlayerSidePanel.None ||
-            runtimeTracksState.audioPanelVisible ||
-            runtimeTracksState.videoPanelVisible
-        ) {
+        if (!shouldAutoHideControlsOnStartup(overlayState, hasSidePanel)) {
             return@LaunchedEffect
         }
 
-        controlsInteractionEvents.tryEmit(Unit)
+        delay(ControlsStartupAutoHideDelayMs)
+        if (!shouldAutoHideControlsOnStartup(currentOverlayState, currentHasSidePanel)) {
+            return@LaunchedEffect
+        }
+
+        currentOverlayState.controlsVisible = false
+        currentOverlayState.startupAutoHideArmed = false
+    }
+
+    LaunchedEffect(controlsInteractionEvents) {
         controlsInteractionEvents.collectLatest {
-            delay(4_500L)
-            overlayState.controlsVisible = false
+            delay(ControlsInactivityAutoHideDelayMs)
+            if (shouldAutoHideControlsAfterInteraction(currentOverlayState, currentHasSidePanel)) {
+                currentOverlayState.controlsVisible = false
+            }
         }
     }
 
@@ -281,6 +332,27 @@ internal fun PlayerPlaybackFocusEffects(
             overlayState.controlsVisible = true
         }
     }
+}
+
+private fun shouldAutoHideControlsOnStartup(
+    overlayState: PlayerOverlayStateHolder,
+    hasSidePanel: Boolean,
+): Boolean {
+    return overlayState.startupAutoHideArmed &&
+        shouldAutoHideControlsAfterInteraction(
+            overlayState = overlayState,
+            hasSidePanel = hasSidePanel,
+        )
+}
+
+private fun shouldAutoHideControlsAfterInteraction(
+    overlayState: PlayerOverlayStateHolder,
+    hasSidePanel: Boolean,
+): Boolean {
+    return overlayState.controlsVisible &&
+        overlayState.isPlaying &&
+        overlayState.playerWantsToPlay &&
+        !hasSidePanel
 }
 
 @Composable

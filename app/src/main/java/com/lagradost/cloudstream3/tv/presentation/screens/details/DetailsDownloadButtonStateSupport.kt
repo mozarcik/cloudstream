@@ -59,7 +59,10 @@ internal data class DetailsDownloadSnapshotPublication(
     val uiState: DetailsDownloadButtonUiState,
 )
 
-internal val PendingDetailsDownloadButtonUiState = DetailsDownloadButtonUiState(
+internal fun createPendingDetailsDownloadButtonUiState(
+    episodeId: Int? = null,
+): DetailsDownloadButtonUiState = DetailsDownloadButtonUiState(
+    episodeId = episodeId,
     status = VideoDownloadManager.DownloadType.IsPending,
     progressFraction = 0f,
 )

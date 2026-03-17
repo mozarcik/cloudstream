@@ -6,7 +6,6 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.PlayerSessionController
@@ -33,8 +32,9 @@ internal fun PlayerPlaybackScreen(
     val subtitleSyncController = playerSessionController.subtitleSyncController
 
     var playerResizeMode by remember { mutableStateOf(PlayerResizeMode.Fit) }
-    var pendingSeekPositionMs by remember { mutableStateOf<Long?>(null) }
-    var pendingPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
+    var playbackRestoreRequest by remember { mutableStateOf<PlayerPlaybackRestoreRequest?>(null) }
+    var lastConsumedPlaybackRestoreRequestId by remember { mutableStateOf<Long?>(null) }
+    var nextPlaybackRestoreRequestId by remember { mutableStateOf(0L) }
 
     val selectedSubtitle = catalogState.selectedSubtitle
     val selectedSubtitleId = catalogState.selectedSubtitleId
@@ -47,8 +47,10 @@ internal fun PlayerPlaybackScreen(
         mutableStateMapOf<String, Long>()
     }
     val initialSubtitleDelayMs = selectedSubtitleId?.let(subtitleDelayByTrackId::get) ?: 0L
-    val initialPlayerPositionMs = pendingSeekPositionMs ?: state.resumePositionMs
-    val initialPlayerPlayWhenReady = pendingPlayWhenReady ?: true
+    val playbackRestoreRequestKey = playbackRestoreRequestKey(
+        activeRequest = playbackRestoreRequest,
+        lastConsumedRequestId = lastConsumedPlaybackRestoreRequestId,
+    )
 
     val overlayState = rememberPlayerOverlayStateHolder(
         linkUrl = state.link.url,
@@ -87,8 +89,13 @@ internal fun PlayerPlaybackScreen(
         selectedSubtitleId = selectedSubtitleId,
         actions = actions,
         onPendingPlaybackRestoreCaptured = { positionMs, playWhenReady ->
-            pendingSeekPositionMs = positionMs
-            pendingPlayWhenReady = playWhenReady
+            val nextRequestId = nextPlaybackRestoreRequestId + 1L
+            nextPlaybackRestoreRequestId = nextRequestId
+            playbackRestoreRequest = PlayerPlaybackRestoreRequest(
+                requestId = nextRequestId,
+                positionMs = positionMs,
+                playWhenReady = playWhenReady,
+            )
         },
     )
     PlayerPlaybackLoadEffect(
@@ -98,25 +105,40 @@ internal fun PlayerPlaybackScreen(
         isCurrentSourceReady = catalogState.isCurrentSourceReady,
         subtitleSelectionSource = catalogState.subtitleSelectionSource,
         initialSubtitleDelayMs = initialSubtitleDelayMs,
-        initialPlayerPositionMs = initialPlayerPositionMs,
-        initialPlayerPlayWhenReady = initialPlayerPlayWhenReady,
+        playbackRestoreRequest = playbackRestoreRequest,
+        playbackRestoreRequestKey = playbackRestoreRequestKey,
+        defaultPlayerPositionMs = state.resumePositionMs,
+        defaultPlayerPlayWhenReady = true,
         playerSessionController = playerSessionController,
         overlayState = overlayState,
         runtimeTracksState = runtimeTracksState,
-        onPlaybackRestoreConsumed = {
-            pendingSeekPositionMs = null
-            pendingPlayWhenReady = null
+        onPlaybackRestoreConsumed = { consumedRequestId ->
+            if (consumedRequestId != null) {
+                lastConsumedPlaybackRestoreRequestId = consumedRequestId
+            }
+            if (playbackRestoreRequest?.requestId == consumedRequestId) {
+                playbackRestoreRequest = null
+            }
         },
+    )
+    PlayerPlaybackSubtitleDelayEffect(
+        subtitleDelayMs = initialSubtitleDelayMs,
+        playerSessionController = playerSessionController,
     )
     PlayerExtractorVerificationEffect(state = state)
     PlayerPlaybackFocusEffects(
         overlayState = overlayState,
         hasSidePanel = hasSidePanel,
-        activePanel = activePanel,
-        runtimeTracksState = runtimeTracksState,
         controlsInteractionEvents = controlsInteractionEvents,
         playPauseFocusRequester = playPauseFocusRequester,
         rootFocusRequester = rootFocusRequester,
+    )
+    PlayerKeepScreenOnEffect(
+        keepScreenOn = shouldKeepPlaybackScreenOn(
+            isPlaying = overlayState.isPlaying,
+            playerWantsToPlay = overlayState.playerWantsToPlay,
+            playbackState = overlayState.playerPlaybackState,
+        ),
     )
     PlayerPanelEffectsCollector(
         panelEffects = panelEffects,
@@ -149,8 +171,13 @@ internal fun PlayerPlaybackScreen(
         controlsInteractionEvents = controlsInteractionEvents,
         actions = actions,
         onPendingPlaybackRestoreCaptured = { positionMs, playWhenReady ->
-            pendingSeekPositionMs = positionMs
-            pendingPlayWhenReady = playWhenReady
+            val nextRequestId = nextPlaybackRestoreRequestId + 1L
+            nextPlaybackRestoreRequestId = nextRequestId
+            playbackRestoreRequest = PlayerPlaybackRestoreRequest(
+                requestId = nextRequestId,
+                positionMs = positionMs,
+                playWhenReady = playWhenReady,
+            )
         },
         onRuntimeSubtitleDelayChanged = { updatedDelayMs ->
             selectedSubtitleId?.let { subtitleId ->

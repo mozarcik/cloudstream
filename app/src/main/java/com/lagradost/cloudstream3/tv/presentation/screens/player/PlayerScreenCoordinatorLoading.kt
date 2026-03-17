@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
+import android.net.Uri
 import android.util.Log
 import com.lagradost.cloudstream3.APIHolder
 import com.lagradost.cloudstream3.CloudStreamApp
@@ -10,8 +11,12 @@ import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.resolvePlayerPlaybackTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.ui.APIRepository
+import com.lagradost.cloudstream3.ui.player.DownloadFileGenerator
+import com.lagradost.cloudstream3.ui.player.ExtractorUri
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
+import com.lagradost.cloudstream3.ui.player.toSubtitleFetchEpisodeMetadataLog
+import com.lagradost.cloudstream3.ui.player.toSubtitleFetchLogPayload
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
 import com.lagradost.cloudstream3.ui.result.buildResultEpisode
 import com.lagradost.cloudstream3.utils.DOWNLOAD_EPISODE_CACHE
@@ -22,7 +27,6 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.INFER_TYPE
 import com.lagradost.cloudstream3.utils.VideoDownloadHelper
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
-import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -30,14 +34,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val DebugTag = "TvPlayerVM"
+private const val InitialFinalizeQuietWindowMs = 1_500L
 private const val ReadyRefreshBatchSize = 20
 private const val ReadyRefreshDebounceMs = 900L
 
 private data class DownloadedPlaybackTarget(
     val metadata: TvPlayerMetadata,
-    val episode: ResultEpisode,
-    val links: List<ExtractorLink>,
-    val selectedUrl: String?,
+    val episodes: List<ResultEpisode>,
+    val selectedEpisodeIndex: Int,
+    val extractorItems: List<ExtractorUri>,
 )
 
 private fun playerDiagnosticsLog(message: String) {
@@ -46,14 +51,25 @@ private fun playerDiagnosticsLog(message: String) {
 
 internal fun retry(context: PlayerScreenCoordinatorContext) {
     context.catalog.loadingJob?.cancel()
+    context.catalog.pendingInitialFinalizeJob?.cancel()
+    context.catalog.pendingInitialFinalizeJob = null
+    context.catalog.prefetchJob?.cancel()
+    context.catalog.prefetchJob = null
+    context.catalog.prefetchedFromEpisodeId = null
+    context.catalog.prefetchingFromEpisodeId = null
+    context.catalog.generator = null
     context.catalog.store.reset()
     context.catalog.hasFinalized = false
+    context.core.baseMetadata = TvPlayerMetadata.Empty
     context.core.metadata = TvPlayerMetadata.Empty
+    context.core.loadingUseBlackBackground = false
     context.core.currentLoadResponse = null
     context.catalog.pendingReadyRefreshChanges = 0
     context.catalog.pendingReadyRefreshJob?.cancel()
     context.catalog.pendingReadyRefreshJob = null
     context.core.currentEpisode = null
+    context.core.episodeQueue = emptyList()
+    context.core.currentEpisodeIndex = -1
     context.panels.onlineSubtitlesController.reset()
     context.core.playbackProgressState.reset()
     context.panels.stateHolder.reset()
@@ -75,13 +91,12 @@ internal fun skipLoading(context: PlayerScreenCoordinatorContext) {
 internal fun loadSources(context: PlayerScreenCoordinatorContext) {
     val url = context.savedStateHandle.get<String>(PlayerScreenNavigation.UrlBundleKey).orEmpty()
     val apiName = context.savedStateHandle.get<String>(PlayerScreenNavigation.ApiNameBundleKey).orEmpty()
-    val rawEpisodeData = context.savedStateHandle
-        .get<String>(PlayerScreenNavigation.EpisodeDataBundleKey)
-    val downloadEpisodeId = PlayerScreenNavigation.parseDownloadedEpisodeId(rawEpisodeData)
-    val episodeData = rawEpisodeData
-        ?.takeIf { value -> value.isNotBlank() && downloadEpisodeId == null }
+    val rawPlaybackTarget = context.savedStateHandle
+        .get<String>(PlayerScreenNavigation.PlaybackTargetBundleKey)
+    val playbackTarget = PlayerScreenNavigation.fromNavigationArg(rawPlaybackTarget)
+    val downloadedEpisodeId = (playbackTarget as? PlayerStartTarget.DownloadedEpisode)?.episodeId
 
-    if (downloadEpisodeId == null && (url.isBlank() || apiName.isBlank())) {
+    if (downloadedEpisodeId == null && (url.isBlank() || apiName.isBlank())) {
         Log.e(DebugTag, "missing args: url=$url apiName=$apiName")
         context.core.uiState.value = TvPlayerUiState.Error(
             metadata = TvPlayerMetadata.Empty,
@@ -91,15 +106,15 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
     }
 
     context.catalog.loadingJob = context.coroutineScope.launch {
-        if (downloadEpisodeId != null) {
+        if (downloadedEpisodeId != null) {
             val downloadedTarget = withContext(Dispatchers.IO) {
                 resolveDownloadedPlaybackTarget(
-                    episodeId = downloadEpisodeId,
+                    episodeId = downloadedEpisodeId,
                     fallbackApiName = apiName,
                 )
             }
             if (downloadedTarget == null) {
-                Log.e(DebugTag, "downloaded playback target unavailable episodeId=$downloadEpisodeId")
+                Log.e(DebugTag, "downloaded playback target unavailable episodeId=$downloadedEpisodeId")
                 context.core.uiState.value = TvPlayerUiState.Error(
                     metadata = TvPlayerMetadata(
                         title = apiName.ifBlank { "Downloads" },
@@ -115,7 +130,6 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
             applyDownloadedPlaybackTarget(
                 context = context,
                 target = downloadedTarget,
-                episodeId = downloadEpisodeId,
             )
             return@launch
         }
@@ -140,7 +154,7 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
                 repository = repository,
                 url = url,
                 apiName = apiName,
-                directEpisodeData = episodeData,
+                startTarget = playbackTarget,
             )
         }
 
@@ -156,68 +170,33 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
             return@launch
         }
 
+        context.core.baseMetadata = target.metadata.copy(
+            season = null,
+            episode = null,
+            episodeTitle = null,
+        )
         context.core.metadata = target.metadata
         context.core.currentEpisode = target.episode
+        context.core.episodeQueue = target.episodes
+        context.core.currentEpisodeIndex = target.selectedEpisodeIndex
         context.core.currentLoadResponse = target.page
         context.panels.onlineSubtitlesController.reset(
             query = defaultOnlineSubtitlesQuery(context),
         )
-        context.core.playbackProgressState.onEpisodeChanged(target.episode)
-        postLoadingState(context)
-
-        val generator = RepoLinkGenerator(
-            episodes = listOf(target.episode),
+        context.core.playbackProgressState.onEpisodeChanged(
+            episode = target.episode,
+            nextEpisode = target.episodes.getOrNull(target.selectedEpisodeIndex + 1),
+        )
+        context.catalog.generator = RepoLinkGenerator(
+            episodes = target.episodes,
+            currentIndex = target.selectedEpisodeIndex,
             page = target.page,
         )
-
-        try {
-            withContext(Dispatchers.IO) {
-                val loadingScope = this
-                generator.generateLinks(
-                    clearCache = false,
-                    sourceTypes = LOADTYPE_INAPP,
-                    callback = { (link, _) ->
-                        if (link == null || link.url.isBlank()) return@generateLinks
-                        val inserted = context.catalog.store.insertLink(link)
-                        if (!inserted) return@generateLinks
-                        loadingScope.launch(Dispatchers.Main.immediate) {
-                            if (context.catalog.hasFinalized) {
-                                onBackgroundDataInsertedAfterFinalize(context)
-                            } else {
-                                postLoadingState(context)
-                            }
-                        }
-                    },
-                    subtitleCallback = { subtitle ->
-                        val inserted = context.catalog.store.insertSubtitle(subtitle)
-                        if (!inserted) return@generateLinks
-                        loadingScope.launch(Dispatchers.Main.immediate) {
-                            playerDiagnosticsLog(
-                                "subtitle inserted: finalized=${context.catalog.hasFinalized}" +
-                                    " id=${subtitle.getId()}" +
-                                    " name=${subtitle.name}" +
-                                    " language=${subtitle.languageCode ?: "null"}",
-                            )
-                            if (context.catalog.hasFinalized) {
-                                onBackgroundDataInsertedAfterFinalize(context)
-                            }
-                        }
-                    },
-                )
-            }
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (throwable: Throwable) {
-            logError(throwable)
-        }
-
-        flushPendingReadyRefresh(
+        context.core.loadingUseBlackBackground = false
+        loadCurrentGeneratorEpisodeSources(
             context = context,
-            force = true,
-        )
-        finalizeLoading(
-            context = context,
-            forceError = true,
+            showLoadingState = true,
+            clearPublicUiState = true,
         )
     }
 }
@@ -252,19 +231,11 @@ private suspend fun resolveDownloadedPlaybackTarget(
         (season != null && episodeNumber != null)
     val tvType = header?.type ?: if (isEpisodeBased) TvType.TvSeries else TvType.Movie
 
-    val seasonLabel = appContext.getString(R.string.season)
-    val episodeLabel = appContext.getString(R.string.episode)
     val downloadedLabel = appContext.getString(R.string.downloaded)
-    val seasonEpisodeLabel = when {
-        season != null && episodeNumber != null -> "$seasonLabel $season $episodeLabel $episodeNumber"
-        season != null -> "$seasonLabel $season"
-        episodeNumber != null -> "$episodeLabel $episodeNumber"
-        else -> null
-    }
 
     val metadata = TvPlayerMetadata(
         title = title,
-        subtitle = listOfNotNull(seasonEpisodeLabel, downloadedLabel).joinToString(" . "),
+        subtitle = downloadedLabel,
         backdropUri = header?.backdrop ?: header?.poster ?: selectedEpisode.poster,
         apiName = sourceName,
         season = season,
@@ -283,125 +254,315 @@ private suspend fun resolveDownloadedPlaybackTarget(
         )
         .toList()
 
-    val links = mutableListOf<ExtractorLink>()
-    var selectedUrl: String? = null
-    orderedEpisodes.forEach { episode ->
-        val fileInfo = VideoDownloadManager.getDownloadFileInfoAndUpdateSettings(
+    val extractorItems = mutableListOf<ExtractorUri>()
+    val resultEpisodes = orderedEpisodes.mapIndexedNotNull { index, episode ->
+        val downloadInfo = appContext.getKey<VideoDownloadManager.DownloadedFileInfo>(
+            VideoDownloadManager.KEY_DOWNLOAD_INFO,
+            episode.id.toString()
+        ) ?: return@mapIndexedNotNull null
+
+        extractorItems += ExtractorUri(
+            uri = Uri.EMPTY,
+            id = episode.id,
+            parentId = episode.parentId,
+            name = episode.name ?: title,
+            season = episode.season,
+            episode = episode.episode,
+            headerName = title,
+            tvType = tvType,
+            basePath = downloadInfo.basePath,
+            displayName = downloadInfo.displayName,
+            relativePath = downloadInfo.relativePath,
+        )
+
+        val resolvedSeason = episode.season?.takeIf { value -> value > 0 }
+        buildResultEpisode(
+            headerName = title,
+            name = episode.name ?: title,
+            poster = episode.poster ?: header?.poster,
+            episode = episode.episode,
+            seasonIndex = resolvedSeason,
+            season = resolvedSeason,
+            data = "download://${episode.id}",
+            apiName = sourceName,
+            id = episode.id,
+            index = index,
+            description = episode.description,
+            rating = episode.score,
+            tvType = tvType,
+            parentId = episode.parentId,
+        )
+    }
+
+    if (extractorItems.isEmpty() || resultEpisodes.isEmpty()) {
+        val fallbackFile = VideoDownloadManager.getDownloadFileInfoAndUpdateSettings(
             appContext,
-            episode.id
-        ) ?: return@forEach
-
-        val link = newExtractorLink(
-            source = sourceName,
-            name = episode.name?.ifBlank { title } ?: title,
-            url = fileInfo.path.toString(),
-            type = INFER_TYPE,
-        ) {
-            this.quality = 0
-            this.referer = ""
-        }
-        links += link
-        if (episode.id == selectedEpisode.id) {
-            selectedUrl = link.url
-        }
+            selectedEpisode.id
+        ) ?: return null
+        extractorItems += ExtractorUri(
+            uri = fallbackFile.path,
+            id = selectedEpisode.id,
+            parentId = selectedEpisode.parentId,
+            name = selectedEpisode.name ?: title,
+            season = selectedEpisode.season,
+            episode = selectedEpisode.episode,
+            headerName = title,
+            tvType = tvType,
+        )
     }
 
-    if (links.isEmpty()) {
-        return null
-    }
-
-    val episodeIndex = orderedEpisodes.indexOfFirst { episode ->
+    val selectedEpisodeIndex = resultEpisodes.indexOfFirst { episode ->
         episode.id == selectedEpisode.id
-    }.coerceAtLeast(0)
-    val resultEpisode = buildResultEpisode(
-        headerName = title,
-        name = episodeTitle ?: title,
-        poster = selectedEpisode.poster ?: header?.poster,
-        episode = episodeNumber ?: 0,
-        seasonIndex = season,
-        season = season,
-        data = "download://${selectedEpisode.id}",
-        apiName = sourceName,
-        id = selectedEpisode.id,
-        index = episodeIndex,
-        description = selectedEpisode.description,
-        tvType = tvType,
-        parentId = selectedEpisode.parentId,
-    )
+    }.takeIf { index -> index >= 0 } ?: 0
 
     return DownloadedPlaybackTarget(
         metadata = metadata,
-        episode = resultEpisode,
-        links = links,
-        selectedUrl = selectedUrl,
+        episodes = if (resultEpisodes.isEmpty()) {
+            listOf(
+                buildResultEpisode(
+                    headerName = title,
+                    name = episodeTitle ?: title,
+                    poster = selectedEpisode.poster ?: header?.poster,
+                    episode = episodeNumber ?: 0,
+                    seasonIndex = season,
+                    season = season,
+                    data = "download://${selectedEpisode.id}",
+                    apiName = sourceName,
+                    id = selectedEpisode.id,
+                    index = 0,
+                    description = selectedEpisode.description,
+                    rating = selectedEpisode.score,
+                    tvType = tvType,
+                    parentId = selectedEpisode.parentId,
+                )
+            )
+        } else {
+            resultEpisodes
+        },
+        selectedEpisodeIndex = selectedEpisodeIndex,
+        extractorItems = extractorItems,
     )
 }
 
-private fun applyDownloadedPlaybackTarget(
+private suspend fun applyDownloadedPlaybackTarget(
     context: PlayerScreenCoordinatorContext,
     target: DownloadedPlaybackTarget,
-    episodeId: Int,
 ) {
-    context.catalog.store.reset()
-    target.links.forEach { link ->
-        context.catalog.store.insertLink(link)
-    }
-
-    context.core.metadata = target.metadata
-    context.core.currentEpisode = target.episode
+    val selectedEpisode = target.episodes.getOrNull(target.selectedEpisodeIndex) ?: return
+    context.core.baseMetadata = target.metadata.copy(
+        season = null,
+        episode = null,
+        episodeTitle = null,
+    )
+    context.core.loadingUseBlackBackground = false
+    context.core.metadata = resolveEpisodeMetadata(
+        baseMetadata = context.core.baseMetadata,
+        episode = selectedEpisode,
+    )
+    context.core.currentEpisode = selectedEpisode
+    context.core.episodeQueue = target.episodes
+    context.core.currentEpisodeIndex = target.selectedEpisodeIndex
     context.core.currentLoadResponse = null
     context.panels.onlineSubtitlesController.reset(
         query = defaultOnlineSubtitlesQuery(context),
     )
-    context.core.playbackProgressState.onEpisodeChanged(target.episode)
-
-    val rebuilt = context.catalog.store.rebuildOrderedData(
-        currentUrl = target.selectedUrl
+    context.core.playbackProgressState.onEpisodeChanged(
+        episode = selectedEpisode,
+        nextEpisode = target.episodes.getOrNull(target.selectedEpisodeIndex + 1),
     )
-    if (!rebuilt) {
-        context.catalog.hasFinalized = true
-        context.core.uiState.value = TvPlayerUiState.Error(
-            metadata = target.metadata,
-            messageResId = R.string.no_links_found_toast,
-        )
-        return
+    context.catalog.generator = DownloadFileGenerator(
+        episodes = target.extractorItems,
+        currentIndex = target.selectedEpisodeIndex,
+    )
+    playerDiagnosticsLog(
+        "offline playback prepared episodeId=${selectedEpisode.id} items=${target.extractorItems.size}" +
+            " selectedIndex=${target.selectedEpisodeIndex}"
+    )
+    loadCurrentGeneratorEpisodeSources(
+        context = context,
+        showLoadingState = true,
+        clearPublicUiState = true,
+    )
+}
+
+private fun resetGeneratorLoadState(
+    context: PlayerScreenCoordinatorContext,
+    clearPublicUiState: Boolean,
+) {
+    context.catalog.store.reset()
+    context.catalog.hasFinalized = false
+    context.catalog.pendingInitialFinalizeJob?.cancel()
+    context.catalog.pendingInitialFinalizeJob = null
+    context.catalog.pendingReadyRefreshChanges = 0
+    context.catalog.pendingReadyRefreshJob?.cancel()
+    context.catalog.pendingReadyRefreshJob = null
+    context.panels.stateHolder.onSourceChanged(newLink = null)
+    context.panels.uiState.value = TvPlayerPanelsUiState()
+    if (clearPublicUiState) {
+        context.catalog.uiState.value = PlayerCatalogUiState()
+    }
+}
+
+internal suspend fun loadCurrentGeneratorEpisodeSources(
+    context: PlayerScreenCoordinatorContext,
+    showLoadingState: Boolean,
+    clearPublicUiState: Boolean,
+    beforeFinalize: (() -> Unit)? = null,
+) {
+    val generator = context.catalog.generator ?: return
+    var beforeFinalizeApplied = false
+
+    fun applyBeforeFinalizeIfNeeded() {
+        if (beforeFinalizeApplied) return
+        beforeFinalize?.invoke()
+        beforeFinalizeApplied = true
     }
 
-    val selectedIndex = target.selectedUrl
-        ?.let(context.catalog.store::indexOfUrl)
-        ?.takeIf { index -> index >= 0 }
-        ?: 0
-    context.catalog.store.setCurrentLinkIndex(selectedIndex)
-    val selectedLink = context.catalog.store.linkAt(selectedIndex)
-        ?: context.catalog.store.orderedLinks.firstOrNull()
-        ?: run {
-            context.catalog.hasFinalized = true
-            context.core.uiState.value = TvPlayerUiState.Error(
-                metadata = target.metadata,
-                messageResId = R.string.no_links_found_toast,
-            )
-            return
-        }
-
-    context.panels.stateHolder.onSourceChanged(selectedLink)
-    context.catalog.hasFinalized = true
-    playerDiagnosticsLog(
-        "offline playback prepared episodeId=$episodeId links=${target.links.size} selectedIndex=$selectedIndex"
-    )
-    postReadyState(
+    resetGeneratorLoadState(
         context = context,
-        link = selectedLink,
-        currentIndex = selectedIndex,
+        clearPublicUiState = clearPublicUiState,
+    )
+
+    if (showLoadingState) {
+        postLoadingState(context)
+    }
+
+    try {
+        withContext(Dispatchers.IO) {
+            val loadingScope = this
+            val subtitleEpisodeMetadata = context.core.currentEpisode.toSubtitleFetchEpisodeMetadataLog()
+            generator.generateLinks(
+                clearCache = false,
+                sourceTypes = LOADTYPE_INAPP,
+                callback = { (link, uri) ->
+                    val playableLink = playableLinkFromGenerator(
+                        extractorLink = link,
+                        extractorUri = uri,
+                    ) ?: return@generateLinks
+                    if (playableLink.url.isBlank()) return@generateLinks
+                    val inserted = context.catalog.store.insertLink(playableLink)
+                    if (!inserted) return@generateLinks
+                    loadingScope.launch(Dispatchers.Main.immediate) {
+                        if (context.catalog.hasFinalized) {
+                            onBackgroundDataInsertedAfterFinalize(context)
+                        } else {
+                            applyBeforeFinalizeIfNeeded()
+                            schedulePendingInitialFinalize(context)
+                            if (showLoadingState) {
+                                postLoadingState(context)
+                            }
+                        }
+                    }
+                },
+                subtitleCallback = { subtitle ->
+                    val inserted = context.catalog.store.insertSubtitle(subtitle)
+                    playerDiagnosticsLog(
+                        "subtitle fetched [tv-generator]: inserted=$inserted " +
+                            subtitle.toSubtitleFetchLogPayload() +
+                            " $subtitleEpisodeMetadata",
+                    )
+                    if (!inserted) return@generateLinks
+                    loadingScope.launch(Dispatchers.Main.immediate) {
+                        if (context.catalog.hasFinalized) {
+                            onBackgroundDataInsertedAfterFinalize(context)
+                        }
+                    }
+                },
+            )
+        }
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (throwable: Throwable) {
+        logError(throwable)
+    }
+
+    applyBeforeFinalizeIfNeeded()
+    flushPendingReadyRefresh(
+        context = context,
+        force = true,
+    )
+    finalizeLoading(
+        context = context,
+        forceError = true,
+    )
+}
+
+@Suppress("DEPRECATION_ERROR")
+private fun playableLinkFromGenerator(
+    extractorLink: ExtractorLink?,
+    extractorUri: ExtractorUri?,
+): ExtractorLink? {
+    if (extractorLink != null) {
+        return extractorLink
+    }
+
+    val resolvedUri = extractorUri?.uri?.takeIf { uri -> uri != Uri.EMPTY } ?: return null
+    val resolvedSource = extractorUri.headerName
+        ?.takeIf { source -> source.isNotBlank() }
+        ?: extractorUri.name.takeIf { name -> name.isNotBlank() }
+        ?: "Downloaded"
+    val resolvedName = extractorUri.name.takeIf { name -> name.isNotBlank() } ?: resolvedSource
+
+    return ExtractorLink(
+        source = resolvedSource,
+        name = resolvedName,
+        url = resolvedUri.toString(),
+        referer = "",
+        quality = 0,
+        type = INFER_TYPE,
     )
 }
 
 internal fun postLoadingState(context: PlayerScreenCoordinatorContext) {
     if (context.catalog.hasFinalized) return
     context.core.uiState.value = TvPlayerUiState.LoadingSources(
-        metadata = context.core.metadata,
+        metadata = resolveLoadingStateMetadata(context),
         loadedSources = context.catalog.store.loadedSourcesCount(),
         canSkip = context.catalog.store.hasLoadedSources(),
+        useBlackBackground = context.core.loadingUseBlackBackground,
     )
+}
+
+private fun resolveLoadingStateMetadata(context: PlayerScreenCoordinatorContext): TvPlayerMetadata {
+    val fallbackTitle = stringFromAppContext(
+        context = context,
+        resId = R.string.loading,
+        fallback = "Loading...",
+    )
+    val currentMetadata = context.core.metadata
+    val resolvedTitle = currentMetadata.title.takeIf { title ->
+        title.isNotBlank()
+    } ?: context.core.currentEpisode?.name?.takeIf { episodeName ->
+        episodeName.isNotBlank()
+    } ?: context.core.currentEpisode?.headerName?.takeIf { headerName ->
+        headerName.isNotBlank()
+    } ?: fallbackTitle
+
+    return currentMetadata.copy(title = resolvedTitle)
+}
+
+internal fun schedulePendingInitialFinalize(context: PlayerScreenCoordinatorContext) {
+    if (context.catalog.hasFinalized || !context.catalog.store.hasLoadedSources()) {
+        return
+    }
+
+    context.catalog.pendingInitialFinalizeJob?.cancel()
+    context.catalog.pendingInitialFinalizeJob = context.coroutineScope.launch {
+        delay(InitialFinalizeQuietWindowMs)
+        context.catalog.pendingInitialFinalizeJob = null
+        if (context.catalog.hasFinalized || !context.catalog.store.hasLoadedSources()) {
+            return@launch
+        }
+
+        playerDiagnosticsLog(
+            "initial finalize quiet window elapsed:" +
+                " loadedSources=${context.catalog.store.loadedSourcesCount()}",
+        )
+        finalizeLoading(
+            context = context,
+            forceError = false,
+        )
+    }
 }
 
 internal fun onBackgroundDataInsertedAfterFinalize(context: PlayerScreenCoordinatorContext) {
@@ -486,12 +647,15 @@ internal fun finalizeLoading(
     forceError: Boolean,
 ) {
     if (context.catalog.hasFinalized) return
+    context.catalog.pendingInitialFinalizeJob?.cancel()
+    context.catalog.pendingInitialFinalizeJob = null
 
     val rebuilt = context.catalog.store.rebuildOrderedData(currentUrl = null)
     if (rebuilt) {
         val firstLink = context.catalog.store.markFirstLinkLoading() ?: return
         context.panels.stateHolder.onSourceChanged(firstLink)
         context.catalog.hasFinalized = true
+        context.core.loadingUseBlackBackground = false
         postReadyState(
             context = context,
             link = firstLink,
@@ -502,6 +666,7 @@ internal fun finalizeLoading(
 
     if (forceError) {
         context.catalog.hasFinalized = true
+        context.core.loadingUseBlackBackground = false
         context.core.uiState.value = TvPlayerUiState.Error(
             metadata = context.core.metadata,
             messageResId = R.string.no_links_found_toast,

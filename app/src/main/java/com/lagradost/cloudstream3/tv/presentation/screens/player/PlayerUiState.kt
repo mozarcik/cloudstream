@@ -30,6 +30,7 @@ sealed interface TvPlayerUiState {
         val metadata: TvPlayerMetadata,
         val loadedSources: Int,
         val canSkip: Boolean,
+        val useBlackBackground: Boolean = false,
     ) : TvPlayerUiState
 
     data class Ready(
@@ -37,6 +38,7 @@ sealed interface TvPlayerUiState {
         val link: ExtractorLink,
         val episodeId: Int = -1,
         val resumePositionMs: Long = 0L,
+        val hasNextEpisode: Boolean = false,
     ) : TvPlayerUiState
 
     @Immutable

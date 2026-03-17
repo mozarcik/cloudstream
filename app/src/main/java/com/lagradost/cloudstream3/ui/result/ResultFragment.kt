@@ -19,8 +19,6 @@ import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getVideoWatchState
 import com.lagradost.cloudstream3.utils.DataStoreHelper.getViewPos
 import com.lagradost.cloudstream3.utils.Event
-import com.lagradost.cloudstream3.utils.ImageLoader.loadImage
-import com.lagradost.cloudstream3.utils.UiImage
 
 const val START_ACTION_RESUME_LATEST = 1
 const val START_ACTION_LOAD_EP = 2
@@ -249,36 +247,11 @@ object ResultFragment {
         logoView: ImageView,
         titleView: TextView
     ) {
-        // Cancel it, as we want to remove the listener onSuccess race condition
+        // Core only gets a single logo URL without language metadata, so always prefer
+        // the textual title instead of risking a mixed-language logo in the UI.
         logoView.dispose()
-
-        if (url.isNullOrBlank()) {
-            logoView.isVisible = false
-            titleView.isVisible = true
-            return
-        }
-
-        logoView.isVisible = true
-        titleView.isVisible = false
-
-        logoView.loadImage(
-            imageData = UiImage.Image(url, headers = headers),
-            builder = {
-                listener(
-                    onSuccess = { _, _ ->
-                        logoView.isVisible = true
-                        titleView.isVisible = false
-                    },
-                    onError = { _, _ ->
-                        logoView.isVisible = false
-                        titleView.isVisible = true
-                    },
-                    onCancel = {
-                        // If we manually cancel, then it should not do anything
-                    }
-                )
-            }
-        )
+        logoView.isVisible = false
+        titleView.isVisible = true
     }
 
     fun Fragment.getStoredData(): StoredData? {

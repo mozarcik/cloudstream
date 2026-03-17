@@ -6,6 +6,8 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceStatus
+import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSyncDebugLog
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerEmbeddedSubtitleSnapshot
 
 internal fun onPlaybackProgress(
     context: PlayerScreenCoordinatorContext,
@@ -13,6 +15,11 @@ internal fun onPlaybackProgress(
     durationMs: Long,
 ) {
     context.core.playbackProgressState.onPlaybackProgress(
+        positionMs = positionMs,
+        durationMs = durationMs,
+    )
+    maybePrefetchNextEpisode(
+        context = context,
         positionMs = positionMs,
         durationMs = durationMs,
     )
@@ -70,6 +77,7 @@ internal fun retrySource(
 
 internal fun onPlaybackReady(context: PlayerScreenCoordinatorContext) {
     if (!context.catalog.hasFinalized) return
+    context.core.playbackProgressState.setPersistenceEnabled(true)
     context.panels.stateHolder.onPlaybackReady()
     val currentLink = context.catalog.store.currentLink() ?: return
     val stateUpdated = context.catalog.store.updateSourceState(
@@ -79,6 +87,38 @@ internal fun onPlaybackReady(context: PlayerScreenCoordinatorContext) {
     if (stateUpdated) {
         postReadyStateForCurrentLink(context)
     }
+}
+
+internal fun onEmbeddedSubtitlesChanged(
+    context: PlayerScreenCoordinatorContext,
+    snapshots: List<PlayerEmbeddedSubtitleSnapshot>,
+) {
+    if (!context.catalog.hasFinalized) return
+
+    val currentLink = context.catalog.store.currentLink() ?: return
+    val runtimeSelectedSubtitleId = snapshots.firstOrNull { snapshot ->
+        snapshot.isSelected
+    }?.subtitle?.getId()
+    val storeChanged = context.catalog.store.replaceEmbeddedSubtitles(
+        snapshots.map(PlayerEmbeddedSubtitleSnapshot::subtitle),
+    )
+    val runtimeSelectionChanged = context.panels.stateHolder.onEmbeddedSubtitlesChanged(
+        runtimeSelectedSubtitleId = runtimeSelectedSubtitleId,
+    )
+    if (!storeChanged && !runtimeSelectionChanged) {
+        return
+    }
+
+    context.catalog.store.refreshOrderedSubtitles()
+    subtitleSyncDebugLog(
+        "embeddedSubtitlesChanged: linkHash=${currentLink.url.hashCode()}" +
+            " count=${snapshots.size}" +
+            " runtimeSelectedId=${runtimeSelectedSubtitleId ?: "null"}" +
+            " storeChanged=$storeChanged" +
+            " runtimeSelectionChanged=$runtimeSelectionChanged" +
+            " tracks=${snapshots.joinToString(separator = " | ") { snapshot -> snapshot.toDebugLogString() }}",
+    )
+    postReadyStateForCurrentLink(context)
 }
 
 internal fun onPlaybackError(

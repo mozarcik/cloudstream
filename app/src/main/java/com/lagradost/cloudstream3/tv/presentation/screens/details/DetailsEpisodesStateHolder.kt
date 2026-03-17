@@ -29,6 +29,7 @@ internal class DetailsEpisodesStateHolder(
     private var episodeDownloadStates by mutableStateOf<Map<String, DetailsDownloadButtonUiState>>(emptyMap())
     private var episodeWatchedStates by mutableStateOf<Map<String, Boolean>>(emptyMap())
     private var loadingEpisodeStateIds by mutableStateOf<Set<String>>(emptySet())
+    private var episodeKeyByLocator: Map<DetailsEpisodeLocator, String> = emptyMap()
 
     fun syncSelectedSeason(
         seasons: List<TvSeason>,
@@ -66,6 +67,12 @@ internal class DetailsEpisodesStateHolder(
             clearEpisodeStates()
             return
         }
+        episodeKeyByLocator = episodes.associate { episode ->
+            DetailsEpisodeLocator(
+                seasonNumber = resolveEpisodeSeason(episode),
+                episodeNumber = episode.episodeNumber,
+            ) to episode.id
+        }
 
         val requestedEpisodes = resolveRequestedEpisodes(episodes, visibleItemKeys)
         if (requestedEpisodes.isEmpty()) {
@@ -85,9 +92,12 @@ internal class DetailsEpisodesStateHolder(
                 )
                 if (requestGeneration != generation) return@launch
 
-                episodeDownloadStates = episodeDownloadStates + loadedStates.mapValues { (_, state) ->
-                    state.downloadState
-                }
+                episodeDownloadStates = mergeHydratedEpisodeDownloadStates(
+                    currentStates = episodeDownloadStates,
+                    loadedStates = loadedStates.mapValues { (_, state) ->
+                        state.downloadState
+                    },
+                )
                 episodeWatchedStates = episodeWatchedStates + loadedStates.mapValues { (_, state) ->
                     state.isWatched
                 }
@@ -126,6 +136,34 @@ internal class DetailsEpisodesStateHolder(
         }
     }
 
+    fun markEpisodePending(
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        downloadEpisodeId: Int?,
+    ) {
+        episodeDownloadStates = updateEpisodeDownloadStateByLocator(
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
+            downloadEpisodeId = downloadEpisodeId,
+        ) { current ->
+            current.withStatus(VideoDownloadManager.DownloadType.IsPending)
+        }
+    }
+
+    fun markEpisodeFailed(
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        downloadEpisodeId: Int?,
+    ) {
+        episodeDownloadStates = updateEpisodeDownloadStateByLocator(
+            seasonNumber = seasonNumber,
+            episodeNumber = episodeNumber,
+            downloadEpisodeId = downloadEpisodeId,
+        ) { current ->
+            current.withStatus(VideoDownloadManager.DownloadType.IsFailed)
+        }
+    }
+
     private fun resolveRequestedEpisodes(episodes: List<TvEpisode>, visibleItemKeys: List<Any>): List<TvEpisode> =
         filterRequestedDetailEpisodes(
             episodes = episodes,
@@ -140,6 +178,28 @@ internal class DetailsEpisodesStateHolder(
         episodeDownloadStates = emptyMap()
         episodeWatchedStates = emptyMap()
         loadingEpisodeStateIds = emptySet()
+        episodeKeyByLocator = emptyMap()
+    }
+
+    private fun updateEpisodeDownloadStateByLocator(
+        seasonNumber: Int?,
+        episodeNumber: Int?,
+        downloadEpisodeId: Int?,
+        transform: (DetailsDownloadButtonUiState) -> DetailsDownloadButtonUiState,
+    ): Map<String, DetailsDownloadButtonUiState> {
+        val episodeKey = episodeKeyByLocator[
+            DetailsEpisodeLocator(
+                seasonNumber = seasonNumber,
+                episodeNumber = episodeNumber,
+            )
+        ] ?: return episodeDownloadStates
+
+        return updateDetailsEpisodeDownloadStateByKey(
+            currentStates = episodeDownloadStates,
+            episodeKey = episodeKey,
+            fallbackEpisodeId = downloadEpisodeId,
+            transform = transform,
+        )
     }
 
     private fun logSeasonState(

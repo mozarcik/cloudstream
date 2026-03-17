@@ -34,6 +34,7 @@ fun MovieActionsSidePanel(
     panelWidth: Dp? = null,
     panelTestTag: String = "movie_actions_side_panel",
     showItemsWhileLoading: Boolean = false,
+    closeOnFocusExit: Boolean = true,
     headerContent: (@Composable ColumnScope.() -> Unit)? = null,
     emptyContent: (@Composable () -> Unit)? = null,
 ) {
@@ -44,6 +45,7 @@ fun MovieActionsSidePanel(
             SidePanelMenuItem(
                 id = action.key,
                 title = action.label,
+                testTag = action.key,
                 titleMaxLines = action.titleMaxLines,
                 enabled = when {
                     action.isSectionHeader -> false
@@ -87,6 +89,7 @@ fun MovieActionsSidePanel(
         panelTestTag = panelTestTag,
         initialFocusedItemId = menuItems.firstOrNull { !it.isSectionHeader }?.id,
         headerContent = headerContent,
+        closeOnFocusExit = closeOnFocusExit,
         emptyContent = {
             if (emptyContent != null) {
                 emptyContent()

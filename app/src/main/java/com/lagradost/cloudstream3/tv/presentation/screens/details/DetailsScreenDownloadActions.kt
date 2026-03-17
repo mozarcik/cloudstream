@@ -40,6 +40,7 @@ internal fun executeDetailsDownloadSelection(
     context: Context,
     downloadMirrorStateHolder: DownloadMirrorSelectionStateHolder,
     downloadButtonViewModel: DetailsDownloadButtonViewModel,
+    episodesStateHolder: DetailsEpisodesStateHolder,
     panelsStateHolder: DetailsPanelsStateHolder,
     scope: CoroutineScope,
     onHandleDownloadActionOutcome: (MovieDetailsCompatActionOutcome) -> Unit,
@@ -49,7 +50,15 @@ internal fun executeDetailsDownloadSelection(
 
     scope.launch {
         panelsStateHolder.updateActionInProgress(true)
-        downloadButtonViewModel.markPending()
+        val targetEpisodeId = selection.targetEpisodeId
+        val targetSeasonNumber = selection.targetSeasonNumber
+        val targetEpisodeNumber = selection.targetEpisodeNumber
+        downloadButtonViewModel.markPending(targetEpisodeId)
+        episodesStateHolder.markEpisodePending(
+            seasonNumber = targetSeasonNumber,
+            episodeNumber = targetEpisodeNumber,
+            downloadEpisodeId = targetEpisodeId,
+        )
         var shouldClearPendingCompat = false
         try {
             val outcome = withContext(Dispatchers.IO) {
@@ -78,6 +87,11 @@ internal fun executeDetailsDownloadSelection(
         } catch (error: Throwable) {
             Log.e(DetailsDebugTag, "download selection failed mode=$mode actionId=$actionId", error)
             downloadButtonViewModel.markFailed()
+            episodesStateHolder.markEpisodeFailed(
+                seasonNumber = targetSeasonNumber,
+                episodeNumber = targetEpisodeNumber,
+                downloadEpisodeId = targetEpisodeId,
+            )
             downloadMirrorStateHolder.onEvent(DownloadMirrorSelectionEvent.Close)
             shouldClearPendingCompat = true
         } finally {

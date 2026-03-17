@@ -6,9 +6,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
@@ -73,6 +75,16 @@ class DetailsScreenRouteContentTest {
         composeRule.onNodeWithText("TV-14").assertIsDisplayed()
         composeRule.onNodeWithText(expectedOriginalTitle).assertIsDisplayed()
         composeRule.onNodeWithText("Action, Drama").assertIsDisplayed()
+    }
+
+    @Test
+    fun doneState_showsTextTitleEvenWhenLogoIsAvailable() {
+        setDoneStateContent(
+            details = fakeDetails().copy(logoUri = "https://example.com/logo.png")
+        )
+
+        composeRule.onNodeWithTag("details_title_text").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("details_title_logo").assertCountEquals(0)
     }
 
     @Test

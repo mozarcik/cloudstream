@@ -210,6 +210,8 @@ class PlayerGeneratorViewModel : ViewModel() {
 
             // load more data
             _loadingLinks.postValue(Resource.Loading())
+            val subtitleEpisodeMetadata = (generator?.getCurrent() as? ResultEpisode)
+                .toSubtitleFetchEpisodeMetadataLog()
             val loadingState = safeApiCall {
                 generator?.generateLinks(
                     sourceTypes = sourceTypes,
@@ -224,13 +226,23 @@ class PlayerGeneratorViewModel : ViewModel() {
                             }
                         }
                     },
-                    subtitleCallback = {
+                    subtitleCallback = { subtitle ->
+                        var inserted = false
+                        var totalSubtitles = 0
                         synchronized(extraSubtitles) {
-                            currentSubs.add(it)
+                            inserted = currentSubs.add(subtitle)
+                            val updatedSubtitles = currentSubs + extraSubtitles
+                            totalSubtitles = updatedSubtitles.size
                             safe {
-                                _currentSubs.postValue(currentSubs + extraSubtitles)
+                                _currentSubs.postValue(updatedSubtitles)
                             }
                         }
+                        Log.i(
+                            TAG,
+                            "subtitle fetched [legacy-generator]: inserted=$inserted total=$totalSubtitles " +
+                                subtitle.toSubtitleFetchLogPayload() +
+                                " $subtitleEpisodeMetadata",
+                        )
                     })
             }
 

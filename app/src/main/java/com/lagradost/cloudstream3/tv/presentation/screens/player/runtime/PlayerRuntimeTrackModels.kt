@@ -191,7 +191,62 @@ internal fun applyRuntimeSubtitleSelection(
     return true
 }
 
-private fun String.stripRuntimeTrackId(): String {
+internal data class RuntimeSubtitleSelectionState(
+    val exists: Boolean,
+    val isSelected: Boolean,
+)
+
+internal fun resolveRuntimeSubtitleSelectionState(
+    tracks: Tracks,
+    subtitleId: String,
+): RuntimeSubtitleSelectionState {
+    tracks.groups.forEach { group ->
+        if (group.type != C.TRACK_TYPE_TEXT) {
+            return@forEach
+        }
+
+        val trackGroup = group.mediaTrackGroup
+        for (trackIndex in 0 until trackGroup.length) {
+            if (!group.isTrackSupported(trackIndex)) {
+                continue
+            }
+            if (trackGroup.getFormat(trackIndex).id?.stripRuntimeTrackId() == subtitleId) {
+                return RuntimeSubtitleSelectionState(
+                    exists = true,
+                    isSelected = group.isTrackSelected(trackIndex),
+                )
+            }
+        }
+    }
+
+    return RuntimeSubtitleSelectionState(
+        exists = false,
+        isSelected = false,
+    )
+}
+
+internal fun availableRuntimeSubtitleIds(tracks: Tracks): List<String> {
+    return tracks.groups.flatMap { group ->
+        if (group.type != C.TRACK_TYPE_TEXT) {
+            return@flatMap emptyList()
+        }
+
+        val trackGroup = group.mediaTrackGroup
+        buildList {
+            for (trackIndex in 0 until trackGroup.length) {
+                if (!group.isTrackSupported(trackIndex)) {
+                    continue
+                }
+                trackGroup.getFormat(trackIndex).id
+                    ?.stripRuntimeTrackId()
+                    ?.takeIf { selectionId -> selectionId.isNotBlank() }
+                    ?.let(::add)
+            }
+        }
+    }
+}
+
+internal fun String.stripRuntimeTrackId(): String {
     return replace(Regex("""^\d+:"""), "")
 }
 

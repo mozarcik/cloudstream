@@ -52,9 +52,9 @@ internal class DetailsDownloadButtonViewModel : ViewModel() {
         compatRegistry.clearPendingCompat()
     }
 
-    fun markPending() {
+    fun markPending(episodeId: Int? = null) {
         logTracker.markPending()
-        _uiState.value = PendingDetailsDownloadButtonUiState
+        _uiState.value = createPendingDetailsDownloadButtonUiState(episodeId = episodeId)
     }
 
     fun markFailed() {

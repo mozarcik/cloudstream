@@ -8,6 +8,8 @@ import com.lagradost.cloudstream3.TorrentSearchResponse
 import com.lagradost.cloudstream3.TvSeriesSearchResponse
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.tv.compat.resume.ContinueWatchingState
+import com.lagradost.cloudstream3.tv.compat.resume.ResumePlaybackContext
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
 import com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult
 import com.lagradost.cloudstream3.utils.DataStoreHelper.fixVisual
@@ -237,12 +239,11 @@ object SearchResponseMapper {
                 score = this.score,
                 backdropUri = this.backdropUrl,
                 episodes = null,
-                continueWatchingProgress = progress,
-                continueWatchingRemainingMs = remainingMs,
-                continueWatchingSeason = this.season,
-                continueWatchingEpisode = this.episode,
-                continueWatchingHasBackdrop = hasBackdrop,
-                continueWatchingParentId = this.parentId,
+                continueWatching = createContinueWatchingState(
+                    progress = progress,
+                    remainingMs = remainingMs,
+                    hasBackdrop = hasBackdrop,
+                ),
             )
         }
 
@@ -256,12 +257,11 @@ object SearchResponseMapper {
                 type = mediaType,
                 score = this.score,
                 backdropUri = this.backdropUrl,
-                continueWatchingProgress = progress,
-                continueWatchingRemainingMs = remainingMs,
-                continueWatchingSeason = this.season,
-                continueWatchingEpisode = this.episode,
-                continueWatchingHasBackdrop = hasBackdrop,
-                continueWatchingParentId = this.parentId,
+                continueWatching = createContinueWatchingState(
+                    progress = progress,
+                    remainingMs = remainingMs,
+                    hasBackdrop = hasBackdrop,
+                ),
             )
         }
 
@@ -274,12 +274,30 @@ object SearchResponseMapper {
             type = mediaType,
             score = this.score,
             backdropUri = this.backdropUrl,
-            continueWatchingProgress = progress,
-            continueWatchingRemainingMs = remainingMs,
-            continueWatchingSeason = this.season,
-            continueWatchingEpisode = this.episode,
-            continueWatchingHasBackdrop = hasBackdrop,
-            continueWatchingParentId = this.parentId,
+            continueWatching = createContinueWatchingState(
+                progress = progress,
+                remainingMs = remainingMs,
+                hasBackdrop = hasBackdrop,
+            ),
+        )
+    }
+
+    private fun ResumeWatchingResult.createContinueWatchingState(
+        progress: Float?,
+        remainingMs: Long?,
+        hasBackdrop: Boolean,
+    ): ContinueWatchingState {
+        return ContinueWatchingState(
+            progress = progress,
+            remainingMs = remainingMs,
+            hasBackdrop = hasBackdrop,
+            resume = ResumePlaybackContext(
+                parentId = parentId,
+                episodeId = id,
+                season = season,
+                episode = episode,
+                isFromDownload = isFromDownload,
+            ),
         )
     }
 

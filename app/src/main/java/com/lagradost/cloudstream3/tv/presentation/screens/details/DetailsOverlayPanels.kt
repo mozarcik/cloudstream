@@ -15,8 +15,6 @@ import com.lagradost.cloudstream3.tv.presentation.screens.movies.BookmarkStatusS
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieActionsSidePanel
 import com.lagradost.cloudstream3.ui.WatchType
 
-private const val SkipDownloadLoadingActionId = -10_001
-
 @Composable
 internal fun DetailsOverlayPanels(
     mode: DetailsScreenMode,
@@ -50,26 +48,22 @@ internal fun DetailsOverlayPanels(
 
     val downloadPanelTitle = downloadMirrorState.selectionRequest?.title
         ?: stringResource(R.string.episode_action_download_mirror)
-    val downloadPanelItems = downloadMirrorState.selectionRequest?.options ?: emptyList()
     val skipLoadingItem = MovieDetailsCompatPanelItem(
         id = SkipDownloadLoadingActionId,
         label = stringResource(R.string.skip_loading),
         iconRes = R.drawable.ic_baseline_fast_forward_24
     )
-    val showSkipLoadingAction = downloadMirrorState.isLoading &&
-        !downloadMirrorState.isLoadingUiSkipped &&
-        downloadMirrorState.loadedSourcesCount > 0
-    val downloadPanelActionItems = when {
-        showSkipLoadingAction -> listOf(skipLoadingItem)
-        else -> downloadPanelItems
-    }
+    val downloadPanelContent = resolveDetailsDownloadPanelContent(
+        state = downloadMirrorState,
+        skipLoadingItem = skipLoadingItem,
+    )
 
     MovieActionsSidePanel(
         visible = downloadMirrorState.isVisible,
         loading = downloadMirrorState.isLoading,
         inProgress = panelsStateHolder.isActionInProgress,
         title = downloadPanelTitle,
-        items = downloadPanelActionItems,
+        items = downloadPanelContent.items,
         onCloseRequested = onCloseDownloadPanel,
         onActionSelected = { actionId ->
             if (actionId == SkipDownloadLoadingActionId) {
@@ -79,7 +73,8 @@ internal fun DetailsOverlayPanels(
             }
         },
         panelTestTag = mode.downloadPanelTestTag,
-        showItemsWhileLoading = downloadMirrorState.loadedSourcesCount > 0,
+        showItemsWhileLoading = downloadPanelContent.showItemsWhileLoading,
+        closeOnFocusExit = false,
         headerContent = {
             if (downloadMirrorState.isLoading) {
                 Text(

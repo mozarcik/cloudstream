@@ -15,8 +15,8 @@ internal fun LazyListState.isItemOutsideViewport(targetIndex: Int): Boolean {
 
 internal fun MediaItemCompat.continueWatchingMetadataLabel(remainingSuffix: String): String? {
     val isSeriesContent = this is MediaItemCompat.TvSeries || this.type?.isEpisodeBased() == true
-    val safeSeason = continueWatchingSeason?.takeIf { it > 0 }
-    val safeEpisode = continueWatchingEpisode?.takeIf { it > 0 }
+    val safeSeason = continueWatching?.season?.takeIf { it > 0 }
+    val safeEpisode = continueWatching?.episode?.takeIf { it > 0 }
     val seasonEpisode = when {
         isSeriesContent && safeSeason != null && safeEpisode != null -> {
             "S${safeSeason}:E${safeEpisode}"
@@ -26,7 +26,7 @@ internal fun MediaItemCompat.continueWatchingMetadataLabel(remainingSuffix: Stri
         isSeriesContent && safeEpisode != null -> "E${safeEpisode}"
         else -> null
     }
-    val remaining = continueWatchingRemainingMs?.toRemainingLabel(remainingSuffix = remainingSuffix)
+    val remaining = continueWatching?.remainingMs?.toRemainingLabel(remainingSuffix = remainingSuffix)
 
     return when {
         !seasonEpisode.isNullOrBlank() && !remaining.isNullOrBlank() -> "$seasonEpisode • $remaining"

@@ -54,7 +54,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreenV2
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
-import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerScreenNavigation
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
@@ -87,7 +87,7 @@ fun DashboardScreen(
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
-    openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
+    openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
     isComingBackFromDifferentScreen: Boolean,
     resetIsComingBackFromDifferentScreen: () -> Unit,
     searchPrefillQuery: String?,
@@ -322,7 +322,7 @@ private fun Body(
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
-    openVideoPlayer: (url: String, apiName: String, episodeData: String?) -> Unit,
+    openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
     updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
@@ -374,7 +374,15 @@ private fun Body(
                     }
                 },
                 onContinueWatchingPlay = { item ->
-                    openVideoPlayer(item.url, item.apiName, null)
+                    val playbackTarget = item.continueWatching?.let { continueWatching ->
+                        val episodeId = continueWatching.episodeId ?: return@let PlayerStartTarget.Default
+                        if (continueWatching.isFromDownload) {
+                            PlayerStartTarget.DownloadedEpisode(episodeId)
+                        } else {
+                            PlayerStartTarget.ResumeEpisode(episodeId)
+                        }
+                    } ?: PlayerStartTarget.Default
+                    openVideoPlayer(item.url, item.apiName, playbackTarget)
                 },
                 onOpenFeedGrid = { feed ->
                     HomeFeedGridSelectionStore.setSelectedFeed(feed)
@@ -513,7 +521,7 @@ private fun Body(
                     openVideoPlayer(
                         item.sourceUrl.ifBlank { "download://local" },
                         item.apiName.ifBlank { "download" },
-                        PlayerScreenNavigation.buildDownloadedEpisodeData(item.episodeId)
+                        PlayerStartTarget.DownloadedEpisode(item.episodeId)
                     )
                 },
                 onScroll = updateTopBarVisibility,

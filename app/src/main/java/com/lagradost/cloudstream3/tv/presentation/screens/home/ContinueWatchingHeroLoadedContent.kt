@@ -162,7 +162,7 @@ internal fun ContinueWatchingHeroLoadedState(
     ) {
         ContinueWatchingHeroBackdrop(
             posterUrl = selectedItem.posterUri,
-            applyBlur = !selectedItem.continueWatchingHasBackdrop,
+            applyBlur = selectedItem.continueWatching?.hasBackdrop != true,
             modifier = Modifier.matchParentSize()
         )
 

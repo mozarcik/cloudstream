@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelItemAction
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPlaybackErrorDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerEmbeddedSubtitleSnapshot
 
 @Stable
 internal class PlayerScreenActions(
@@ -13,8 +14,10 @@ internal class PlayerScreenActions(
     val onSkipLoading: () -> Unit,
     val onRetry: () -> Unit,
     val onPlaybackReady: () -> Unit,
+    val onPlaybackEnded: (Long, Long) -> Unit,
     val onPlaybackProgress: (Long, Long) -> Unit,
     val onPlaybackStopped: (Long, Long) -> Unit,
+    val onPlayNextEpisode: (Long, Long) -> Unit,
     val onRetrySource: (Int) -> Unit,
     val onOpenPanel: (TvPlayerSidePanel) -> Unit,
     val onClosePanel: () -> Unit,
@@ -23,6 +26,7 @@ internal class PlayerScreenActions(
     val onPlaybackError: (TvPlayerPlaybackErrorDetails?) -> Unit,
     val onOpenSubtitleFilePicker: () -> Unit,
     val onSubtitlesSidePanelBackPressed: () -> Boolean,
+    val onEmbeddedSubtitlesChanged: (List<PlayerEmbeddedSubtitleSnapshot>) -> Unit,
 )
 
 @Composable
@@ -41,8 +45,10 @@ internal fun rememberPlayerScreenActions(
             onSkipLoading = tvPlayerScreenViewModel::skipLoading,
             onRetry = tvPlayerScreenViewModel::retry,
             onPlaybackReady = tvPlayerScreenViewModel::onPlaybackReady,
+            onPlaybackEnded = tvPlayerScreenViewModel::onPlaybackEnded,
             onPlaybackProgress = tvPlayerScreenViewModel::onPlaybackProgress,
             onPlaybackStopped = tvPlayerScreenViewModel::onPlaybackStopped,
+            onPlayNextEpisode = tvPlayerScreenViewModel::playNextEpisode,
             onRetrySource = tvPlayerScreenViewModel::retrySource,
             onOpenPanel = tvPlayerScreenViewModel::openPanel,
             onClosePanel = tvPlayerScreenViewModel::closePanel,
@@ -51,6 +57,7 @@ internal fun rememberPlayerScreenActions(
             onPlaybackError = tvPlayerScreenViewModel::onPlaybackError,
             onOpenSubtitleFilePicker = onOpenSubtitleFilePicker,
             onSubtitlesSidePanelBackPressed = tvPlayerScreenViewModel::onSubtitlesSidePanelBackPressed,
+            onEmbeddedSubtitlesChanged = tvPlayerScreenViewModel::onEmbeddedSubtitlesChanged,
         )
     }
 }

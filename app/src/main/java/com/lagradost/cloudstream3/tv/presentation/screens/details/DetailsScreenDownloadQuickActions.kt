@@ -2,17 +2,17 @@ package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import android.util.Log
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
-import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerScreenNavigation
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 
 internal fun playDownloadedDetailsByState(
     state: DetailsDownloadButtonUiState,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
 ): Boolean {
     val episodeId = state.episodeId ?: run {
         Log.d(DetailsDebugTag, "playDownloadedByState skipped: state without episodeId")
         return false
     }
-    goToPlayer(PlayerScreenNavigation.buildDownloadedEpisodeData(episodeId))
+    goToPlayer(PlayerStartTarget.DownloadedEpisode(episodeId))
     Log.d(
         DetailsDebugTag,
         "playDownloadedByState episodeId=$episodeId status=${state.status} played=true via compose player route"
@@ -25,7 +25,7 @@ internal fun handleDetailsDownloadQuickAction(
     preferredSeason: Int?,
     preferredEpisode: Int?,
     openDownloadPanel: (Int?, Int?) -> Unit,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
 ) {
     when (state.toMovieDetailsDownloadActionState()) {
         is MovieDetailsDownloadActionState.Downloading -> {

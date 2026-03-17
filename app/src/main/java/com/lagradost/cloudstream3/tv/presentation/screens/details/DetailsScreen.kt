@@ -8,13 +8,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.Movie
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
 
 @Composable
 fun DetailsScreen(
     mode: DetailsScreenMode,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
     onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
@@ -53,7 +54,7 @@ internal fun DetailsScreenRouteContent(
     shouldShowUnavailableState: Boolean,
     unavailableDetails: UnavailableDetailsUiModel,
     canRemoveFromLibrary: Boolean,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
     onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,

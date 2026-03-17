@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.ui.result.ACTION_MARK_AS_WATCHED
 import com.lagradost.cloudstream3.ui.result.ACTION_MARK_WATCHED_UP_TO_THIS_EPISODE
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +22,7 @@ internal fun onDetailsEpisodeQuickAction(
     episodesStateHolder: DetailsEpisodesStateHolder,
     scope: CoroutineScope,
     openDownloadPanel: (Int?, Int?) -> Unit,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
 ) {
     when (quickAction) {
         MovieDetailsQuickAction.MarkAsWatched,

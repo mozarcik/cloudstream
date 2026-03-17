@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
+import android.view.KeyEvent as AndroidKeyEvent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -63,6 +64,7 @@ internal fun PlayerPlaybackContent(
         overlayState.sourceErrorDialogEffect != null
 
     fun registerControlsInteraction() {
+        overlayState.startupAutoHideArmed = false
         controlsInteractionEvents.tryEmit(Unit)
     }
 
@@ -92,6 +94,9 @@ internal fun PlayerPlaybackContent(
                     hasSidePanel = hasSidePanel,
                     controlsVisible = overlayState.controlsVisible,
                     overlayState = overlayState,
+                    rootFocusRequester = rootFocusRequester,
+                    playerWantsToPlay = overlayState.playerWantsToPlay,
+                    showBufferingOverlay = overlayState.showBufferingOverlay,
                     registerControlsInteraction = ::registerControlsInteraction,
                     onSeekBackward = {
                         seekBy(-seekPreferencesState.seekWhenControlsHiddenMs)
@@ -125,7 +130,7 @@ internal fun PlayerPlaybackContent(
             showAudioTracksButton = runtimeTracksState.showRuntimeAudioTracksButton,
             showVideoTracksButton = runtimeTracksState.showRuntimeVideoTracksButton,
             showSyncButton = catalogState.selectedSubtitleIndex >= 0,
-            showNextEpisodeButton = state.metadata.isEpisodeBased,
+            showNextEpisodeButton = state.hasNextEpisode,
             playPauseFocusRequester = playPauseFocusRequester,
             timelineFocusRequester = timelineFocusRequester,
             exoPlayer = exoPlayer,
@@ -143,6 +148,7 @@ internal fun PlayerPlaybackContent(
                     runtimeTracksState = runtimeTracksState,
                     seekPreferencesState = seekPreferencesState,
                     onOpenPanel = actions.onOpenPanel,
+                    onPlayNextEpisode = actions.onPlayNextEpisode,
                     onToggleResizeMode = ::toggleResizeMode,
                     onSeekBy = ::seekBy,
                 )
@@ -173,6 +179,9 @@ private fun handlePlayerPreviewKeyEvent(
     hasSidePanel: Boolean,
     controlsVisible: Boolean,
     overlayState: PlayerOverlayStateHolder,
+    rootFocusRequester: FocusRequester,
+    playerWantsToPlay: Boolean,
+    showBufferingOverlay: Boolean,
     registerControlsInteraction: () -> Unit,
     onSeekBackward: () -> Unit,
     onSeekForward: () -> Unit,
@@ -181,10 +190,26 @@ private fun handlePlayerPreviewKeyEvent(
     if (event.type != KeyEventType.KeyDown) {
         return false
     }
-    registerControlsInteraction()
+    val isBackKey = event.key == Key.Back ||
+        event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_BACK
+
+    if (!isBackKey) {
+        registerControlsInteraction()
+    }
 
     if (hasSidePanel) {
         return false
+    }
+
+    if (isBackKey) {
+        return if (controlsVisible && playerWantsToPlay && !showBufferingOverlay) {
+            overlayState.startupAutoHideArmed = false
+            overlayState.controlsVisible = false
+            rootFocusRequester.requestFocus()
+            true
+        } else {
+            false
+        }
     }
 
     return when (event.key) {
@@ -243,9 +268,15 @@ private fun handlePlayerControlsEvent(
     runtimeTracksState: PlayerRuntimeTracksStateHolder,
     seekPreferencesState: TvPlayerSeekPreferencesState,
     onOpenPanel: (TvPlayerSidePanel) -> Unit,
+    onPlayNextEpisode: (Long, Long) -> Unit,
     onToggleResizeMode: () -> Unit,
     onSeekBy: (Long) -> Unit,
 ) {
+    fun resolvedDurationMs(): Long {
+        val durationMs = exoPlayer.duration
+        return if (durationMs > 0L) durationMs else 0L
+    }
+
     when (event) {
         TvPlayerControlsEvent.PlayPause -> {
             if (exoPlayer.isPlaying) {
@@ -288,7 +319,13 @@ private fun handlePlayerControlsEvent(
             exoPlayer.playWhenReady = true
             exoPlayer.play()
         }
-        TvPlayerControlsEvent.NextEpisode -> Unit
+        TvPlayerControlsEvent.NextEpisode -> {
+            exoPlayer.pause()
+            onPlayNextEpisode(
+                exoPlayer.currentPosition.coerceAtLeast(0L),
+                resolvedDurationMs(),
+            )
+        }
         TvPlayerControlsEvent.SeekBackward -> onSeekBy(-seekPreferencesState.seekWhenControlsVisibleMs)
         TvPlayerControlsEvent.SeekForward -> onSeekBy(seekPreferencesState.seekWhenControlsVisibleMs)
     }

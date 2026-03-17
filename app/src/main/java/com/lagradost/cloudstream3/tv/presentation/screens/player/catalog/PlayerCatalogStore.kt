@@ -80,6 +80,39 @@ internal class PlayerCatalogStore {
         return insertedAny
     }
 
+    fun replaceEmbeddedSubtitles(subtitles: Iterable<SubtitleData>): Boolean {
+        val normalizedSubtitles = linkedMapOf<String, SubtitleData>()
+        subtitles.forEach { subtitle ->
+            if (subtitle.origin == com.lagradost.cloudstream3.ui.player.SubtitleOrigin.EMBEDDED_IN_VIDEO) {
+                normalizedSubtitles[subtitle.getId()] = subtitle
+            }
+        }
+
+        return synchronized(loadedSubtitlesById) {
+            val currentEmbeddedSubtitles = loadedSubtitlesById.entries
+                .filter { (_, subtitle) ->
+                    subtitle.origin == com.lagradost.cloudstream3.ui.player.SubtitleOrigin.EMBEDDED_IN_VIDEO
+                }
+                .associate { (id, subtitle) ->
+                    id to subtitle
+                }
+            if (currentEmbeddedSubtitles == normalizedSubtitles) {
+                return@synchronized false
+            }
+
+            val iterator = loadedSubtitlesById.entries.iterator()
+            while (iterator.hasNext()) {
+                if (iterator.next().value.origin == com.lagradost.cloudstream3.ui.player.SubtitleOrigin.EMBEDDED_IN_VIDEO) {
+                    iterator.remove()
+                }
+            }
+            normalizedSubtitles.forEach { (id, subtitle) ->
+                loadedSubtitlesById[id] = subtitle
+            }
+            true
+        }
+    }
+
     fun refreshOrderedSubtitles() {
         orderedSubtitles = synchronized(loadedSubtitlesById) {
             sortSubs(loadedSubtitlesById.values.toSet())

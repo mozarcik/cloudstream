@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.ui.WatchType
 import com.lagradost.cloudstream3.utils.VideoDownloadManager
 
@@ -39,6 +40,12 @@ internal fun resolveDefaultEpisodeData(details: MovieDetails): String? {
     } ?: selectedSeason?.episodes?.firstOrNull()
 
     return selectedEpisode?.data
+}
+
+internal fun resolveDefaultPlaybackTarget(details: MovieDetails): PlayerStartTarget {
+    return resolveDefaultEpisodeData(details)
+        ?.let(PlayerStartTarget::DirectEpisodeData)
+        ?: PlayerStartTarget.Default
 }
 
 @Composable

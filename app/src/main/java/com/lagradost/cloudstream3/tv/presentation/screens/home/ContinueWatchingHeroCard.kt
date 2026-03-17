@@ -41,7 +41,7 @@ internal fun ContinueWatchingHeroCard(
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val progress = (item.continueWatchingProgress ?: 0f).coerceIn(0f, 1f)
+    val progress = (item.continueWatching?.progress ?: 0f).coerceIn(0f, 1f)
     val imageRequest = rememberContinueWatchingImageRequest(item.posterUri)
 
     Surface(

@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionUiState
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.CoroutineScope
 
@@ -18,10 +19,11 @@ internal fun DetailsScreenOverlayCoordinator(
     downloadMirrorState: DownloadMirrorSelectionUiState,
     downloadMirrorStateHolder: DownloadMirrorSelectionStateHolder,
     downloadButtonViewModel: DetailsDownloadButtonViewModel,
+    episodesStateHolder: DetailsEpisodesStateHolder,
     context: Context,
     scope: CoroutineScope,
     closeDownloadPanel: () -> Unit,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     onBookmarkClick: (WatchType) -> Unit,
 ) {
     DetailsOverlayPanels(
@@ -48,6 +50,7 @@ internal fun DetailsScreenOverlayCoordinator(
                 context = context,
                 downloadMirrorStateHolder = downloadMirrorStateHolder,
                 downloadButtonViewModel = downloadButtonViewModel,
+                episodesStateHolder = episodesStateHolder,
                 panelsStateHolder = panelsStateHolder,
                 scope = scope,
                 onHandleDownloadActionOutcome = { outcome ->

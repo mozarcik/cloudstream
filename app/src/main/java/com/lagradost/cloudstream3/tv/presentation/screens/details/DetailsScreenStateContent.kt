@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.presentation.common.Error
 import com.lagradost.cloudstream3.tv.presentation.common.Loading
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsLoadingPlaceholder
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsScreen
 import com.lagradost.cloudstream3.ui.WatchType
@@ -77,7 +78,7 @@ internal fun DetailsScreenDoneStateContent(
     mode: DetailsScreenMode,
     state: DetailsScreenUiState.Done,
     actionsCompat: MovieDetailsEpisodeActionsCompat?,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     onFavoriteClick: () -> Unit,

@@ -77,7 +77,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil3.compose.AsyncImage
 import coil3.compose.rememberAsyncImagePainter
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
@@ -109,8 +108,6 @@ private const val DetailsDescriptionCollapsedState = "collapsed"
 private const val DetailsDescriptionExpandedState = "expanded"
 private const val DetailsDescriptionCollapsedMaxLines = 5
 private const val DetailsTitleMaxWidthFraction = 0.55f
-private const val DetailsLogoMaxWidthFraction = 0.72f
-private val DetailsLogoHeight = 92.dp
 private val DetailsDescriptionFocusInset = 8.dp
 
 enum class MovieDetailsQuickAction {
@@ -483,33 +480,10 @@ private fun PrimaryPlayButton(
 private fun MovieHeroTitle(
     movieDetails: MovieDetails,
 ) {
-    var shouldShowTextTitle by remember(movieDetails.id, movieDetails.logoUri) {
-        mutableStateOf(movieDetails.logoUri.isNullOrBlank())
-    }
-    val logoRequest = rememberMovieDetailsImageRequest(
-        imageUrl = movieDetails.logoUri.orEmpty(),
-        headers = movieDetails.posterHeaders,
+    MovieLargeTitle(
+        movieTitle = movieDetails.name,
+        modifier = Modifier.testTag("details_title_text")
     )
-
-    if (!shouldShowTextTitle && logoRequest != null) {
-        AsyncImage(
-            model = logoRequest,
-            contentDescription = movieDetails.name,
-            contentScale = ContentScale.Fit,
-            alignment = Alignment.CenterStart,
-            onError = { shouldShowTextTitle = true },
-            modifier = Modifier
-                .testTag("details_title_logo")
-                .fillMaxWidth(DetailsLogoMaxWidthFraction)
-                .height(DetailsLogoHeight)
-                .clip(CloudStreamCardShape)
-        )
-    } else {
-        MovieLargeTitle(
-            movieTitle = movieDetails.name,
-            modifier = Modifier.testTag("details_title_text")
-        )
-    }
 }
 
 @Composable
@@ -863,37 +837,6 @@ fun MovieDetailsLoadingPlaceholder(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun rememberMovieDetailsImageRequest(
-    imageUrl: String,
-    headers: Map<String, String>,
-): ImageRequest? {
-    val context = LocalContext.current
-
-    return remember(context, imageUrl, headers) {
-        imageUrl
-            .takeIf { url -> url.isNotBlank() }
-            ?.let { url ->
-                ImageRequest.Builder(context)
-                    .data(url)
-                    .crossfade(false)
-                    .apply {
-                        if (headers.isNotEmpty()) {
-                            httpHeaders(
-                                NetworkHeaders.Builder().apply {
-                                    this["User-Agent"] = USER_AGENT
-                                    headers.forEach { (key, value) ->
-                                        this[key] = value
-                                    }
-                                }.build()
-                            )
-                        }
-                    }
-                    .build()
-            }
     }
 }
 

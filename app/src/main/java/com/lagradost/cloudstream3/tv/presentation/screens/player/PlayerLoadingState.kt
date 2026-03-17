@@ -37,9 +37,26 @@ internal fun LoadingSourcesState(
     onSkipLoading: () -> Unit,
     onBackPressed: () -> Unit,
 ) {
+    PlayerKeepScreenOnEffect(keepScreenOn = true)
+
     val loadingMetaTexts = listOfNotNull(
         state.metadata.year?.toString()?.takeIf { it.isNotBlank() },
         state.metadata.apiName.takeIf { it.isNotBlank() },
+    )
+    val episodeLabel = when {
+        state.metadata.season != null && state.metadata.episode != null -> {
+            "S${state.metadata.season}:E${state.metadata.episode}"
+        }
+
+        state.metadata.episode != null -> {
+            "E${state.metadata.episode}"
+        }
+
+        else -> null
+    }
+    val episodeTexts = listOfNotNull(
+        episodeLabel,
+        state.metadata.episodeTitle?.takeIf { title -> title.isNotBlank() },
     )
     val skipFocusRequester = remember { FocusRequester() }
 
@@ -57,40 +74,44 @@ internal fun LoadingSourcesState(
     BackHandler(onBack = onBackPressed)
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
         contentAlignment = Alignment.BottomStart,
     ) {
-        AsyncImage(
-            model = state.metadata.backdropUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (!state.useBlackBackground && !state.metadata.backdropUri.isNullOrBlank()) {
+            AsyncImage(
+                model = state.metadata.backdropUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.2f),
-                            Color.Black.copy(alpha = 0.55f),
-                            Color.Black.copy(alpha = 0.88f),
-                        ),
-                        startY = 220f,
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.2f),
+                                Color.Black.copy(alpha = 0.55f),
+                                Color.Black.copy(alpha = 0.88f),
+                            ),
+                            startY = 220f,
+                        )
                     )
-                )
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.55f),
-                            Color.Transparent,
-                        ),
-                        endX = 850f,
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.55f),
+                                Color.Transparent,
+                            ),
+                            endX = 850f,
+                        )
                     )
-                )
-        )
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -104,6 +125,16 @@ internal fun LoadingSourcesState(
                     style = MaterialTheme.typography.headlineLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (episodeTexts.isNotEmpty()) {
+                DotSeparatedRow(
+                    texts = episodeTexts,
+                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                    ),
                 )
             }
 

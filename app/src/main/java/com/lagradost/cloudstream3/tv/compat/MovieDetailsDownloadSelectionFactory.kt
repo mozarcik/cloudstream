@@ -21,6 +21,9 @@ internal fun buildMovieDetailsDownloadMirrorSelectionRequest(
     return MovieDetailsCompatSelectionRequest(
         title = title,
         options = options,
+        targetEpisodeId = target.episode.id,
+        targetSeasonNumber = target.episode.season,
+        targetEpisodeNumber = target.episode.episode,
         onOptionSelected = { selectedIndex ->
             Log.d(
                 MovieDetailsDownloadSupport.DebugTag,

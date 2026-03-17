@@ -22,6 +22,8 @@ internal object PlayerControlsTokens {
     val OverlayVerticalPadding = 20.dp
     val MetadataToTimelineSpacing = 16.dp
     val TimelineToControlsSpacing = 18.dp
+    const val EpisodeTitleTextAlpha = 1f
+    const val InfoMetadataTextAlpha = 0.7f
 
     val PlayButtonSize = 64.dp
     val PlayIconSize = 28.dp

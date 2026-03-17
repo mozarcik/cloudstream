@@ -16,6 +16,9 @@ data class MovieDetailsCompatPanelItem(
 data class MovieDetailsCompatSelectionRequest(
     val title: String,
     val options: List<MovieDetailsCompatPanelItem>,
+    val targetEpisodeId: Int? = null,
+    val targetSeasonNumber: Int? = null,
+    val targetEpisodeNumber: Int? = null,
     val onOptionSelected: suspend (Int) -> MovieDetailsCompatActionOutcome,
 )
 

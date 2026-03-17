@@ -13,22 +13,34 @@ internal class TvPlayerPlaybackProgressState(
     private val persistIntervalMs: Long = DefaultPlaybackProgressPersistIntervalMs,
 ) {
     private var currentEpisode: ResultEpisode? = null
+    private var nextEpisode: ResultEpisode? = null
     private var currentResumePositionMs: Long = 0L
     private var lastPlaybackProgressPersistAtElapsedMs: Long = 0L
+    private var persistenceEnabled: Boolean = true
 
     val resumePositionMs: Long
         get() = currentResumePositionMs
 
     fun reset() {
         currentEpisode = null
+        nextEpisode = null
         currentResumePositionMs = 0L
+        lastPlaybackProgressPersistAtElapsedMs = 0L
+        persistenceEnabled = true
+    }
+
+    fun onEpisodeChanged(
+        episode: ResultEpisode?,
+        nextEpisode: ResultEpisode?,
+    ) {
+        currentEpisode = episode
+        this.nextEpisode = nextEpisode
+        currentResumePositionMs = episode?.let { getResumePosition(it.id) } ?: 0L
         lastPlaybackProgressPersistAtElapsedMs = 0L
     }
 
-    fun onEpisodeChanged(episode: ResultEpisode?) {
-        currentEpisode = episode
-        currentResumePositionMs = episode?.let { getResumePosition(it.id) } ?: 0L
-        lastPlaybackProgressPersistAtElapsedMs = 0L
+    fun setPersistenceEnabled(enabled: Boolean) {
+        persistenceEnabled = enabled
     }
 
     fun onPlaybackProgress(positionMs: Long, durationMs: Long) {
@@ -59,6 +71,7 @@ internal class TvPlayerPlaybackProgressState(
         durationMs: Long,
         force: Boolean,
     ) {
+        if (!persistenceEnabled) return
         val episode = currentEpisode ?: return
         if (episode.tvType.isLiveStream() || episode.tvType == TvType.NSFW) return
         if (durationMs <= 0L) return
@@ -74,7 +87,7 @@ internal class TvPlayerPlaybackProgressState(
             position = positionMs.coerceAtLeast(0L),
             duration = durationMs,
             currentEpisode = episode,
-            nextEpisode = null,
+            nextEpisode = nextEpisode,
         )
     }
 }

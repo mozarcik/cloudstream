@@ -19,6 +19,7 @@ import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 import kotlinx.coroutines.launch
 
@@ -48,7 +49,7 @@ internal fun DetailsScreenBody(
     onEpisodeSelected: (TvEpisode) -> Unit,
     onEpisodeQuickActionClick: (TvEpisode, MovieDetailsQuickAction) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -70,7 +71,7 @@ internal fun DetailsScreenBody(
             item {
                 MovieDetails(
                     movieDetails = details,
-                    goToMoviePlayer = { goToPlayer(resolveDefaultEpisodeData(details)) },
+                    goToMoviePlayer = { goToPlayer(resolveDefaultPlaybackTarget(details)) },
                     playButtonLabel = heroState.playButtonLabel,
                     downloadActionState = heroState.downloadActionState,
                     onPrimaryActionsFocused = {

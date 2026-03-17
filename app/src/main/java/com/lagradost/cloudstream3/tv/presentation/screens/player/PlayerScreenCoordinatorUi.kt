@@ -79,6 +79,10 @@ internal fun postReadyState(
         link = link,
         episodeId = episodeId,
         resumePositionMs = context.core.playbackProgressState.resumePositionMs,
+        hasNextEpisode = resolveNextEpisodeIndex(
+            currentEpisodeIndex = context.core.currentEpisodeIndex,
+            totalEpisodes = context.core.episodeQueue.size,
+        ) != null,
     )
 }
 

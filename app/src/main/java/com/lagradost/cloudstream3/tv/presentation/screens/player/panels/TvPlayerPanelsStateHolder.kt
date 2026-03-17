@@ -28,6 +28,8 @@ internal class TvPlayerPanelsStateHolder {
     private var subtitleSelectionOverriddenByUser: Boolean = false
     private var subtitleSelectionSource: TvPlayerSubtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
     private var allowPreferredSubtitleAutoSelection: Boolean = true
+    private var runtimeSelectedSubtitleId: String? = null
+    private var pendingEmbeddedSubtitleReconciliation: Boolean = false
     private val preferredSubtitleLanguageTag: String = getAutoSelectLanguageTagIETF().trim()
     private val preferredSubtitleLanguageKey: String = preferredSubtitleLanguageTag.lowercase(Locale.ROOT)
     private val preferredSubtitleBaseLanguageKey: String = preferredSubtitleLanguageKey.substringBefore('-')
@@ -40,6 +42,8 @@ internal class TvPlayerPanelsStateHolder {
         subtitleSelectionOverriddenByUser = false
         subtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
         allowPreferredSubtitleAutoSelection = true
+        runtimeSelectedSubtitleId = null
+        pendingEmbeddedSubtitleReconciliation = false
     }
 
     fun onSourceChanged(
@@ -55,6 +59,8 @@ internal class TvPlayerPanelsStateHolder {
         subtitleSelectionOverriddenByUser = false
         subtitleSelectionSource = TvPlayerSubtitleSelectionSource.None
         allowPreferredSubtitleAutoSelection = true
+        runtimeSelectedSubtitleId = null
+        pendingEmbeddedSubtitleReconciliation = false
     }
 
     fun openPanel(panel: TvPlayerSidePanel): Boolean {
@@ -107,24 +113,72 @@ internal class TvPlayerPanelsStateHolder {
         allowPreferredSubtitleAutoSelection = false
     }
 
+    fun onEmbeddedSubtitlesChanged(runtimeSelectedSubtitleId: String?): Boolean {
+        val normalizedRuntimeSubtitleId = runtimeSelectedSubtitleId
+            ?.trim()
+            ?.takeIf { subtitleId -> subtitleId.isNotBlank() }
+        val changed = this.runtimeSelectedSubtitleId != normalizedRuntimeSubtitleId
+        if (
+            this.runtimeSelectedSubtitleId == null &&
+            normalizedRuntimeSubtitleId != null &&
+            !subtitleSelectionOverriddenByUser
+        ) {
+            pendingEmbeddedSubtitleReconciliation = true
+        }
+        this.runtimeSelectedSubtitleId = normalizedRuntimeSubtitleId
+        return changed
+    }
+
     fun applyPreferredSubtitleAutoSelection(subtitles: List<SubtitleData>) {
-        if (!allowPreferredSubtitleAutoSelection) {
-            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=locked_after_first_start")
+        if (!allowPreferredSubtitleAutoSelection && !pendingEmbeddedSubtitleReconciliation) {
+            subtitleSyncDebugLog(
+                "applyPreferredSubtitleAutoSelection: skipped reason=locked_after_first_start",
+            )
             return
         }
         if (subtitleSelectionOverriddenByUser) {
+            pendingEmbeddedSubtitleReconciliation = false
             subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=user_override")
-            return
-        }
-        if (preferredSubtitleLanguageTag.isBlank()) {
-            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=blank_preference")
             return
         }
 
         normalizeSelectedSubtitleIndex(subtitles)
 
+        val runtimeSelectedSubtitleIndex = runtimeSelectedSubtitleId?.let { subtitleId ->
+            subtitles.indexOfFirst { subtitle ->
+                subtitle.getId() == subtitleId
+            }.takeIf { index -> index >= 0 }
+        }
+        val runtimeSelectedSubtitle = runtimeSelectedSubtitleIndex?.let(subtitles::getOrNull)
+        if (
+            runtimeSelectedSubtitle != null &&
+            (
+                preferredSubtitleLanguageTag.isBlank() ||
+                    runtimeSelectedSubtitle.matchesLanguageCode(preferredSubtitleLanguageTag)
+                )
+        ) {
+            selectedSubtitleIndex = runtimeSelectedSubtitleIndex
+            selectedSubtitleId = runtimeSelectedSubtitle.getId()
+            subtitleSelectionSource = TvPlayerSubtitleSelectionSource.Auto
+            pendingEmbeddedSubtitleReconciliation = false
+            subtitleSyncDebugLog(
+                "applyPreferredSubtitleAutoSelection: selected runtime subtitle" +
+                    " subtitleId=$selectedSubtitleId" +
+                    " subtitleIndex=$selectedSubtitleIndex" +
+                    " preferred=${preferredSubtitleLanguageTag.ifBlank { "<blank>" }}",
+            )
+            return
+        }
+
+        if (preferredSubtitleLanguageTag.isBlank()) {
+            pendingEmbeddedSubtitleReconciliation = false
+            subtitleSyncDebugLog("applyPreferredSubtitleAutoSelection: skipped reason=blank_preference")
+            return
+        }
+
         val currentSubtitle = subtitles.getOrNull(selectedSubtitleIndex)
         if (currentSubtitle != null && currentSubtitle.matchesLanguageCode(preferredSubtitleLanguageTag)) {
+            pendingEmbeddedSubtitleReconciliation = false
             subtitleSyncDebugLog(
                 "applyPreferredSubtitleAutoSelection: skipped reason=already_selected" +
                     " subtitleId=${currentSubtitle.getId()}",
@@ -136,6 +190,7 @@ internal class TvPlayerPanelsStateHolder {
             subtitle.matchesLanguageCode(preferredSubtitleLanguageTag)
         }
         if (targetIndex < 0) {
+            pendingEmbeddedSubtitleReconciliation = false
             subtitleSyncDebugLog(
                 "applyPreferredSubtitleAutoSelection: skipped reason=no_match" +
                     " subtitles=${subtitles.size}" +
@@ -147,6 +202,7 @@ internal class TvPlayerPanelsStateHolder {
         selectedSubtitleIndex = targetIndex
         selectedSubtitleId = subtitles[targetIndex].getId()
         subtitleSelectionSource = TvPlayerSubtitleSelectionSource.Auto
+        pendingEmbeddedSubtitleReconciliation = false
         subtitleSyncDebugLog(
             "applyPreferredSubtitleAutoSelection: selected" +
                 " subtitleId=$selectedSubtitleId" +

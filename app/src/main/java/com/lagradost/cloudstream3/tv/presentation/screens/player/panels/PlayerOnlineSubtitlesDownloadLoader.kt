@@ -1,11 +1,15 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.panels
 
+import android.util.Log
 import com.lagradost.cloudstream3.amap
 import com.lagradost.cloudstream3.mvvm.Resource
+import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities
 import com.lagradost.cloudstream3.subtitles.SubtitleResource.SingleSubtitleResource
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.subtitleProviders
 import com.lagradost.cloudstream3.ui.player.PlayerSubtitleHelper.Companion.toSubtitleMimeType
 import com.lagradost.cloudstream3.ui.player.SubtitleData
+import com.lagradost.cloudstream3.ui.player.toOnlineSubtitleMetadataLog
+import com.lagradost.cloudstream3.ui.player.toSubtitleFetchLogPayload
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.getAutoSelectLanguageTagIETF
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -13,6 +17,10 @@ import kotlinx.coroutines.launch
 internal class PlayerOnlineSubtitlesDownloadLoader(
     private val context: PlayerOnlineSubtitlesLoadContext,
 ) {
+    companion object {
+        private const val TAG = "TvPlayerVM"
+    }
+
     private var loadJob: Job? = null
     private var firstAvailableSubtitleJob: Job? = null
 
@@ -60,6 +68,11 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
                     val downloadedSubtitles = mapDownloadedSubtitles(
                         subtitleEntry = subtitleEntry,
                         downloadedEntries = resource.value.getSubtitles(),
+                    )
+                    logDownloadedSubtitles(
+                        stage = "tv-online-selection",
+                        subtitleEntry = subtitleEntry,
+                        downloadedSubtitles = downloadedSubtitles,
                     )
                     if (downloadedSubtitles.isEmpty()) {
                         context.updateState(
@@ -132,6 +145,11 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
                         subtitleEntry = subtitleEntry,
                         downloadedEntries = subtitleResource.value.getSubtitles(),
                     )
+                    logDownloadedSubtitles(
+                        stage = "tv-online-first-available",
+                        subtitleEntry = subtitleEntry,
+                        downloadedSubtitles = downloadedSubtitles,
+                    )
                     if (downloadedSubtitles.isEmpty()) continue
 
                     context.deliverDownloadedSubtitles(downloadedSubtitles)
@@ -142,7 +160,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
     }
 
     private fun mapDownloadedSubtitles(
-        subtitleEntry: com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities.SubtitleEntity,
+        subtitleEntry: AbstractSubtitleEntities.SubtitleEntity,
         downloadedEntries: List<SingleSubtitleResource>,
     ): List<SubtitleData> {
         return downloadedEntries.map { downloaded ->
@@ -157,6 +175,21 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
                 mimeType = downloaded.url.toSubtitleMimeType(),
                 headers = subtitleEntry.headers,
                 languageCode = subtitleEntry.lang,
+            )
+        }
+    }
+
+    private fun logDownloadedSubtitles(
+        stage: String,
+        subtitleEntry: AbstractSubtitleEntities.SubtitleEntity,
+        downloadedSubtitles: List<SubtitleData>,
+    ) {
+        downloadedSubtitles.forEach { subtitle ->
+            Log.i(
+                TAG,
+                "subtitle fetched [$stage]: " +
+                    subtitle.toSubtitleFetchLogPayload() +
+                    " ${subtitleEntry.toOnlineSubtitleMetadataLog()}",
             )
         }
     }

@@ -86,7 +86,9 @@ internal fun PlayerOverlay(
                 texts = episodeTexts,
                 textStyle = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = PlayerControlsTokens.EpisodeTitleTextAlpha,
+                    ),
                 ),
                 modifier = Modifier.padding(top = 2.dp),
             )
@@ -97,7 +99,9 @@ internal fun PlayerOverlay(
                 texts = infoTexts,
                 textStyle = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(
+                        alpha = PlayerControlsTokens.InfoMetadataTextAlpha,
+                    ),
                 ),
                 modifier = Modifier.padding(top = 4.dp),
             )

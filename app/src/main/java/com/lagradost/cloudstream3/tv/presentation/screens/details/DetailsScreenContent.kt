@@ -14,6 +14,7 @@ import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.rememberChildPadding
 import com.lagradost.cloudstream3.tv.presentation.screens.tvseries.resolveInitialSeasonId
@@ -25,7 +26,7 @@ internal fun DetailsScreenContent(
     details: MovieDetails,
     actionsCompat: MovieDetailsEpisodeActionsCompat,
     isSecondaryContentLoading: Boolean,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     onFavoriteClick: () -> Unit,
@@ -134,6 +135,7 @@ internal fun DetailsScreenContent(
         downloadMirrorState = downloadMirrorState,
         downloadMirrorStateHolder = downloadMirrorStateHolder,
         downloadButtonViewModel = downloadButtonViewModel,
+        episodesStateHolder = episodesStateHolder,
         context = context,
         scope = coroutineScope,
         closeDownloadPanel = downloadPanelActions.closePanel,

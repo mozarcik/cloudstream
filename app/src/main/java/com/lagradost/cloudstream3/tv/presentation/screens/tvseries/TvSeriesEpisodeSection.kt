@@ -178,6 +178,7 @@ internal fun EpisodeCard(
     onEpisodeQuickActionClick: (TvEpisode, MovieDetailsQuickAction) -> Unit = { _, _ -> },
     isWatched: Boolean = false,
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
+    forceActionsVisible: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val actionFocusRequester = remember { FocusRequester() }
@@ -190,10 +191,12 @@ internal fun EpisodeCard(
     }
 
     var hasCardOrChildFocus by remember { mutableStateOf(false) }
+    val actionsVisible = forceActionsVisible || hasCardOrChildFocus
 
     Surface(
         onClick = { onEpisodeSelected(episode) },
         modifier = modifier
+            .testTag("episode_card_${episode.id}")
             .focusProperties { right = actionFocusRequester }
             .onFocusChanged { focusState ->
                 hasCardOrChildFocus = focusState.hasFocus
@@ -266,11 +269,12 @@ internal fun EpisodeCard(
                     onPlayLongClick = { },
                     isWatched = isWatched,
                     downloadActionState = downloadActionState,
+                    actionTestTagPrefix = "episode_${episode.id}_",
                     onQuickActionClick = { action ->
                         onEpisodeQuickActionClick(episode, action)
                     },
                     playButtonModifier = Modifier.focusRequester(actionFocusRequester),
-                    modifier = Modifier.alpha(if (hasCardOrChildFocus) 1f else 0f)
+                    modifier = Modifier.alpha(if (actionsVisible) 1f else 0f)
                 )
             }
         }
@@ -412,6 +416,7 @@ private fun DetailsActionsRow(
     onPlayLongClick: (() -> Unit)? = null,
     isWatched: Boolean = false,
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
+    actionTestTagPrefix: String = "",
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
 ) {
     val watchedLabel = if (isWatched) {
@@ -479,19 +484,19 @@ private fun DetailsActionsRow(
                 ActionIconSpec(
                     icon = watchedIcon,
                     label = watchedLabel,
-                    testTag = "action_watched",
+                    testTag = "${actionTestTagPrefix}action_watched",
                     action = watchedAction
                 ),
                 ActionIconSpec(
                     icon = watchedUpToIcon,
                     label = watchedUpToLabel,
-                    testTag = "action_watched_all",
+                    testTag = "${actionTestTagPrefix}action_watched_all",
                     action = watchedUpToAction
                 ),
                 ActionIconSpec(
                     icon = downloadIcon,
                     label = downloadLabel,
-                    testTag = "action_download",
+                    testTag = "${actionTestTagPrefix}action_download",
                     action = MovieDetailsQuickAction.Download,
                     progressFraction = downloadProgressFraction
                 ),

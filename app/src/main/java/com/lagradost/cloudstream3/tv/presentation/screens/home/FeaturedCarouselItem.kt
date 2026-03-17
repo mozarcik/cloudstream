@@ -2,10 +2,10 @@ package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,10 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -141,13 +138,6 @@ private fun FeaturedCarouselTitle(
     item: FeaturedItemCompat,
     shadowColor: androidx.compose.ui.graphics.Color,
 ) {
-    var shouldShowTextTitle by remember(item.id, item.logoUri) {
-        mutableStateOf(item.logoUri.isNullOrBlank())
-    }
-    val logoRequest = rememberFeaturedImageRequest(
-        imageUrl = item.logoUri.orEmpty(),
-        headers = item.imageHeaders
-    )
     val titleTypography = MaterialTheme.typography.displayMedium
     val titleStyle = remember(titleTypography, shadowColor) {
         titleTypography.copy(
@@ -162,30 +152,14 @@ private fun FeaturedCarouselTitle(
         )
     }
 
-    if (!shouldShowTextTitle && logoRequest != null) {
-        AsyncImage(
-            model = logoRequest,
-            contentDescription = item.name,
-            contentScale = ContentScale.Fit,
-            alignment = Alignment.CenterStart,
-            onError = {
-                shouldShowTextTitle = true
-            },
-            modifier = Modifier
-                .fillMaxWidth(FeaturedCarouselTitleMaxWidthFraction)
-                .height(FeaturedCarouselLogoHeight)
-                .clip(FeaturedCarouselShape)
-        )
-    } else {
-        Text(
-            text = item.name,
-            style = titleStyle,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.fillMaxWidth(FeaturedCarouselTitleMaxWidthFraction)
-        )
-    }
+    Text(
+        text = item.name,
+        style = titleStyle,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.fillMaxWidth(FeaturedCarouselTitleMaxWidthFraction)
+    )
 }
 
 @Composable

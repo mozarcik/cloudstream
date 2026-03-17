@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.common
 
+import android.util.Log
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -154,6 +155,7 @@ fun MenuListSidePanel(
     onInlineTextFieldSubmit: ((Any, String) -> Unit)? = null,
     onExitUpRequested: (() -> Unit)? = null,
 ) {
+    val shouldLogDownloadPanel = panelTestTag?.contains("download") == true
     val resolvedContentKey = contentAnimationKey ?: Unit
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -211,6 +213,23 @@ fun MenuListSidePanel(
         focusedItemId = null
     }
 
+    LaunchedEffect(
+        visible,
+        resolvedContentKey,
+        requestFocusItemId,
+        focusedItemId,
+        focusableItemIds,
+        panelTestTag,
+    ) {
+        if (!shouldLogDownloadPanel) return@LaunchedEffect
+
+        Log.d(
+            "MenuListSidePanel",
+            "panel=$panelTestTag visible=$visible requestFocusItemId=$requestFocusItemId focusedItemId=$focusedItemId " +
+                "focusable=${focusableItemIds.size}"
+        )
+    }
+
     LaunchedEffect(requestFocusItemId, items) {
         val targetItemId = requestFocusItemId ?: return@LaunchedEffect
         val focusItemListIndex = items.indexOfFirst { menuItem ->
@@ -230,6 +249,12 @@ fun MenuListSidePanel(
         retryDelayMs = 50,
         onFocused = {
             focusedItemId = requestFocusItemId
+            if (shouldLogDownloadPanel) {
+                Log.d(
+                    "MenuListSidePanel",
+                    "panel=$panelTestTag focus_applied itemId=$requestFocusItemId"
+                )
+            }
         }
     )
 
@@ -271,6 +296,13 @@ fun MenuListSidePanel(
                         }
                         .focusProperties {
                             onExit = {
+                                if (shouldLogDownloadPanel) {
+                                    Log.d(
+                                        "MenuListSidePanel",
+                                        "panel=$panelTestTag focus_exit closeOnFocusExit=$closeOnFocusExit focusedItemId=$focusedItemId " +
+                                            "focusable=${focusableItemIds.size}"
+                                    )
+                                }
                                 if (closeOnFocusExit) {
                                     onCloseRequested()
                                     FocusRequester.Default

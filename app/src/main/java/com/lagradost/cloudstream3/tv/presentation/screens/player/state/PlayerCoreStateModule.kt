@@ -10,8 +10,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 internal class PlayerCoreStateModule(
     internal val uiState: MutableStateFlow<TvPlayerUiState>,
 ) {
+    internal var baseMetadata: TvPlayerMetadata = TvPlayerMetadata.Empty
     internal var metadata: TvPlayerMetadata = TvPlayerMetadata.Empty
+    internal var loadingUseBlackBackground: Boolean = false
     internal var currentLoadResponse: LoadResponse? = null
     internal var currentEpisode: ResultEpisode? = null
+    internal var episodeQueue: List<ResultEpisode> = emptyList()
+    internal var currentEpisodeIndex: Int = -1
     internal val playbackProgressState = TvPlayerPlaybackProgressState()
 }

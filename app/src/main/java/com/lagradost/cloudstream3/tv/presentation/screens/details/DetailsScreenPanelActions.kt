@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatActionOutcome
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,7 +53,7 @@ internal fun executeDetailsAction(
     actionsCompat: MovieDetailsEpisodeActionsCompat,
     panelsStateHolder: DetailsPanelsStateHolder,
     scope: CoroutineScope,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
 ) {
     if (!mode.allowsExtendedActions ||
         panelsStateHolder.isActionInProgress ||
@@ -71,7 +72,7 @@ internal fun executeDetailsAction(
                 actionsCompat.execute(
                     actionId = actionId,
                     context = context,
-                    onPlayInApp = { goToPlayer(resolveDefaultEpisodeData(details)) },
+                    onPlayInApp = { goToPlayer(resolveDefaultPlaybackTarget(details)) },
                 )
             }
             handleDetailsActionOutcome(

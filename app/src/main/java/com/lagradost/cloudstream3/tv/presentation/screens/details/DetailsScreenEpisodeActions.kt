@@ -6,6 +6,7 @@ import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -30,7 +31,7 @@ internal fun executeDetailsEpisodeQuickAction(
     panelsStateHolder: DetailsPanelsStateHolder,
     episodesStateHolder: DetailsEpisodesStateHolder,
     scope: CoroutineScope,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
 ) {
     if (panelsStateHolder.isActionInProgress ||
         panelsStateHolder.isPanelLoading ||
@@ -53,7 +54,13 @@ internal fun executeDetailsEpisodeQuickAction(
                 context = context,
                 preferredSeason = targetSeason,
                 preferredEpisode = targetEpisode,
-                onPlayInApp = goToPlayer,
+                onPlayInApp = { episodeData ->
+                    goToPlayer(
+                        episodeData
+                            ?.let(PlayerStartTarget::DirectEpisodeData)
+                            ?: PlayerStartTarget.Default
+                    )
+                },
             )
         } catch (error: Throwable) {
             Log.e(

@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPlaybackErrorDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerEmbeddedSubtitleSnapshot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -80,5 +81,34 @@ internal class PlayerScreenCoordinator(
 
     fun onPlaybackReady() = onPlaybackReady(context)
 
+    fun onPlaybackEnded(
+        positionMs: Long,
+        durationMs: Long,
+    ) {
+        onPlaybackEnded(
+            context = context,
+            positionMs = positionMs,
+            durationMs = durationMs,
+        )
+    }
+
+    fun playNextEpisode(
+        positionMs: Long,
+        durationMs: Long,
+    ) {
+        playNextEpisode(
+            context = context,
+            positionMs = positionMs,
+            durationMs = durationMs,
+        )
+    }
+
     fun onPlaybackError(error: TvPlayerPlaybackErrorDetails?) = onPlaybackError(context, error)
+
+    fun onEmbeddedSubtitlesChanged(subtitles: List<PlayerEmbeddedSubtitleSnapshot>) {
+        onEmbeddedSubtitlesChanged(
+            context = context,
+            snapshots = subtitles,
+        )
+    }
 }

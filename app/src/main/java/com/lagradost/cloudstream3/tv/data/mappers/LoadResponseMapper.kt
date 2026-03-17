@@ -7,6 +7,7 @@ import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.MovieLoadResponse
 import com.lagradost.cloudstream3.SeasonData
 import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import com.lagradost.cloudstream3.tv.compat.resume.ResumePlaybackResolver
 import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieCast
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
@@ -14,9 +15,6 @@ import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.data.repositories.DetailsSecondaryLoadResult
 import com.lagradost.cloudstream3.tv.data.repositories.mergeSecondary
-import com.lagradost.cloudstream3.ui.result.VideoWatchState
-import com.lagradost.cloudstream3.ui.result.getId
-import com.lagradost.cloudstream3.utils.DataStoreHelper.getVideoWatchState
 
 private const val DebugTag = "TvDetailsMapper"
 
@@ -68,7 +66,7 @@ private fun TvSeriesLoadResponse.toPrimaryMovieDetails(): MovieDetails {
     val episodes = this.episodes
     val seasonCount = episodes.extractSeasonCount(this.seasonNames?.mapNotNull { it.displaySeason ?: it.season })
     val episodeCount = episodes.extractEpisodeCount()
-    val currentEpisode = episodes.findCurrentEpisode()
+    val currentEpisode = ResumePlaybackResolver.resolveCurrentSeriesEpisode(this)
     val seasons = episodes.toTvSeasons(
         seasonNames = this.seasonNames,
         defaultPosterUri = this.backgroundPosterUrl ?: this.posterUrl ?: ""
@@ -95,7 +93,7 @@ private fun TvSeriesLoadResponse.toPrimaryMovieDetails(): MovieDetails {
 }
 
 private fun TvSeriesLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
-    val resumeEpisode = this.episodes.findCurrentEpisode(mainId = this.getId())
+    val resumeEpisode = ResumePlaybackResolver.resolveCurrentSeriesEpisode(this)
     return DetailsSecondaryLoadResult(
         cast = this.actors.toMovieCastList(),
         similarMovies = this.recommendations.toMovieList(),
@@ -108,7 +106,7 @@ private fun AnimeLoadResponse.toPrimaryMovieDetails(): MovieDetails {
     val episodes = this.episodes.values.flatten()
     val seasonCount = episodes.extractSeasonCount()
     val episodeCount = episodes.extractEpisodeCount()
-    val currentEpisode = episodes.findCurrentEpisode()
+    val currentEpisode = ResumePlaybackResolver.resolveCurrentAnimeEpisode(this)?.episode
     val seasons = episodes.toTvSeasons(
         seasonNames = this.seasonNames,
         defaultPosterUri = this.backgroundPosterUrl ?: this.posterUrl ?: "",
@@ -137,9 +135,12 @@ private fun AnimeLoadResponse.toPrimaryMovieDetails(): MovieDetails {
 }
 
 private fun AnimeLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    val resumeEpisode = ResumePlaybackResolver.resolveCurrentAnimeEpisode(this)?.episode
     return DetailsSecondaryLoadResult(
         cast = this.actors.toMovieCastList(),
         similarMovies = this.recommendations.toMovieList(),
+        currentSeason = resumeEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = resumeEpisode?.episode,
     )
 }
 
@@ -257,44 +258,6 @@ private fun List<Episode>.extractEpisodeCount(): Int? {
     } else {
         this.size
     }
-}
-
-private fun List<Episode>.findCurrentEpisode(): Episode? {
-    val missingSeasonBucket = resolveMissingSeasonBucket()
-    val sortedEpisodes = this
-        .asSequence()
-        .filter { episode -> episode.season != null || episode.episode != null }
-        .sortedWith(
-            compareBy<Episode>(
-                { episode -> episode.seasonSortOrder(missingSeasonBucket) },
-                { it.episode ?: Int.MAX_VALUE }
-            )
-        )
-        .toList()
-    return sortedEpisodes.firstOrNull()
-}
-
-private fun List<Episode>.findCurrentEpisode(mainId: Int): Episode? {
-    val missingSeasonBucket = resolveMissingSeasonBucket()
-    val sortedEpisodes = this
-        .asSequence()
-        .filter { episode -> episode.season != null || episode.episode != null }
-        .sortedWith(
-            compareBy<Episode>(
-                { episode -> episode.seasonSortOrder(missingSeasonBucket) },
-                { it.episode ?: Int.MAX_VALUE }
-            )
-        )
-        .toList()
-
-    val watchedFlags = sortedEpisodes.mapIndexed { index, episode ->
-        val episodeIndex = episode.episode ?: (index + 1)
-        val episodeId = mainId + (episode.season?.times(100_000) ?: 0) + episodeIndex + 1
-        getVideoWatchState(episodeId) == VideoWatchState.Watched
-    }
-    val lastWatchedIndex = watchedFlags.indexOfLast { watched -> watched }
-
-    return sortedEpisodes.getOrNull(lastWatchedIndex + 1) ?: sortedEpisodes.firstOrNull()
 }
 
 private fun List<Episode>.toTvSeasons(

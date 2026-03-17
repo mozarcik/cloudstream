@@ -30,6 +30,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerSubtitl
 import com.lagradost.cloudstream3.ui.player.CustomDecoder
 import com.lagradost.cloudstream3.ui.player.CustomDecoder.Companion.fixSubtitleAlignment
 import com.lagradost.cloudstream3.ui.player.SubtitleData
+import com.lagradost.cloudstream3.ui.player.SubtitleOrigin
 import com.lagradost.cloudstream3.ui.player.UpdatedDefaultExtractorsFactory
 import com.lagradost.cloudstream3.ui.subtitles.SubtitlesFragment.Companion.applyStyle
 import com.lagradost.cloudstream3.utils.ExtractorLink
@@ -175,23 +176,34 @@ internal fun buildPlayerMediaSource(
         .setUri(link.url)
         .build()
     val videoMediaSource = videoMediaSourceFactory.createMediaSource(videoMediaItem)
-    val subtitleConfiguration = subtitle?.let { subtitleData ->
+    val externalSubtitle = subtitle?.takeUnless { subtitleData ->
+        subtitleData.origin == SubtitleOrigin.EMBEDDED_IN_VIDEO
+    }
+    if (subtitle != null && externalSubtitle == null) {
+        subtitleSyncDebugLog(
+            "buildPlayerMediaSource: skipping external subtitle source for embedded track" +
+                " id=${subtitle.getId()}",
+        )
+    }
+    val subtitleConfiguration = externalSubtitle?.let { subtitleData ->
         MediaItem.SubtitleConfiguration.Builder(android.net.Uri.parse(subtitleData.getFixedUrl()))
             .setMimeType(subtitleData.mimeType)
             .setLabel(subtitleData.name)
-            .setLanguage(subtitleData.languageCode)
+            // WHY: parity z legacy playerem - nie pozwalamy automatyce track selector-a
+            // traktować zewnętrznych napisów jak zwykłego tracku językowego źródła.
+            .setLanguage("_${subtitleData.name}")
             .setId(subtitleData.getId())
-            .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+            .setSelectionFlags(0)
             .build()
     }
-    val subtitleMediaSource = if (subtitle != null && subtitleConfiguration != null) {
+    val subtitleMediaSource = if (externalSubtitle != null && subtitleConfiguration != null) {
         val subtitleDataSourceFactory = createDataSourceFactory(
             context = context,
             link = link,
-            globalExtraHeaders = subtitle.headers,
+            globalExtraHeaders = externalSubtitle.headers,
         )
         subtitleSyncDebugLog(
-            "buildPlayerMediaSource: creating subtitle source id=${subtitle.getId()} uri=${subtitle.getFixedUrl()}",
+            "buildPlayerMediaSource: creating subtitle source id=${externalSubtitle.getId()} uri=${externalSubtitle.getFixedUrl()}",
         )
         SingleSampleMediaSource.Factory(subtitleDataSourceFactory)
             .createMediaSource(subtitleConfiguration, C.TIME_UNSET)

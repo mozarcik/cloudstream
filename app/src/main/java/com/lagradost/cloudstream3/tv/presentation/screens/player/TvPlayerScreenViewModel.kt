@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPlaybackErrorDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
+import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerEmbeddedSubtitleSnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ class TvPlayerScreenViewModel(
             metadata = TvPlayerMetadata.Empty,
             loadedSources = 0,
             canSkip = false,
+            useBlackBackground = false,
         )
     )
     val uiState: StateFlow<TvPlayerUiState> = _uiState.asStateFlow()
@@ -81,5 +83,23 @@ class TvPlayerScreenViewModel(
 
     fun onPlaybackReady() = coordinator.onPlaybackReady()
 
+    fun onPlaybackEnded(positionMs: Long, durationMs: Long) {
+        coordinator.onPlaybackEnded(
+            positionMs = positionMs,
+            durationMs = durationMs,
+        )
+    }
+
+    fun playNextEpisode(positionMs: Long, durationMs: Long) {
+        coordinator.playNextEpisode(
+            positionMs = positionMs,
+            durationMs = durationMs,
+        )
+    }
+
     fun onPlaybackError(error: TvPlayerPlaybackErrorDetails?) = coordinator.onPlaybackError(error)
+
+    internal fun onEmbeddedSubtitlesChanged(subtitles: List<PlayerEmbeddedSubtitleSnapshot>) {
+        coordinator.onEmbeddedSubtitlesChanged(subtitles)
+    }
 }

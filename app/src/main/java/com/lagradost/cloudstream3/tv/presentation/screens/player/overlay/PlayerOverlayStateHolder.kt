@@ -20,6 +20,7 @@ internal class PlayerOverlayStateHolder(
     var isPlaying by mutableStateOf(initialIsPlaying)
     var playerPlaybackState by mutableIntStateOf(initialPlaybackState)
     var playerWantsToPlay by mutableStateOf(initialPlayWhenReady)
+    var startupAutoHideArmed by mutableStateOf(true)
     var errorHandled by mutableStateOf(false)
     var sourceErrorDialogEffect by mutableStateOf<TvPlayerPanelEffect.OpenSourceErrorDialog?>(null)
 
@@ -29,6 +30,7 @@ internal class PlayerOverlayStateHolder(
             (playerPlaybackState == Player.STATE_BUFFERING || playerPlaybackState == Player.STATE_IDLE)
 
     fun resetForSourceChange() {
+        startupAutoHideArmed = true
         errorHandled = false
         sourceErrorDialogEffect = null
     }

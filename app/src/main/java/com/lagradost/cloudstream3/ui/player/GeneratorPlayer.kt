@@ -839,6 +839,11 @@ class GeneratorPlayer : FullScreenPlayer() {
                                         languageCode = currentSubtitle.lang
                                     )
                                 }
+                                logFetchedOnlineSubtitles(
+                                    stage = "legacy-online-selection",
+                                    subtitleEntry = currentSubtitle,
+                                    subtitles = subtitles,
+                                )
                                 if (subtitles.isEmpty()) {
                                     showToast(R.string.no_subtitles)
                                     return@ioSafe
@@ -918,6 +923,21 @@ class GeneratorPlayer : FullScreenPlayer() {
             String.format(ctx.getString(R.string.player_loaded_subtitles), selectedSubtitle.name),
             Toast.LENGTH_LONG
         )
+    }
+
+    private fun logFetchedOnlineSubtitles(
+        stage: String,
+        subtitleEntry: AbstractSubtitleEntities.SubtitleEntity,
+        subtitles: List<SubtitleData>,
+    ) {
+        subtitles.forEach { subtitle ->
+            Log.i(
+                TAG,
+                "subtitle fetched [$stage]: " +
+                    subtitle.toSubtitleFetchLogPayload() +
+                    " ${subtitleEntry.toOnlineSubtitleMetadataLog()}",
+            )
+        }
     }
 
     // Open file picker
@@ -1010,6 +1030,11 @@ class GeneratorPlayer : FullScreenPlayer() {
                             languageCode = subtitleEntry.lang,
                         )
                     }
+                    logFetchedOnlineSubtitles(
+                        stage = "legacy-online-first-available",
+                        subtitleEntry = subtitleEntry,
+                        subtitles = subtitles,
+                    )
 
                     // checks for both a race condition and if any of the subs generated is new
                     if (this.isActive && !currentSubs.containsAll(subtitles) && !hasSelectASubtitle) {

@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 import kotlinx.coroutines.CoroutineScope
 
@@ -40,7 +41,7 @@ internal fun DetailsScreenBodyCoordinator(
     openDownloadPanel: (Int?, Int?) -> Unit,
     onFavoriteClick: () -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
-    goToPlayer: (String?) -> Unit,
+    goToPlayer: (PlayerStartTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     DetailsScreenBody(
@@ -88,7 +89,7 @@ internal fun DetailsScreenBodyCoordinator(
             )
         },
         onSeasonSelected = { season -> episodesStateHolder.onSeasonSelected(season.id) },
-        onEpisodeSelected = { episode -> goToPlayer(episode.data) },
+        onEpisodeSelected = { episode -> goToPlayer(PlayerStartTarget.DirectEpisodeData(episode.data)) },
         onEpisodeQuickActionClick = { episode, quickAction ->
             onDetailsEpisodeQuickAction(
                 quickAction = quickAction,

@@ -54,7 +54,7 @@ fun HomeScreenV2(
         onMorePanelOpenChange = sourcesViewModel::setMorePanelOpen,
         onTogglePin = sourcesViewModel::togglePinned,
         onRemoveContinueWatching = { item ->
-            continueWatchingViewModel.removeItem(item.continueWatchingParentId)
+            continueWatchingViewModel.removeItem(item.continueWatching?.parentId)
         },
         modifier = modifier,
     )

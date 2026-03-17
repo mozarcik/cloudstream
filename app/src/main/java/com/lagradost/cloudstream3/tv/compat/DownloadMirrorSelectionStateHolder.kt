@@ -77,6 +77,7 @@ class DownloadMirrorSelectionStateHolder(
         _uiState.update { current ->
             current.copy(selectionRequest = request)
         }
+        logState("selection_request_updated")
     }
 
     private fun openPanel(
@@ -92,6 +93,11 @@ class DownloadMirrorSelectionStateHolder(
             isVisible = true,
             isLoading = true,
         )
+        Log.d(
+            DebugTag,
+            "open_panel requestVersion=$requestVersion season=${preferredSeason ?: "null"} episode=${preferredEpisode ?: "null"}"
+        )
+        logState("open_panel_initialized")
 
         loadingJob = scope.launch(Dispatchers.IO) {
             try {
@@ -104,12 +110,18 @@ class DownloadMirrorSelectionStateHolder(
                         _uiState.update { current ->
                             current.copy(loadedSourcesCount = loadedSources)
                         }
+                        logState("sources_progress($loadedSources)")
                     },
                     onSelectionUpdated = { request ->
                         if (activeRequestVersion != requestVersion) return@requestDownloadMirrorSelection
                         _uiState.update { current ->
                             current.copy(selectionRequest = request)
                         }
+                        Log.d(
+                            DebugTag,
+                            "selection_updated requestVersion=$requestVersion options=${request.options.size}"
+                        )
+                        logState("selection_updated")
                     },
                     shouldCancelLoading = {
                         activeRequestVersion != requestVersion
@@ -121,8 +133,17 @@ class DownloadMirrorSelectionStateHolder(
                     current.copy(
                         isLoading = false,
                         isLoadingUiSkipped = false,
+                        selectionRequest = when (outcome) {
+                            is MovieDetailsCompatActionOutcome.OpenSelection -> outcome.request
+                            MovieDetailsCompatActionOutcome.Completed -> null
+                        },
                     )
                 }
+                Log.d(
+                    DebugTag,
+                    "loading_finished requestVersion=$requestVersion outcome=${outcome::class.java.simpleName}"
+                )
+                logState("loading_finished")
                 _effects.tryEmit(
                     DownloadMirrorSelectionEffect.LoadingFinished(outcome)
                 )
@@ -144,12 +165,24 @@ class DownloadMirrorSelectionStateHolder(
                 current.copy(isLoadingUiSkipped = true)
             }
         }
+        logState("skip_loading_ui")
     }
 
     private fun closePanel() {
         activeRequestVersion += 1
         loadingJob?.cancel()
         loadingJob = null
+        logState("close_panel_requested")
         _uiState.value = DownloadMirrorSelectionUiState()
+        logState("close_panel_cleared")
+    }
+
+    private fun logState(event: String) {
+        val current = _uiState.value
+        Log.d(
+            DebugTag,
+            "$event visible=${current.isVisible} loading=${current.isLoading} skipped=${current.isLoadingUiSkipped} " +
+                "loadedSources=${current.loadedSourcesCount} options=${current.selectionRequest?.options?.size ?: 0}"
+        )
     }
 }

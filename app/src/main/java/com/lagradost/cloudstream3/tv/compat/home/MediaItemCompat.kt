@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.tv.compat.home
 import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.Score
 import com.lagradost.cloudstream3.TvType
+import com.lagradost.cloudstream3.tv.compat.resume.ContinueWatchingState
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -22,12 +23,7 @@ sealed class MediaItemCompat {
     abstract val score: Score?
     open val backdropUri: String? = null
     open val description: String? = null
-    open val continueWatchingProgress: Float? = null
-    open val continueWatchingRemainingMs: Long? = null
-    open val continueWatchingSeason: Int? = null
-    open val continueWatchingEpisode: Int? = null
-    open val continueWatchingHasBackdrop: Boolean = false
-    open val continueWatchingParentId: Int? = null
+    open val continueWatching: ContinueWatchingState? = null
     
     @Immutable
     data class Movie(
@@ -46,12 +42,7 @@ sealed class MediaItemCompat {
         override val backdropUri: String? = null,
         override val description: String? = null,
         val year: Int? = null,
-        override val continueWatchingProgress: Float? = null,
-        override val continueWatchingRemainingMs: Long? = null,
-        override val continueWatchingSeason: Int? = null,
-        override val continueWatchingEpisode: Int? = null,
-        override val continueWatchingHasBackdrop: Boolean = false,
-        override val continueWatchingParentId: Int? = null,
+        override val continueWatching: ContinueWatchingState? = null,
     ) : MediaItemCompat()
     
     @Immutable
@@ -72,12 +63,7 @@ sealed class MediaItemCompat {
         override val description: String? = null,
         val year: Int? = null,
         val episodes: Int? = null,
-        override val continueWatchingProgress: Float? = null,
-        override val continueWatchingRemainingMs: Long? = null,
-        override val continueWatchingSeason: Int? = null,
-        override val continueWatchingEpisode: Int? = null,
-        override val continueWatchingHasBackdrop: Boolean = false,
-        override val continueWatchingParentId: Int? = null,
+        override val continueWatching: ContinueWatchingState? = null,
     ) : MediaItemCompat()
     
     @Immutable
@@ -96,12 +82,7 @@ sealed class MediaItemCompat {
         override val score: Score?,
         override val backdropUri: String? = null,
         override val description: String? = null,
-        override val continueWatchingProgress: Float? = null,
-        override val continueWatchingRemainingMs: Long? = null,
-        override val continueWatchingSeason: Int? = null,
-        override val continueWatchingEpisode: Int? = null,
-        override val continueWatchingHasBackdrop: Boolean = false,
-        override val continueWatchingParentId: Int? = null,
+        override val continueWatching: ContinueWatchingState? = null,
     ) : MediaItemCompat()
 }
 

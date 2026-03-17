@@ -24,6 +24,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.details.consumeDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.details.createDetailsSavedStateHandle
 import com.lagradost.cloudstream3.tv.presentation.screens.details.saveDetailsLoadingState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerScreenNavigation
+import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerScreenViewModel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.createPlayerSavedStateHandle
@@ -58,7 +59,7 @@ fun TvApp(
                                     posterUri = movie.posterUri,
                                     backdropUri = movie.backdropUri?.takeIf { it.isNotBlank() }
                                         ?: movie.posterUri.takeIf {
-                                            movie.continueWatchingHasBackdrop && it.isNotBlank()
+                                            movie.continueWatching?.hasBackdrop == true && it.isNotBlank()
                                         },
                                     description = movie.description,
                                     year = movie.year,
@@ -79,7 +80,7 @@ fun TvApp(
                                     posterUri = series.posterUri,
                                     backdropUri = series.backdropUri?.takeIf { it.isNotBlank() }
                                         ?: series.posterUri.takeIf {
-                                            series.continueWatchingHasBackdrop && it.isNotBlank()
+                                            series.continueWatching?.hasBackdrop == true && it.isNotBlank()
                                         },
                                     description = series.description,
                                     year = series.year,
@@ -107,12 +108,15 @@ fun TvApp(
                         }
                         navController.navigate(Screens.MediaDetails.withArgs(encodedUrl, encodedApiName))
                     },
-                    openVideoPlayer = { url, apiName, episodeData ->
+                    openVideoPlayer = { url, apiName, playbackTarget ->
                         val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
                         val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
-                        val encodedEpisodeData = URLEncoder.encode(episodeData.orEmpty(), StandardCharsets.UTF_8.toString())
+                        val encodedPlaybackTarget = URLEncoder.encode(
+                            PlayerScreenNavigation.toNavigationArg(playbackTarget),
+                            StandardCharsets.UTF_8.toString()
+                        )
                         navController.navigate(
-                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedEpisodeData)
+                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedPlaybackTarget)
                         )
                     },
                     onBackPressed = onBackPressed,
@@ -159,12 +163,15 @@ fun TvApp(
 
                 DetailsScreen(
                     mode = DetailsScreenMode.Movie,
-                    goToPlayer = {
+                    goToPlayer = { playbackTarget ->
                         val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
                         val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
-                        val encodedEpisodeData = URLEncoder.encode("", StandardCharsets.UTF_8.toString())
+                        val encodedPlaybackTarget = URLEncoder.encode(
+                            PlayerScreenNavigation.toNavigationArg(playbackTarget),
+                            StandardCharsets.UTF_8.toString()
+                        )
                         navController.navigate(
-                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedEpisodeData)
+                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedPlaybackTarget)
                         )
                     },
                     onBackPressed = {
@@ -226,12 +233,15 @@ fun TvApp(
 
                 DetailsScreen(
                     mode = DetailsScreenMode.TvSeries,
-                    goToPlayer = { episodeData ->
+                    goToPlayer = { playbackTarget ->
                         val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
                         val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
-                        val encodedEpisodeData = URLEncoder.encode(episodeData.orEmpty(), StandardCharsets.UTF_8.toString())
+                        val encodedPlaybackTarget = URLEncoder.encode(
+                            PlayerScreenNavigation.toNavigationArg(playbackTarget),
+                            StandardCharsets.UTF_8.toString()
+                        )
                         navController.navigate(
-                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedEpisodeData)
+                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedPlaybackTarget)
                         )
                     },
                     onBackPressed = {
@@ -292,12 +302,15 @@ fun TvApp(
 
                 DetailsScreen(
                     mode = DetailsScreenMode.Media,
-                    goToPlayer = { episodeData ->
+                    goToPlayer = { playbackTarget ->
                         val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
                         val encodedApiName = URLEncoder.encode(apiName, StandardCharsets.UTF_8.toString())
-                        val encodedEpisodeData = URLEncoder.encode(episodeData.orEmpty(), StandardCharsets.UTF_8.toString())
+                        val encodedPlaybackTarget = URLEncoder.encode(
+                            PlayerScreenNavigation.toNavigationArg(playbackTarget),
+                            StandardCharsets.UTF_8.toString()
+                        )
                         navController.navigate(
-                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedEpisodeData)
+                            Screens.TvPlayer.withArgs(encodedUrl, encodedApiName, encodedPlaybackTarget)
                         )
                     },
                     onBackPressed = {
@@ -332,21 +345,24 @@ fun TvApp(
                 arguments = listOf(
                     navArgument("url") { type = NavType.StringType },
                     navArgument("apiName") { type = NavType.StringType },
-                    navArgument("episodeData") { type = NavType.StringType },
+                    navArgument("playbackTarget") { type = NavType.StringType },
                 )
             ) { backStackEntry ->
                 val encodedUrl = backStackEntry.arguments?.getString("url") ?: ""
                 val encodedApiName = backStackEntry.arguments?.getString("apiName") ?: ""
-                val encodedEpisodeData = backStackEntry.arguments?.getString("episodeData") ?: ""
+                val encodedPlaybackTarget = backStackEntry.arguments?.getString("playbackTarget") ?: ""
 
                 val url = URLDecoder.decode(encodedUrl, StandardCharsets.UTF_8.toString())
                 val apiName = URLDecoder.decode(encodedApiName, StandardCharsets.UTF_8.toString())
-                val episodeData = URLDecoder.decode(encodedEpisodeData, StandardCharsets.UTF_8.toString())
+                val playbackTarget = URLDecoder.decode(
+                    encodedPlaybackTarget,
+                    StandardCharsets.UTF_8.toString()
+                )
 
                 val savedStateHandle = createPlayerSavedStateHandle(
                     url = url,
                     apiName = apiName,
-                    episodeData = episodeData,
+                    playbackTarget = playbackTarget,
                 )
 
                 val viewModel: TvPlayerScreenViewModel = viewModel(

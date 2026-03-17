@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.core
 
 import android.content.Context
+import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.lagradost.cloudstream3.ui.player.SubtitleData
@@ -39,6 +40,10 @@ internal class PlayerSessionController(
         startPositionMs: Long,
         startPlayWhenReady: Boolean,
     ) {
+        trackSelector.parameters = trackSelector.buildUponParameters()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .build()
         subtitleSyncController.setSubtitleDelayMs(
             player = player,
             newSubtitleDelayMs = subtitleDelayMs,
