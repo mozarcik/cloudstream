@@ -1,7 +1,9 @@
 package com.lagradost.cloudstream3.tv.compat
 
 import android.content.Context
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
 
 class MovieDetailsEpisodeActionsCompat(
     private val loadResponse: LoadResponse,
@@ -25,6 +27,44 @@ class MovieDetailsEpisodeActionsCompat(
     suspend fun loadPanelActions(context: Context?): List<MovieDetailsCompatPanelItem> {
         val target = resolveTarget() ?: return emptyList()
         return panelActionsFactory.build(context = context, target = target)
+    }
+
+    suspend fun buildActionMenuRequest(
+        context: Context?,
+        preferredSeason: Int? = this.preferredSeason,
+        preferredEpisode: Int? = this.preferredEpisode,
+        title: String? = null,
+        onPlayInApp: (String?) -> Unit,
+    ): MovieDetailsCompatSelectionRequest? {
+        val resolvedTarget = resolveTarget(
+            preferredSeason = preferredSeason,
+            preferredEpisode = preferredEpisode,
+        ) ?: return null
+
+        val options = panelActionsFactory.build(
+            context = context,
+            target = resolvedTarget,
+        )
+
+        return MovieDetailsCompatSelectionRequest(
+            title = title
+                ?.takeIf { customTitle -> customTitle.isNotBlank() }
+                ?: context.resolveActionMenuTitle(resolvedTarget),
+            options = options,
+            targetEpisodeId = resolvedTarget.episode.id,
+            targetSeasonNumber = resolvedTarget.episode.season,
+            targetEpisodeNumber = resolvedTarget.episode.episode,
+            onOptionSelected = { actionId ->
+                actionExecutor.execute(
+                    actionId = actionId,
+                    target = resolvedTarget,
+                    context = context,
+                    onPlayInApp = { target ->
+                        onPlayInApp(target.episode.data)
+                    },
+                )
+            },
+        )
     }
 
     suspend fun execute(
@@ -137,5 +177,16 @@ class MovieDetailsEpisodeActionsCompat(
             preferredSeason = preferredSeason,
             preferredEpisode = preferredEpisode,
         )
+    }
+
+    private fun Context?.resolveActionMenuTitle(
+        target: MovieDetailsActionTarget,
+    ): String {
+        return this?.getNameFull(
+            name = target.episode.name,
+            episode = target.episode.episode,
+            season = target.episode.season,
+        ) ?: this?.getString(R.string.episode_more_options_des)
+            ?: "More Options"
     }
 }

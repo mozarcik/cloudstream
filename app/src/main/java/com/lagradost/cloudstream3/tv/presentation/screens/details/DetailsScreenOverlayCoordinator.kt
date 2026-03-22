@@ -4,9 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionUiState
-import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
-import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.CoroutineScope
 
@@ -14,7 +12,6 @@ import kotlinx.coroutines.CoroutineScope
 internal fun DetailsScreenOverlayCoordinator(
     mode: DetailsScreenMode,
     details: MovieDetails,
-    actionsCompat: MovieDetailsEpisodeActionsCompat,
     panelsStateHolder: DetailsPanelsStateHolder,
     downloadMirrorState: DownloadMirrorSelectionUiState,
     downloadMirrorStateHolder: DownloadMirrorSelectionStateHolder,
@@ -23,7 +20,6 @@ internal fun DetailsScreenOverlayCoordinator(
     context: Context,
     scope: CoroutineScope,
     closeDownloadPanel: () -> Unit,
-    goToPlayer: (PlayerStartTarget) -> Unit,
     onBookmarkClick: (WatchType) -> Unit,
 ) {
     DetailsOverlayPanels(
@@ -35,12 +31,15 @@ internal fun DetailsScreenOverlayCoordinator(
             executeDetailsAction(
                 mode = mode,
                 actionId = actionId,
-                context = context,
-                details = details,
-                actionsCompat = actionsCompat,
                 panelsStateHolder = panelsStateHolder,
                 scope = scope,
-                goToPlayer = goToPlayer,
+                onCompleted = {
+                    episodesStateHolder.invalidateEpisodeStates()
+                    downloadButtonViewModel.refreshPendingOrDefaultSnapshot(
+                        context = context,
+                        reason = "details_action_panel_completed",
+                    )
+                },
             )
         },
         onDownloadActionSelected = { actionId ->

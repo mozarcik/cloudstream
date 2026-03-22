@@ -50,6 +50,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,6 +92,10 @@ private object SettingsPanelTokens {
     val PlaceholderSpacing = 10.dp
     const val FocusScale = 1.03f
     const val FocusScaleAnimationMs = 120
+}
+
+fun settingsEntryTestTag(stableKey: String): String {
+    return "settings_entry_$stableKey"
 }
 
 @Composable
@@ -285,6 +290,7 @@ private fun SettingsEntryRow(
 
     val rowModifier = modifier
         .fillMaxWidth()
+        .testTag(settingsEntryTestTag(entry.stableKey))
         .run {
             if (interactive) {
                 onFocusChanged { state ->

@@ -34,7 +34,20 @@ class LibraryGridSorterTest {
     }
 
     @Test
-    fun `sortLibraryGridItems keeps null updated timestamps first for updated new`() {
+    fun `sortLibraryGridItems sorts by rating ascending and keeps unrated items last`() {
+        val items = listOf(
+            testGridItem(name = "Alpha", originalIndex = 0, personalRatingHundred = 72),
+            testGridItem(name = "Beta", originalIndex = 1, personalRatingHundred = null),
+            testGridItem(name = "Gamma", originalIndex = 2, personalRatingHundred = 18),
+        )
+
+        val sortedItems = sortLibraryGridItems(items, method = ListSorting.RatingLow)
+
+        assertEquals(listOf("Gamma", "Alpha", "Beta"), sortedItems.map { item -> item.name })
+    }
+
+    @Test
+    fun `sortLibraryGridItems keeps null updated timestamps last for updated new`() {
         val items = listOf(
             testGridItem(name = "Alpha", originalIndex = 0, lastUpdatedUnixTime = 200L),
             testGridItem(name = "Beta", originalIndex = 1, lastUpdatedUnixTime = null),
@@ -43,7 +56,33 @@ class LibraryGridSorterTest {
 
         val sortedItems = sortLibraryGridItems(items, method = ListSorting.UpdatedNew)
 
-        assertEquals(listOf("Beta", "Alpha", "Gamma"), sortedItems.map { item -> item.name })
+        assertEquals(listOf("Alpha", "Gamma", "Beta"), sortedItems.map { item -> item.name })
+    }
+
+    @Test
+    fun `sortLibraryGridItems keeps null release dates last for release date new`() {
+        val items = listOf(
+            testGridItem(name = "Alpha", originalIndex = 0, releaseDateUnixTimeMs = 100L),
+            testGridItem(name = "Beta", originalIndex = 1, releaseDateUnixTimeMs = null),
+            testGridItem(name = "Gamma", originalIndex = 2, releaseDateUnixTimeMs = 300L),
+        )
+
+        val sortedItems = sortLibraryGridItems(items, method = ListSorting.ReleaseDateNew)
+
+        assertEquals(listOf("Gamma", "Alpha", "Beta"), sortedItems.map { item -> item.name })
+    }
+
+    @Test
+    fun `sortLibraryGridItems keeps null release dates last for release date old`() {
+        val items = listOf(
+            testGridItem(name = "Alpha", originalIndex = 0, releaseDateUnixTimeMs = 300L),
+            testGridItem(name = "Beta", originalIndex = 1, releaseDateUnixTimeMs = null),
+            testGridItem(name = "Gamma", originalIndex = 2, releaseDateUnixTimeMs = 100L),
+        )
+
+        val sortedItems = sortLibraryGridItems(items, method = ListSorting.ReleaseDateOld)
+
+        assertEquals(listOf("Gamma", "Alpha", "Beta"), sortedItems.map { item -> item.name })
     }
 
     @Test

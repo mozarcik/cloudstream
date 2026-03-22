@@ -9,6 +9,36 @@ internal object DetailsScreenLoadLogger {
         Log.e(DebugTag, "missing navigation args")
     }
 
+    fun logTmdbResolveStart(
+        request: DetailsTmdbResolveRequest,
+        mode: DetailsScreenMode,
+    ) {
+        Log.d(
+            DebugTag,
+            "resolving tmdb details tmdbId=${request.tmdbId} title=${request.title} preferredApi=${request.preferredApiName} expectedType=${request.expectedType} mode=$mode"
+        )
+    }
+
+    fun logTmdbResolveSuccess(
+        request: DetailsTmdbResolveRequest,
+        resolvedSource: DetailsRouteSource,
+    ) {
+        Log.d(
+            DebugTag,
+            "resolved tmdb details tmdbId=${request.tmdbId} api=${resolvedSource.apiName} url=${resolvedSource.url}"
+        )
+    }
+
+    fun logTmdbResolveUnavailable(
+        request: DetailsTmdbResolveRequest,
+        mode: DetailsScreenMode,
+    ) {
+        Log.w(
+            DebugTag,
+            "tmdb details unavailable tmdbId=${request.tmdbId} title=${request.title} preferredApi=${request.preferredApiName} mode=$mode"
+        )
+    }
+
     fun logPrimaryLoaded(
         primary: DetailsPrimaryStageResult,
         mode: DetailsScreenMode,

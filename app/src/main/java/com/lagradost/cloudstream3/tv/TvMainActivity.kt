@@ -74,11 +74,15 @@ class TvMainActivity : AppCompatActivity() {
                         LocalContentColor provides MaterialTheme.colorScheme.onSurface
                     ) {
                         TvApp(
-                            onBackPressed = onBackPressedDispatcher::onBackPressed,
+                            onBackPressed = ::exitTvApp,
                         )
                     }
                 }
             }
         }
+    }
+
+    private fun exitTvApp() {
+        finishAndRemoveTask()
     }
 }

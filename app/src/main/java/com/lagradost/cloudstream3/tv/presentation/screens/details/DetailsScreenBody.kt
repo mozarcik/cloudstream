@@ -18,7 +18,6 @@ import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
-import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 import kotlinx.coroutines.launch
@@ -41,13 +40,9 @@ internal fun DetailsScreenBody(
     resolveEpisodeDownloadState: (TvEpisode) -> DetailsDownloadButtonUiState,
     resolveEpisodeWatchedState: (TvEpisode) -> Boolean,
     toDownloadUiState: (DetailsDownloadButtonUiState) -> com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsDownloadActionState,
-    onFavoriteClick: () -> Unit,
-    onOpenBookmarkPanel: () -> Unit,
-    onOpenActionsPanel: () -> Unit,
-    onHandleDownloadQuickAction: (DetailsDownloadButtonUiState, Int?, Int?) -> Unit,
+    onAction: (DetailsUiAction) -> Unit,
     onSeasonSelected: (TvSeason) -> Unit,
     onEpisodeSelected: (TvEpisode) -> Unit,
-    onEpisodeQuickActionClick: (TvEpisode, MovieDetailsQuickAction) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     goToPlayer: (PlayerStartTarget) -> Unit,
     modifier: Modifier = Modifier,
@@ -86,21 +81,7 @@ internal fun DetailsScreenBody(
                         }
                     },
                     onQuickActionClick = { quickAction ->
-                        when (quickAction) {
-                            MovieDetailsQuickAction.Bookmark -> onOpenBookmarkPanel()
-                            MovieDetailsQuickAction.Favorite -> onFavoriteClick()
-                            MovieDetailsQuickAction.Download -> onHandleDownloadQuickAction(
-                                downloadButtonState,
-                                null,
-                                null,
-                            )
-                            MovieDetailsQuickAction.More -> onOpenActionsPanel()
-                            MovieDetailsQuickAction.Search -> Unit
-                            MovieDetailsQuickAction.MarkAsWatched -> Unit
-                            MovieDetailsQuickAction.MarkWatchedUpToThisEpisode -> Unit
-                            MovieDetailsQuickAction.RemoveFromWatched -> Unit
-                            MovieDetailsQuickAction.RemoveWatchedUpToThisEpisode -> Unit
-                        }
+                        onAction(DetailsUiAction.HeroQuickAction(quickAction))
                     },
                 )
             }
@@ -119,7 +100,9 @@ internal fun DetailsScreenBody(
                     resolveEpisodeWatchedState = resolveEpisodeWatchedState,
                     toDownloadUiState = toDownloadUiState,
                     onEpisodeSelected = onEpisodeSelected,
-                    onEpisodeQuickActionClick = onEpisodeQuickActionClick,
+                    onEpisodeQuickActionClick = { episode, action ->
+                        onAction(DetailsUiAction.EpisodeQuickAction(episode, action))
+                    },
                 )
             }
 

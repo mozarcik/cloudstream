@@ -25,8 +25,11 @@ enum class Screens(
     SearchFeedGrid,
     Dashboard,
     MovieDetails(args = listOf("url", "apiName")),
+    MovieDetailsResolve,
     TvSeriesDetails(args = listOf("url", "apiName")),
+    TvSeriesDetailsResolve,
     MediaDetails(args = listOf("url", "apiName")),
+    MediaDetailsResolve,
     TvPlayer(args = listOf("url", "apiName", "playbackTarget"));
 
     operator fun invoke(): String {

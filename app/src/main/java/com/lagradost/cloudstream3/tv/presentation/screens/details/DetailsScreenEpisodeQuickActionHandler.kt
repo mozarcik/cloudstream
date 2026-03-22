@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQui
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.ui.result.ACTION_MARK_AS_WATCHED
 import com.lagradost.cloudstream3.ui.result.ACTION_MARK_WATCHED_UP_TO_THIS_EPISODE
+import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
 import kotlinx.coroutines.CoroutineScope
 
 internal fun onDetailsEpisodeQuickAction(
@@ -22,12 +23,12 @@ internal fun onDetailsEpisodeQuickAction(
     episodesStateHolder: DetailsEpisodesStateHolder,
     scope: CoroutineScope,
     openDownloadPanel: (Int?, Int?) -> Unit,
+    openActionsPanel: (Int?, Int?, String?) -> Unit,
     goToPlayer: (PlayerStartTarget) -> Unit,
 ) {
     when (quickAction) {
         MovieDetailsQuickAction.MarkAsWatched,
-        MovieDetailsQuickAction.RemoveFromWatched,
-        MovieDetailsQuickAction.Bookmark -> executeDetailsEpisodeQuickAction(
+        MovieDetailsQuickAction.RemoveFromWatched -> executeDetailsEpisodeQuickAction(
             actionId = ACTION_MARK_AS_WATCHED,
             episode = episode,
             selectedSeason = selectedSeason,
@@ -41,8 +42,7 @@ internal fun onDetailsEpisodeQuickAction(
         )
 
         MovieDetailsQuickAction.MarkWatchedUpToThisEpisode,
-        MovieDetailsQuickAction.RemoveWatchedUpToThisEpisode,
-        MovieDetailsQuickAction.Favorite -> executeDetailsEpisodeQuickAction(
+        MovieDetailsQuickAction.RemoveWatchedUpToThisEpisode -> executeDetailsEpisodeQuickAction(
             actionId = ACTION_MARK_WATCHED_UP_TO_THIS_EPISODE,
             episode = episode,
             selectedSeason = selectedSeason,
@@ -63,12 +63,21 @@ internal fun onDetailsEpisodeQuickAction(
             goToPlayer = goToPlayer,
         )
 
-        MovieDetailsQuickAction.More -> openDetailsEpisodeDownloadPanel(
-            episode = episode,
-            selectedSeason = selectedSeason,
-            openDownloadPanel = openDownloadPanel,
-        )
+        MovieDetailsQuickAction.More -> {
+            val preferredSeason = resolveDetailsEpisodeSeason(episode, selectedSeason)
+            openActionsPanel(
+                preferredSeason,
+                episode.episodeNumber,
+                context.getNameFull(
+                    name = episode.title,
+                    episode = episode.episodeNumber,
+                    season = preferredSeason,
+                ),
+            )
+        }
 
+        MovieDetailsQuickAction.Bookmark,
+        MovieDetailsQuickAction.Favorite,
         MovieDetailsQuickAction.Search -> Unit
     }
 }

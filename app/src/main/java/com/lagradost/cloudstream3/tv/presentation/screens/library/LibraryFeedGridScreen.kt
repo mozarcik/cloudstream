@@ -24,11 +24,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.automirrored.outlined.Sort
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.SortByAlpha
+import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Update
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
 import androidx.tv.material3.Icon
@@ -49,6 +55,21 @@ private val LibraryFeedGridHeaderHorizontalPadding = 24.dp
 private val LibraryFeedGridHeaderVerticalPadding = 12.dp
 private val LibraryFeedGridHeaderSpacing = 12.dp
 private val LibraryFeedGridSortChipMaxWidth = 220.dp
+
+private fun librarySortIcon(method: ListSorting?): ImageVector {
+    return when (method) {
+        null,
+        ListSorting.Query -> Icons.AutoMirrored.Outlined.Sort
+        ListSorting.RatingHigh,
+        ListSorting.RatingLow -> Icons.Outlined.StarOutline
+        ListSorting.AlphabeticalA,
+        ListSorting.AlphabeticalZ -> Icons.Outlined.SortByAlpha
+        ListSorting.UpdatedNew -> Icons.Outlined.Update
+        ListSorting.UpdatedOld -> Icons.Outlined.History
+        ListSorting.ReleaseDateNew,
+        ListSorting.ReleaseDateOld -> Icons.Outlined.CalendarToday
+    }
+}
 
 @Composable
 fun LibraryFeedGridScreen(
@@ -77,6 +98,9 @@ fun LibraryFeedGridScreen(
     var selectedSortMethodOrdinal by rememberSaveable(section.id) { mutableStateOf<Int?>(null) }
     var isSortPanelOpen by rememberSaveable(section.id) { mutableStateOf(false) }
     var wasSortPanelOpen by rememberSaveable(section.id) { mutableStateOf(false) }
+    var shouldRestoreSortButtonFocus by rememberSaveable(section.id) { mutableStateOf(true) }
+    var sortResetGridToken by rememberSaveable(section.id) { mutableIntStateOf(0) }
+    var firstGridItemFocusRequestToken by rememberSaveable(section.id) { mutableIntStateOf(0) }
     var sortButtonFocusRequestToken by rememberSaveable(section.id) { mutableIntStateOf(0) }
     var hasInitialFocusBeenHandled by rememberSaveable(section.id) { mutableStateOf(false) }
 
@@ -105,13 +129,26 @@ fun LibraryFeedGridScreen(
     LaunchedEffect(isSortPanelOpen, hasSortOptions) {
         if (!hasSortOptions) {
             wasSortPanelOpen = false
+            shouldRestoreSortButtonFocus = true
             return@LaunchedEffect
         }
 
         if (!isSortPanelOpen && wasSortPanelOpen) {
-            sortButtonFocusRequestToken += 1
+            if (shouldRestoreSortButtonFocus) {
+                sortButtonFocusRequestToken += 1
+            }
+            shouldRestoreSortButtonFocus = true
         }
         wasSortPanelOpen = isSortPanelOpen
+    }
+
+    LaunchedEffect(sortResetGridToken, isSortPanelOpen, sortedGridItems) {
+        if (sortResetGridToken <= 0 || isSortPanelOpen || sortedGridItems.isEmpty()) {
+            return@LaunchedEffect
+        }
+
+        gridState.scrollToItem(0)
+        firstGridItemFocusRequestToken = sortResetGridToken
     }
 
     BackHandler(enabled = isSortPanelOpen) {
@@ -119,7 +156,11 @@ fun LibraryFeedGridScreen(
     }
 
     FocusRequestEffect(
-        requester = firstItemFocusRequester,
+        requester = if (hasSortOptions) {
+            sortButtonFocusRequester
+        } else {
+            firstItemFocusRequester
+        },
         requestKey = section.id,
         enabled = pendingRestoreTargetId == null &&
             !isSortPanelOpen &&
@@ -133,6 +174,17 @@ fun LibraryFeedGridScreen(
         requester = sortButtonFocusRequester,
         requestKey = sortButtonFocusRequestToken,
         enabled = sortButtonFocusRequestToken > 0
+    )
+
+    FocusRequestEffect(
+        requester = firstItemFocusRequester,
+        requestKey = firstGridItemFocusRequestToken,
+        enabled = firstGridItemFocusRequestToken > 0 &&
+            !isSortPanelOpen &&
+            sortedGridItems.isNotEmpty(),
+        onFocused = {
+            hasInitialFocusBeenHandled = true
+        }
     )
 
     HaloHost(
@@ -165,10 +217,12 @@ fun LibraryFeedGridScreen(
                     if (hasSortOptions) {
                         LibraryGridSortChip(
                             label = currentSortLabel,
+                            sortMethod = selectedSortMethod,
                             focusRequester = sortButtonFocusRequester,
                             upFocusRequester = topBarFocusRequester,
                             downFocusRequester = firstItemFocusRequester,
                             onClick = {
+                                shouldRestoreSortButtonFocus = true
                                 isSortPanelOpen = true
                             }
                         )
@@ -208,6 +262,8 @@ fun LibraryFeedGridScreen(
                 selectedSortMethod = selectedSortMethod,
                 onSortSelected = { method ->
                     selectedSortMethodOrdinal = method?.ordinal
+                    shouldRestoreSortButtonFocus = false
+                    sortResetGridToken += 1
                     isSortPanelOpen = false
                 },
                 onCloseRequested = {
@@ -221,6 +277,7 @@ fun LibraryFeedGridScreen(
 @Composable
 private fun LibraryGridSortChip(
     label: String,
+    sortMethod: ListSorting?,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
@@ -231,7 +288,7 @@ private fun LibraryGridSortChip(
         onClick = onClick,
         leadingIcon = {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.Sort,
+                imageVector = librarySortIcon(sortMethod),
                 contentDescription = null
             )
         },
@@ -262,51 +319,33 @@ private fun LibrarySortPanel(
     onSortSelected: (ListSorting?) -> Unit,
     onCloseRequested: () -> Unit,
 ) {
-    val panelItems = remember(supportedSortingMethods, selectedSortMethod, onSortSelected) {
-        buildList {
-            add(
-                SidePanelMenuItem(
-                    id = "library_sort_default",
-                    title = "None",
-                    selected = selectedSortMethod == null,
-                    onClick = { onSortSelected(null) }
-                )
-            )
-
-            supportedSortingMethods.forEach { method ->
-                add(
-                    SidePanelMenuItem(
-                        id = "library_sort_${method.name}",
-                        title = method.name,
-                        selected = selectedSortMethod == method,
-                        onClick = { onSortSelected(method) }
-                    )
+    val panelOptions = remember(supportedSortingMethods, selectedSortMethod) {
+        buildLibrarySortPanelOptions(
+            supportedSortingMethods = supportedSortingMethods,
+            selectedSortMethod = selectedSortMethod,
+        )
+    }
+    val panelItems = panelOptions.map { option ->
+        val method = option.method
+        SidePanelMenuItem(
+            id = option.id,
+            title = stringResource((method ?: ListSorting.Query).stringRes),
+            selected = option.selected,
+            onClick = { onSortSelected(method) },
+            leadingContent = {
+                Icon(
+                    imageVector = librarySortIcon(method),
+                    contentDescription = null
                 )
             }
-        }
+        )
     }
 
     MenuListSidePanel(
         visible = visible,
         onCloseRequested = onCloseRequested,
         title = stringResource(R.string.sort_by),
-        items = panelItems.map { item ->
-            item.copy(
-                title = when (item.id) {
-                    "library_sort_default" -> stringResource(ListSorting.Query.stringRes)
-                    else -> {
-                        val method = supportedSortingMethods.firstOrNull { sort ->
-                            item.id == "library_sort_${sort.name}"
-                        }
-                        if (method != null) {
-                            stringResource(method.stringRes)
-                        } else {
-                            item.title
-                        }
-                    }
-                }
-            )
-        },
+        items = panelItems,
         initialFocusedItemId = selectedSortMethod?.let { method ->
             "library_sort_${method.name}"
         } ?: "library_sort_default",
@@ -315,3 +354,34 @@ private fun LibrarySortPanel(
         panelTestTag = "library_sort_panel",
     )
 }
+
+internal fun buildLibrarySortPanelOptions(
+    supportedSortingMethods: List<ListSorting>,
+    selectedSortMethod: ListSorting?,
+): List<LibrarySortPanelOption> {
+    return buildList {
+        add(
+            LibrarySortPanelOption(
+                id = "library_sort_default",
+                method = null,
+                selected = selectedSortMethod == null,
+            )
+        )
+
+        supportedSortingMethods.forEach { method ->
+            add(
+                LibrarySortPanelOption(
+                    id = "library_sort_${method.name}",
+                    method = method,
+                    selected = selectedSortMethod == method,
+                )
+            )
+        }
+    }
+}
+
+internal data class LibrarySortPanelOption(
+    val id: String,
+    val method: ListSorting?,
+    val selected: Boolean,
+)

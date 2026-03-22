@@ -1,43 +1,18 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -57,17 +32,13 @@ import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
-import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.MasterDetailSettingsScreen
-import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
-import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
-import kotlinx.coroutines.launch
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
-private val DashboardTopBarHorizontalPadding = 48.dp
-private val DashboardTopBarVerticalPadding = 10.dp
+internal val DashboardTopBarHorizontalPadding = 48.dp
+internal val DashboardTopBarVerticalPadding = 10.dp
 
 @Composable
 fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.current): Padding {
@@ -87,6 +58,7 @@ fun DashboardScreen(
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
+    openTmdbLibraryDetailsScreen: (item: MediaItemCompat) -> Boolean,
     openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
     isComingBackFromDifferentScreen: Boolean,
     resetIsComingBackFromDifferentScreen: () -> Unit,
@@ -94,259 +66,56 @@ fun DashboardScreen(
     onSearchPrefillConsumed: () -> Unit,
     onBackPressed: () -> Unit
 ) {
-    val density = LocalDensity.current
     val navController = rememberNavController()
-    val coroutineScope = rememberCoroutineScope()
-    val topBarFocusRequesters = rememberFocusRequesters(count = TopBarTabs.size + 1)
 
-    var isTopBarVisible by remember { mutableStateOf(true) }
-    var isTopBarFocused by remember { mutableStateOf(false) }
-    var isTopBarFocusable by remember { mutableStateOf(true) }
-    var isTopBarDownNavigationEnabled by remember { mutableStateOf(true) }
-
-    val homeTabIndex = remember { TopBarTabs.indexOf(Screens.Home).coerceAtLeast(0) }
-    val libraryTabIndex = remember { TopBarTabs.indexOf(Screens.Library).coerceAtLeast(0) }
-    val searchTabIndex = remember { TopBarTabs.indexOf(Screens.Search).coerceAtLeast(0) }
-    var currentDestination: String? by remember { mutableStateOf(null) }
-    var previousDestination: String? by remember { mutableStateOf(null) }
-    var homeRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var libraryRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var homeFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var libraryFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    val currentTopBarSelectedTabIndex by remember(
-        currentDestination,
-        homeTabIndex,
-        libraryTabIndex,
-        searchTabIndex
-    ) {
-        derivedStateOf {
-            val destination = currentDestination ?: return@derivedStateOf homeTabIndex
-            if (destination == Screens.HomeFeedGrid.name) {
-                return@derivedStateOf homeTabIndex
-            }
-            if (destination == Screens.LibraryFeedGrid.name) {
-                return@derivedStateOf libraryTabIndex
-            }
-            if (destination == Screens.SearchFeedGrid.name) {
-                return@derivedStateOf searchTabIndex
-            }
-
-            val screen = runCatching { Screens.valueOf(destination) }.getOrNull()
-            val tabIndex = screen?.let { TopBarTabs.indexOf(it) } ?: -1
-            if (tabIndex >= 0) tabIndex else homeTabIndex
-        }
-    }
-    val currentTopBarFocusRequester = topBarFocusRequesters[
-        (currentTopBarSelectedTabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
-    ]
-
-    DisposableEffect(Unit) {
-        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
-            currentDestination = destination.route
-        }
-
-        navController.addOnDestinationChangedListener(listener)
-
-        onDispose {
-            navController.removeOnDestinationChangedListener(listener)
-        }
-    }
-
-    LaunchedEffect(currentDestination) {
-        isTopBarDownNavigationEnabled = true
-        when {
-            previousDestination == Screens.HomeFeedGrid.name &&
-                currentDestination == Screens.Home.name -> {
-                homeRestoreFocusToken += 1
-            }
-
-            previousDestination == Screens.LibraryFeedGrid.name &&
-                currentDestination == Screens.Library.name -> {
-                libraryRestoreFocusToken += 1
-            }
-        }
-        if (currentDestination != null) {
-            previousDestination = currentDestination
-        }
-    }
-
-    LaunchedEffect(isComingBackFromDifferentScreen, currentDestination) {
-        if (!isComingBackFromDifferentScreen) return@LaunchedEffect
-
-        when (currentDestination) {
-            Screens.Home.name -> {
-                homeRestoreFocusToken += 1
-            }
-
-            Screens.Library.name -> {
-                libraryRestoreFocusToken += 1
-            }
-
-            Screens.HomeFeedGrid.name -> {
-                homeFeedGridRestoreFocusToken += 1
-            }
-
-            Screens.LibraryFeedGrid.name -> {
-                libraryFeedGridRestoreFocusToken += 1
-            }
-        }
-        resetIsComingBackFromDifferentScreen()
-    }
-
-    fun requestTopBarFocus(tabIndex: Int) {
-        val requesterIndex = (tabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
-        coroutineScope.launch {
-            topBarFocusRequesters[requesterIndex].requestFocusWithRetry()
-        }
-    }
-
-    BackPressHandledArea(
-        // 1. On user's first back press, bring focus to the current selected tab, if TopBar is not
-        //    visible, first make it visible, then focus the selected tab
-        // 2. On second back press, bring focus back to the first displayed tab
-        // 3. On third back press, exit the app
-        onBackPressed = {
-            val isOnTopBarTab = TopBarTabs.any { tab -> tab() == currentDestination }
-            if (!isOnTopBarTab && navController.previousBackStackEntry != null) {
-                navController.popBackStack()
-            } else if (!isTopBarVisible) {
-                isTopBarVisible = true
-                requestTopBarFocus(currentTopBarSelectedTabIndex)
-            } else if (currentTopBarSelectedTabIndex == homeTabIndex) onBackPressed()
-            else if (!isTopBarFocused) {
-                requestTopBarFocus(currentTopBarSelectedTabIndex)
-            } else {
-                requestTopBarFocus(homeTabIndex)
-            }
-        }
-    ) {
-        // We do not want to focus the TopBar everytime we come back from another screen e.g.
-        // MovieDetails, CategoryMovieList or VideoPlayer screen
-        var wasTopBarFocusRequestedBefore by rememberSaveable { mutableStateOf(false) }
-
-        var topBarHeightPx: Int by rememberSaveable { mutableIntStateOf(0) }
-
-        // Used to show/hide DashboardTopBar
-        val topBarYOffsetPx by animateIntAsState(
-            targetValue = if (isTopBarVisible) 0 else -topBarHeightPx,
-            animationSpec = tween(),
-            label = "",
-            finishedListener = {
-                if (it == -topBarHeightPx && isComingBackFromDifferentScreen) {
-                    resetIsComingBackFromDifferentScreen()
-                }
-            }
-        )
-
-        // Used to push down/pull up NavHost when DashboardTopBar is shown/hidden
-        val navHostTopPaddingDp by animateDpAsState(
-            targetValue = if (isTopBarVisible) with(density) { topBarHeightPx.toDp() } else 0.dp,
-            animationSpec = tween(),
-            label = "",
-        )
-
-        LaunchedEffect(Unit) {
-            if (!wasTopBarFocusRequestedBefore) {
-                requestTopBarFocus(currentTopBarSelectedTabIndex)
-                wasTopBarFocusRequestedBefore = true
-            }
-        }
-
-        DashboardTopBar(
-            modifier = Modifier
-                .offset { IntOffset(x = 0, y = topBarYOffsetPx) }
-                .onSizeChanged { topBarHeightPx = it.height }
-                .onFocusChanged { isTopBarFocused = it.hasFocus }
-                .padding(horizontal = DashboardTopBarHorizontalPadding)
-                .padding(
-                    top = DashboardTopBarVerticalPadding,
-                    bottom = DashboardTopBarVerticalPadding
-                ),
-            selectedTabIndex = currentTopBarSelectedTabIndex,
-            focusRequesters = topBarFocusRequesters,
-            isFocusable = isTopBarFocusable,
-            isDownNavigationEnabled = isTopBarDownNavigationEnabled,
-        ) { screen ->
-            val targetRoute = screen()
-            if (currentDestination != targetRoute) {
-                navController.navigate(targetRoute) {
-                    if (screen == TopBarTabs[0]) popUpTo(TopBarTabs[0].invoke())
-                    launchSingleTop = true
-                }
-            }
-        }
-
+    DashboardScaffold(
+        isComingBackFromDifferentScreen = isComingBackFromDifferentScreen,
+        resetIsComingBackFromDifferentScreen = resetIsComingBackFromDifferentScreen,
+        searchPrefillQuery = searchPrefillQuery,
+        onSearchPrefillConsumed = onSearchPrefillConsumed,
+        onBackPressed = onBackPressed,
+        navController = navController,
+    ) { controller, bodyModifier, bodyContext ->
         Body(
             openMovieDetailsScreen = openMovieDetailsScreen,
             openTvSeriesDetailsScreen = openTvSeriesDetailsScreen,
             openMediaDetailsScreen = openMediaDetailsScreen,
+            openTmdbLibraryDetailsScreen = openTmdbLibraryDetailsScreen,
             openVideoPlayer = openVideoPlayer,
-            updateTopBarVisibility = { isTopBarVisible = it },
-            updateTopBarFocusable = { isTopBarFocusable = it },
-            updateTopBarDownNavigationEnabled = { isTopBarDownNavigationEnabled = it },
-            searchPrefillQuery = searchPrefillQuery,
-            onSearchPrefillConsumed = onSearchPrefillConsumed,
-            topBarSelectedFocusRequester = currentTopBarFocusRequester,
-            homeRestoreFocusToken = homeRestoreFocusToken,
-            libraryRestoreFocusToken = libraryRestoreFocusToken,
-            homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
-            libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
-            navController = navController,
-            modifier = Modifier.padding(top = navHostTopPaddingDp),
+            updateTopBarVisibility = bodyContext.updateTopBarVisibility,
+            updateTopBarFocusable = bodyContext.updateTopBarFocusable,
+            updateTopBarDownNavigationEnabled = bodyContext.updateTopBarDownNavigationEnabled,
+            topBarSelectedFocusRequester = bodyContext.topBarSelectedFocusRequester,
+            homeRestoreFocusToken = bodyContext.homeRestoreFocusToken,
+            libraryRestoreFocusToken = bodyContext.libraryRestoreFocusToken,
+            homeFeedGridRestoreFocusToken = bodyContext.homeFeedGridRestoreFocusToken,
+            libraryFeedGridRestoreFocusToken = bodyContext.libraryFeedGridRestoreFocusToken,
+            requestHomeTopBarFocus = bodyContext.requestHomeTopBarFocus,
+            navController = controller,
+            modifier = bodyModifier,
         )
     }
 }
-
-@Composable
-private fun BackPressHandledArea(
-    onBackPressed: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit,
-) =
-    Box(
-        modifier = Modifier
-            .onPreviewKeyEvent {
-                if (it.key == Key.Back && it.type == KeyEventType.KeyUp) {
-                    onBackPressed()
-                    true
-                } else {
-                    false
-                }
-            }
-            .then(modifier),
-        content = content
-    )
 
 @Composable
 private fun Body(
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
+    openTmdbLibraryDetailsScreen: (item: MediaItemCompat) -> Boolean,
     openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
     updateTopBarVisibility: (Boolean) -> Unit,
     updateTopBarFocusable: (Boolean) -> Unit,
     updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
-    searchPrefillQuery: String?,
-    onSearchPrefillConsumed: () -> Unit,
     topBarSelectedFocusRequester: FocusRequester,
     homeRestoreFocusToken: Int,
     libraryRestoreFocusToken: Int,
     homeFeedGridRestoreFocusToken: Int,
     libraryFeedGridRestoreFocusToken: Int,
+    requestHomeTopBarFocus: () -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
-    LaunchedEffect(searchPrefillQuery) {
-        val query = searchPrefillQuery?.trim().orEmpty()
-        if (query.isBlank()) return@LaunchedEffect
-
-        SearchPrefillStore.setPendingQuery(query)
-        navController.navigate(Screens.Search()) {
-            launchSingleTop = true
-        }
-        onSearchPrefillConsumed()
-    }
-
     NavHost(
         modifier = modifier,
         navController = navController,
@@ -420,6 +189,9 @@ private fun Body(
         composable(Screens.Library()) {
             LibraryScreen(
                 onMediaClick = { item ->
+                    if (openTmdbLibraryDetailsScreen(item)) {
+                        return@LibraryScreen
+                    }
                     when (item) {
                         is MediaItemCompat.Movie -> {
                             openMovieDetailsScreen(item)
@@ -444,6 +216,9 @@ private fun Body(
         composable(Screens.LibraryFeedGrid()) {
             LibraryFeedGridScreen(
                 onMediaClick = { item ->
+                    if (openTmdbLibraryDetailsScreen(item)) {
+                        return@LibraryFeedGridScreen
+                    }
                     when (item) {
                         is MediaItemCompat.Movie -> {
                             openMovieDetailsScreen(item)
@@ -575,18 +350,42 @@ private fun Body(
             )
         }
         composable(Screens.Settings()) {
-            MasterDetailSettingsScreen(
+            DashboardSettingsRouteScreen(
+                updateTopBarVisibility = updateTopBarVisibility,
+                updateTopBarFocusable = updateTopBarFocusable,
+                updateTopBarDownNavigationEnabled = updateTopBarDownNavigationEnabled,
                 onExitSettings = {
-                    updateTopBarVisibility(true)
-                    updateTopBarFocusable(true)
-                    updateTopBarDownNavigationEnabled(true)
+                    navController.navigateToDashboardTab(Screens.Home)
+                    requestHomeTopBarFocus()
                 },
-                onTopBarFocusableChanged = { focusable ->
-                    updateTopBarFocusable(focusable)
-                },
-                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled
             )
         }
+    }
+}
+
+@Composable
+fun DashboardSettingsRouteScreen(
+    updateTopBarVisibility: (Boolean) -> Unit,
+    updateTopBarFocusable: (Boolean) -> Unit,
+    updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
+    onExitSettings: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+    ) {
+        MasterDetailSettingsScreen(
+            onExitSettings = {
+                updateTopBarVisibility(true)
+                updateTopBarFocusable(true)
+                updateTopBarDownNavigationEnabled(true)
+                onExitSettings()
+            },
+            onTopBarFocusableChanged = updateTopBarFocusable,
+            onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

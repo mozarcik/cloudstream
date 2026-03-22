@@ -30,10 +30,9 @@ internal fun DetailsOverlayPanels(
     onBookmarkSelected: (WatchType) -> Unit,
 ) {
     if (mode.allowsExtendedActions) {
-        val currentTitle = panelsStateHolder.panelSelection?.title
+        val currentTitle = panelsStateHolder.currentActionSelection?.title
             ?: stringResource(R.string.episode_more_options_des)
-        val currentItems = panelsStateHolder.panelSelection?.options
-            ?: panelsStateHolder.panelItems
+        val currentItems = panelsStateHolder.currentActionSelection?.options.orEmpty()
 
         MovieActionsSidePanel(
             visible = panelsStateHolder.isActionsPanelVisible,

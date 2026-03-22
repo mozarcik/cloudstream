@@ -13,6 +13,7 @@ import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
+import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsQuickAction
 import kotlinx.coroutines.CoroutineScope
 
 @Composable
@@ -40,6 +41,7 @@ internal fun DetailsScreenBodyCoordinator(
     closeDownloadPanel: () -> Unit,
     openDownloadPanel: (Int?, Int?) -> Unit,
     onFavoriteClick: () -> Unit,
+    onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     goToPlayer: (PlayerStartTarget) -> Unit,
     modifier: Modifier = Modifier,
@@ -61,50 +63,87 @@ internal fun DetailsScreenBodyCoordinator(
         resolveEpisodeDownloadState = episodesStateHolder::resolveEpisodeDownloadState,
         resolveEpisodeWatchedState = episodesStateHolder::resolveEpisodeWatchedState,
         toDownloadUiState = DetailsDownloadButtonUiState::toMovieDetailsDownloadActionState,
-        onFavoriteClick = onFavoriteClick,
-        onOpenBookmarkPanel = {
-            openDetailsBookmarkPanel(
-                mode = mode,
-                panelsStateHolder = panelsStateHolder,
-                closeDownloadPanel = closeDownloadPanel,
-            )
-        },
-        onOpenActionsPanel = {
-            openDetailsActionsPanel(
-                mode = mode,
-                context = context,
-                actionsCompat = actionsCompat,
-                panelsStateHolder = panelsStateHolder,
-                scope = scope,
-                closeDownloadPanel = closeDownloadPanel,
-            )
-        },
-        onHandleDownloadQuickAction = { state, preferredSeason, preferredEpisode ->
-            handleDetailsDownloadQuickAction(
-                state = state,
-                preferredSeason = preferredSeason,
-                preferredEpisode = preferredEpisode,
-                openDownloadPanel = openDownloadPanel,
-                goToPlayer = goToPlayer,
-            )
+        onAction = { action ->
+            when (action) {
+                is DetailsUiAction.HeroQuickAction -> when (action.action) {
+                    MovieDetailsQuickAction.Bookmark -> openDetailsBookmarkPanel(
+                        mode = mode,
+                        panelsStateHolder = panelsStateHolder,
+                        closeDownloadPanel = closeDownloadPanel,
+                    )
+
+                    MovieDetailsQuickAction.Favorite -> onFavoriteClick()
+                    MovieDetailsQuickAction.Download -> handleDetailsDownloadQuickAction(
+                        state = downloadButtonState,
+                        preferredSeason = null,
+                        preferredEpisode = null,
+                        openDownloadPanel = openDownloadPanel,
+                        goToPlayer = goToPlayer,
+                    )
+
+                    MovieDetailsQuickAction.More -> openDetailsActionsPanel(
+                        mode = mode,
+                        context = context,
+                        actionsCompat = actionsCompat,
+                        panelsStateHolder = panelsStateHolder,
+                        scope = scope,
+                        closeDownloadPanel = closeDownloadPanel,
+                        onPlayInApp = { episodeData ->
+                            goToPlayer(
+                                episodeData
+                                    ?.let(PlayerStartTarget::DirectEpisodeData)
+                                    ?: PlayerStartTarget.Default
+                            )
+                        },
+                    )
+
+                    MovieDetailsQuickAction.Search -> {
+                        resolveDetailsSearchQuery(details.name)?.let(onManualSearchRequested)
+                    }
+
+                    MovieDetailsQuickAction.MarkAsWatched,
+                    MovieDetailsQuickAction.MarkWatchedUpToThisEpisode,
+                    MovieDetailsQuickAction.RemoveFromWatched,
+                    MovieDetailsQuickAction.RemoveWatchedUpToThisEpisode -> Unit
+                }
+
+                is DetailsUiAction.EpisodeQuickAction -> onDetailsEpisodeQuickAction(
+                    quickAction = action.action,
+                    episode = action.episode,
+                    selectedSeason = selectedSeason,
+                    context = context,
+                    actionsCompat = actionsCompat,
+                    downloadMirrorStateHolder = downloadMirrorStateHolder,
+                    panelsStateHolder = panelsStateHolder,
+                    episodesStateHolder = episodesStateHolder,
+                    scope = scope,
+                    openDownloadPanel = openDownloadPanel,
+                    openActionsPanel = { preferredSeason, preferredEpisode, title ->
+                        openDetailsActionsPanel(
+                            mode = mode,
+                            context = context,
+                            actionsCompat = actionsCompat,
+                            panelsStateHolder = panelsStateHolder,
+                            scope = scope,
+                            closeDownloadPanel = closeDownloadPanel,
+                            preferredSeason = preferredSeason,
+                            preferredEpisode = preferredEpisode,
+                            title = title,
+                            onPlayInApp = { episodeData ->
+                                goToPlayer(
+                                    episodeData
+                                        ?.let(PlayerStartTarget::DirectEpisodeData)
+                                        ?: PlayerStartTarget.Default
+                                )
+                            },
+                        )
+                    },
+                    goToPlayer = goToPlayer,
+                )
+            }
         },
         onSeasonSelected = { season -> episodesStateHolder.onSeasonSelected(season.id) },
         onEpisodeSelected = { episode -> goToPlayer(PlayerStartTarget.DirectEpisodeData(episode.data)) },
-        onEpisodeQuickActionClick = { episode, quickAction ->
-            onDetailsEpisodeQuickAction(
-                quickAction = quickAction,
-                episode = episode,
-                selectedSeason = selectedSeason,
-                context = context,
-                actionsCompat = actionsCompat,
-                downloadMirrorStateHolder = downloadMirrorStateHolder,
-                panelsStateHolder = panelsStateHolder,
-                episodesStateHolder = episodesStateHolder,
-                scope = scope,
-                openDownloadPanel = openDownloadPanel,
-                goToPlayer = goToPlayer,
-            )
-        },
         refreshScreenWithNewItem = refreshScreenWithNewItem,
         goToPlayer = goToPlayer,
         modifier = modifier,

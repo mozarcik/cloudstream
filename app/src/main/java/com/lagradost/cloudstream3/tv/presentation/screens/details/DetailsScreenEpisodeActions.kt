@@ -10,17 +10,6 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarg
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-internal fun openDetailsEpisodeDownloadPanel(
-    episode: TvEpisode,
-    selectedSeason: TvSeason?,
-    openDownloadPanel: (Int?, Int?) -> Unit,
-) {
-    openDownloadPanel(
-        resolveDetailsEpisodeSeason(episode = episode, selectedSeason = selectedSeason),
-        episode.episodeNumber,
-    )
-}
-
 internal fun executeDetailsEpisodeQuickAction(
     actionId: Int,
     episode: TvEpisode,

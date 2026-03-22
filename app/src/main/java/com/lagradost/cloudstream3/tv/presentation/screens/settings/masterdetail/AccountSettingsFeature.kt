@@ -19,6 +19,7 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.malApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.openSubtitlesApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.simklApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.subDlApi
+import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.tmdbApi
 import com.lagradost.cloudstream3.syncproviders.AuthRepo
 import com.lagradost.cloudstream3.syncproviders.SubtitleRepo
 import com.lagradost.cloudstream3.syncproviders.SyncRepo
@@ -165,6 +166,10 @@ class AccountSettingsFeature(
                 authRepo = SyncRepo(simklApi)
             ),
             AccountProvider(
+                stableId = "tmdb",
+                authRepo = SyncRepo(tmdbApi)
+            ),
+            AccountProvider(
                 stableId = "opensubtitles",
                 authRepo = openSubtitlesRepo
             ),
@@ -282,6 +287,7 @@ class AccountSettingsFeature(
                 providerName = openSubtitlesRepo.name,
                 createAccountUrl = openSubtitlesRepo.createAccountUrl,
                 isPreview = isPreview,
+                onBack = onBack,
                 onAccountChanged = {
                     onDataChanged(AccountSettingsScreenIds.Prefix)
                 },

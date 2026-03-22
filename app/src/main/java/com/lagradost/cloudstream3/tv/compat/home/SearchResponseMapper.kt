@@ -11,6 +11,7 @@ import com.lagradost.cloudstream3.isEpisodeBased
 import com.lagradost.cloudstream3.tv.compat.resume.ContinueWatchingState
 import com.lagradost.cloudstream3.tv.compat.resume.ResumePlaybackContext
 import com.lagradost.cloudstream3.syncproviders.SyncAPI
+import com.lagradost.cloudstream3.syncproviders.providers.TMDB_PROVIDER_NAME
 import com.lagradost.cloudstream3.utils.DataStoreHelper.ResumeWatchingResult
 import com.lagradost.cloudstream3.utils.DataStoreHelper.fixVisual
 import java.util.Calendar
@@ -39,7 +40,13 @@ object SearchResponseMapper {
                 val releaseYear = this.releaseDate?.let { date ->
                     Calendar.getInstance().apply { time = date }.get(Calendar.YEAR)
                 }
-                val poster = this.posterUrl.orEmpty()
+                val poster = this.posterUrl
+                    ?.takeIf { it.isNotBlank() }
+                    ?: this.backgroundPosterUrl
+                        ?.takeIf { it.isNotBlank() }
+                    .orEmpty()
+                val backdrop = this.backgroundPosterUrl?.takeIf { it.isNotBlank() }
+                val tmdbId = this.id.takeIf { this.apiName == TMDB_PROVIDER_NAME }
 
                 if (shouldTreatAsSeries) {
                     MediaItemCompat.TvSeries(
@@ -50,6 +57,8 @@ object SearchResponseMapper {
                         apiName = this.apiName,
                         type = if (mediaType.isEpisodeBased()) mediaType else inferredSeriesType ?: TvType.TvSeries,
                         score = this.score,
+                        backdropUri = backdrop,
+                        tmdbId = tmdbId,
                         description = this.plot,
                         year = releaseYear,
                         episodes = this.episodesTotal,
@@ -63,6 +72,8 @@ object SearchResponseMapper {
                         apiName = this.apiName,
                         type = mediaType,
                         score = this.score,
+                        backdropUri = backdrop,
+                        tmdbId = tmdbId,
                         description = this.plot,
                         year = releaseYear
                     )
@@ -75,6 +86,8 @@ object SearchResponseMapper {
                         apiName = this.apiName,
                         type = mediaType,
                         score = this.score,
+                        backdropUri = backdrop,
+                        tmdbId = tmdbId,
                         description = this.plot
                     )
                 }

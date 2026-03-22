@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.CountDownTimer
 import android.view.View
 import android.view.View.FOCUS_DOWN
+import android.view.Window
 import android.view.inputmethod.EditorInfo
 import android.widget.TextView
 import androidx.annotation.UiThread
@@ -33,6 +34,7 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.kitsuAp
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.openSubtitlesApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.simklApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.subDlApi
+import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.tmdbApi
 import com.lagradost.cloudstream3.syncproviders.AuthLoginResponse
 import com.lagradost.cloudstream3.syncproviders.AuthRepo
 import com.lagradost.cloudstream3.syncproviders.AuthUser
@@ -167,12 +169,15 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
             }
 
             val dialog = builder.create()
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
 
             ioSafe {
+                var hasSpecificPinErrorMessage = false
                 val pinCodeData = try {
                     api.pinRequest()
                 } catch (e: ErrorLoadingException) {
                     if (e.message != null) {
+                        hasSpecificPinErrorMessage = true
                         showToast(e.message)
                         null
                     } else {
@@ -183,16 +188,20 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
                     null
                 }
                 if (pinCodeData == null) {
-                    if (api.hasOAuth2) {
-                        showToast(R.string.device_pin_error_message)
-                        api.openOAuth2PageWithToast()
-                    } else {
-                        showToast(
-                            txt(
-                                R.string.authenticated_user_fail,
-                                api.name
+                    when (resolvePinRequestFailureAction(api.hasOAuth2, hasSpecificPinErrorMessage)) {
+                        PinRequestFailureAction.None -> Unit
+                        PinRequestFailureAction.OpenOAuth -> {
+                            showToast(R.string.device_pin_error_message)
+                            api.openOAuth2PageWithToast()
+                        }
+                        PinRequestFailureAction.ShowGenericAuthFailure -> {
+                            showToast(
+                                txt(
+                                    R.string.authenticated_user_fail,
+                                    api.name
+                                )
                             )
-                        )
+                        }
                     }
                     return@ioSafe
                 }
@@ -216,13 +225,11 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
                 activity.runOnUiThread {
                     dialog.show()
                     binding.apply {
-                        devicePinCode.setText(txt(pinCodeData.userCode))
-                        deviceAuthMessage.setText(
-                            txt(
-                                R.string.device_pin_url_message,
-                                pinCodeData.verificationUrl
-                            )
-                        )
+                        val userCode = pinCodeData.userCode
+                        devicePinCode.isVisible = shouldShowDevicePinCode(userCode)
+                        devicePinCode.setText(txt(userCode))
+                        deviceAuthMessage.setText(R.string.device_pin_qr_message)
+                        deviceAuthUrl.setText(pinCodeData.verificationUrl)
                         deviceAuthQrcode.loadImage(qrCodeImage)
                     }
 
@@ -466,6 +473,7 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
                 R.string.kitsu_key to SyncRepo(kitsuApi),
                 R.string.anilist_key to SyncRepo(aniListApi),
                 R.string.simkl_key to SyncRepo(simklApi),
+                R.string.tmdb_key to SyncRepo(tmdbApi),
                 R.string.opensubtitles_key to SubtitleRepo(openSubtitlesApi),
                 R.string.subdl_key to SubtitleRepo(subDlApi),
             )
@@ -487,4 +495,31 @@ class SettingsAccount : BasePreferenceFragmentCompat(), BiometricCallback {
             }
         }
     }
+}
+
+internal enum class PinRequestFailureAction {
+    None,
+    OpenOAuth,
+    ShowGenericAuthFailure,
+}
+
+internal fun resolvePinRequestFailureAction(
+    hasOAuth2: Boolean,
+    hasSpecificPinErrorMessage: Boolean,
+): PinRequestFailureAction {
+    if (hasSpecificPinErrorMessage) {
+        return PinRequestFailureAction.None
+    }
+
+    return if (hasOAuth2) {
+        PinRequestFailureAction.OpenOAuth
+    } else {
+        PinRequestFailureAction.ShowGenericAuthFailure
+    }
+}
+
+internal fun shouldShowDevicePinCode(userCode: CharSequence?): Boolean {
+    val normalized = userCode?.toString()?.trim().orEmpty()
+    if (normalized.isBlank()) return false
+    return !normalized.equals("SCAN QR", ignoreCase = true)
 }

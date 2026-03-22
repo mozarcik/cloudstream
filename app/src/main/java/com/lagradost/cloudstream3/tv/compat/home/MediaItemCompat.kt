@@ -22,6 +22,7 @@ sealed class MediaItemCompat {
     abstract val type: TvType?
     abstract val score: Score?
     open val backdropUri: String? = null
+    open val tmdbId: Int? = null
     open val description: String? = null
     open val continueWatching: ContinueWatchingState? = null
     
@@ -40,6 +41,7 @@ sealed class MediaItemCompat {
         override val type: TvType?,
         override val score: Score?,
         override val backdropUri: String? = null,
+        override val tmdbId: Int? = null,
         override val description: String? = null,
         val year: Int? = null,
         override val continueWatching: ContinueWatchingState? = null,
@@ -60,6 +62,7 @@ sealed class MediaItemCompat {
         override val type: TvType?,
         override val score: Score?,
         override val backdropUri: String? = null,
+        override val tmdbId: Int? = null,
         override val description: String? = null,
         val year: Int? = null,
         val episodes: Int? = null,
@@ -81,6 +84,7 @@ sealed class MediaItemCompat {
         override val type: TvType?,
         override val score: Score?,
         override val backdropUri: String? = null,
+        override val tmdbId: Int? = null,
         override val description: String? = null,
         override val continueWatching: ContinueWatchingState? = null,
     ) : MediaItemCompat()

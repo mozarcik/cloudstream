@@ -24,10 +24,12 @@ class DetailsScreenViewModel(
     private val routeStateHolder = DetailsRouteStateHolder(routeArgs.loadingPreview)
     private val libraryOverridesStateHolder = DetailsLibraryOverridesStateHolder()
     private val loadCoordinator = DetailsScreenLoadCoordinator(repository)
+    private val tmdbSourceResolver = DetailsTmdbSourceResolver()
     private val libraryActionHandler = DetailsLibraryActionHandler(
         repository = repository,
         libraryOverridesStateHolder = libraryOverridesStateHolder,
     )
+    private var activeSource: DetailsRouteSource? = routeArgs.source
 
     val unavailableDetails: UnavailableDetailsUiModel
         get() = routeArgs.unavailableDetails
@@ -41,6 +43,9 @@ class DetailsScreenViewModel(
 
     val actionsCompat: MovieDetailsEpisodeActionsCompat?
         get() = routeStateHolder.actionsCompat
+
+    internal val currentSource: DetailsRouteSource?
+        get() = activeSource
 
     val uiState: StateFlow<DetailsScreenUiState> = combine(
         routeStateHolder.baseUiState,
@@ -64,8 +69,9 @@ class DetailsScreenViewModel(
 
     fun onFavoriteClick() {
         val currentState = uiState.value as? DetailsScreenUiState.Done ?: return
+        val currentSource = activeSource ?: return
         viewModelScope.launch {
-            libraryActionHandler.toggleFavorite(currentState, routeArgs.source)
+            libraryActionHandler.toggleFavorite(currentState, currentSource)
         }
     }
 
@@ -73,8 +79,9 @@ class DetailsScreenViewModel(
         if (!mode.allowsBookmark) return
 
         val currentState = uiState.value as? DetailsScreenUiState.Done ?: return
+        val currentSource = activeSource ?: return
         viewModelScope.launch {
-            libraryActionHandler.updateBookmark(currentState, routeArgs.source, status)
+            libraryActionHandler.updateBookmark(currentState, currentSource, status)
         }
     }
 
@@ -87,8 +94,8 @@ class DetailsScreenViewModel(
     }
 
     private fun loadDetails() {
-        val source = routeArgs.source
-        if (source == null) {
+        val originSource = routeArgs.source
+        if (originSource == null) {
             DetailsScreenLoadLogger.logMissingArgs()
             routeStateHolder.showError()
             return
@@ -96,9 +103,32 @@ class DetailsScreenViewModel(
 
         libraryOverridesStateHolder.clear()
         routeStateHolder.showLoading()
+        activeSource = originSource
 
         viewModelScope.launch {
             try {
+                val source = routeArgs.tmdbResolveRequest?.let { request ->
+                    DetailsScreenLoadLogger.logTmdbResolveStart(
+                        request = request,
+                        mode = mode,
+                    )
+                    tmdbSourceResolver.resolve(request)?.also { resolvedSource ->
+                        DetailsScreenLoadLogger.logTmdbResolveSuccess(
+                            request = request,
+                            resolvedSource = resolvedSource,
+                        )
+                    } ?: run {
+                        DetailsScreenLoadLogger.logTmdbResolveUnavailable(
+                            request = request,
+                            mode = mode,
+                        )
+                        routeStateHolder.showError()
+                        return@launch
+                    }
+                } ?: originSource
+
+                activeSource = source
+
                 when (val outcome = loadCoordinator.load(
                     url = source.url,
                     apiName = source.apiName,
@@ -118,7 +148,7 @@ class DetailsScreenViewModel(
                     }
                 }
             } catch (e: Exception) {
-                DetailsScreenLoadLogger.logPrimaryFailure(source, mode, e)
+                DetailsScreenLoadLogger.logPrimaryFailure(activeSource ?: originSource, mode, e)
                 routeStateHolder.showError()
             }
         }

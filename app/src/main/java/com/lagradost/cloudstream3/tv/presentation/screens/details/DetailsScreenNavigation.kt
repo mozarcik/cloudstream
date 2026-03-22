@@ -13,6 +13,10 @@ object DetailsScreenNavigation {
     const val LoadingYearBundleKey = "detailsLoadingYear"
     const val LoadingTypeBundleKey = "detailsLoadingType"
     const val LoadingProviderBundleKey = "detailsLoadingProvider"
+    const val ResolveTitleBundleKey = "detailsResolveTitle"
+    const val ResolveTmdbIdBundleKey = "detailsResolveTmdbId"
+    const val ResolvePreferredApiBundleKey = "detailsResolvePreferredApi"
+    const val ResolveTypeBundleKey = "detailsResolveType"
 }
 
 @Immutable
@@ -50,14 +54,73 @@ internal fun SavedStateHandle.consumeDetailsLoadingState(): DetailsLoadingState 
     )
 }
 
+internal fun SavedStateHandle.saveDetailsRouteSource(
+    source: DetailsRouteSource?,
+) {
+    set(DetailsScreenNavigation.UrlBundleKey, source?.url)
+    set(DetailsScreenNavigation.ApiNameBundleKey, source?.apiName)
+}
+
+internal fun SavedStateHandle.consumeDetailsRouteSource(): DetailsRouteSource? {
+    val url = remove<String>(DetailsScreenNavigation.UrlBundleKey)
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    val apiName = remove<String>(DetailsScreenNavigation.ApiNameBundleKey)
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    return DetailsRouteSource(url = url, apiName = apiName)
+}
+
+internal fun SavedStateHandle.saveDetailsTmdbResolveRequest(
+    request: DetailsTmdbResolveRequest?,
+) {
+    set(DetailsScreenNavigation.ResolveTitleBundleKey, request?.title)
+    set(DetailsScreenNavigation.ResolveTmdbIdBundleKey, request?.tmdbId)
+    set(DetailsScreenNavigation.ResolvePreferredApiBundleKey, request?.preferredApiName)
+    set(DetailsScreenNavigation.ResolveTypeBundleKey, request?.expectedType?.name)
+}
+
+internal fun SavedStateHandle.consumeDetailsTmdbResolveRequest(): DetailsTmdbResolveRequest? {
+    val title = remove<String>(DetailsScreenNavigation.ResolveTitleBundleKey)
+        ?.takeIf { it.isNotBlank() }
+        ?: return null
+    val tmdbId = remove<Int>(DetailsScreenNavigation.ResolveTmdbIdBundleKey)
+        ?.takeIf { it > 0 }
+        ?: return null
+    return DetailsTmdbResolveRequest(
+        title = title,
+        tmdbId = tmdbId,
+        preferredApiName = remove<String>(DetailsScreenNavigation.ResolvePreferredApiBundleKey)
+            ?.takeIf { it.isNotBlank() },
+        expectedType = remove<String>(DetailsScreenNavigation.ResolveTypeBundleKey)
+            .toTvTypeOrNull(),
+    )
+}
+
 internal fun createDetailsSavedStateHandle(
-    url: String,
-    apiName: String,
+    url: String?,
+    apiName: String?,
     loadingState: DetailsLoadingState,
+    tmdbResolveRequest: DetailsTmdbResolveRequest? = null,
 ): SavedStateHandle {
     return SavedStateHandle().apply {
-        set(DetailsScreenNavigation.UrlBundleKey, url)
-        set(DetailsScreenNavigation.ApiNameBundleKey, apiName)
+        saveDetailsRouteSource(
+            source = url?.takeIf { it.isNotBlank() }?.let { nonBlankUrl ->
+                val nonBlankApiName = apiName?.takeIf { it.isNotBlank() } ?: return@let null
+                DetailsRouteSource(
+                    url = nonBlankUrl,
+                    apiName = nonBlankApiName,
+                )
+            }
+        )
         saveDetailsLoadingState(loadingState)
+        saveDetailsTmdbResolveRequest(tmdbResolveRequest)
+    }
+}
+
+internal fun String?.toTvTypeOrNull(): com.lagradost.cloudstream3.TvType? {
+    if (this.isNullOrBlank()) return null
+    return com.lagradost.cloudstream3.TvType.entries.firstOrNull { type ->
+        type.name == this
     }
 }

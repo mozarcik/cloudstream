@@ -28,6 +28,7 @@ internal fun DetailsScreenContent(
     isSecondaryContentLoading: Boolean,
     goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
+    onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
     onFavoriteClick: () -> Unit,
     onBookmarkClick: (WatchType) -> Unit,
@@ -123,6 +124,7 @@ internal fun DetailsScreenContent(
         closeDownloadPanel = downloadPanelActions.closePanel,
         openDownloadPanel = downloadPanelActions.openPanel,
         onFavoriteClick = onFavoriteClick,
+        onManualSearchRequested = onManualSearchRequested,
         refreshScreenWithNewItem = refreshScreenWithNewItem,
         goToPlayer = goToPlayer,
         modifier = modifier,
@@ -130,7 +132,6 @@ internal fun DetailsScreenContent(
     DetailsScreenOverlayCoordinator(
         mode = mode,
         details = details,
-        actionsCompat = actionsCompat,
         panelsStateHolder = panelsStateHolder,
         downloadMirrorState = downloadMirrorState,
         downloadMirrorStateHolder = downloadMirrorStateHolder,
@@ -139,7 +140,6 @@ internal fun DetailsScreenContent(
         context = context,
         scope = coroutineScope,
         closeDownloadPanel = downloadPanelActions.closePanel,
-        goToPlayer = goToPlayer,
         onBookmarkClick = onBookmarkClick,
     )
 }

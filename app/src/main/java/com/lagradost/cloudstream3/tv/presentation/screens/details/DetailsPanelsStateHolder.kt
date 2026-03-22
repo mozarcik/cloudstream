@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatPanelItem
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatSelectionRequest
 
 @Stable
@@ -19,37 +18,41 @@ internal class DetailsPanelsStateHolder {
         private set
     var isPanelLoading by mutableStateOf(false)
         private set
-    var panelItems by mutableStateOf<List<MovieDetailsCompatPanelItem>>(emptyList())
+    private var actionPanelStack by mutableStateOf<List<MovieDetailsCompatSelectionRequest>>(emptyList())
         private set
-    var panelSelection by mutableStateOf<MovieDetailsCompatSelectionRequest?>(null)
-        private set
+    val currentActionSelection: MovieDetailsCompatSelectionRequest?
+        get() = actionPanelStack.lastOrNull()
 
     fun openActionsPanel() {
         isActionsPanelVisible = true
-        panelSelection = null
-        panelItems = emptyList()
+        actionPanelStack = emptyList()
     }
 
     fun closeActionsPanel() {
-        panelSelection = null
+        actionPanelStack = emptyList()
         isActionsPanelVisible = false
     }
 
     fun navigateActionsBack() {
-        if (panelSelection != null) {
-            panelSelection = null
+        if (actionPanelStack.size > 1) {
+            actionPanelStack = actionPanelStack.dropLast(1)
             return
         }
         closeActionsPanel()
     }
 
-    fun showActionSelection(request: MovieDetailsCompatSelectionRequest) {
-        panelSelection = request
+    fun showRootActionSelection(request: MovieDetailsCompatSelectionRequest) {
+        actionPanelStack = listOf(request)
         isActionsPanelVisible = true
     }
 
-    fun updatePanelItems(items: List<MovieDetailsCompatPanelItem>) {
-        panelItems = items
+    fun showActionSelection(request: MovieDetailsCompatSelectionRequest) {
+        actionPanelStack = if (actionPanelStack.isEmpty()) {
+            listOf(request)
+        } else {
+            actionPanelStack + request
+        }
+        isActionsPanelVisible = true
     }
 
     fun updatePanelLoading(isLoading: Boolean) {
@@ -73,7 +76,7 @@ internal class DetailsPanelsStateHolder {
         closeBookmarkPanel()
         isActionInProgress = false
         isPanelLoading = false
-        panelItems = emptyList()
+        actionPanelStack = emptyList()
     }
 }
 

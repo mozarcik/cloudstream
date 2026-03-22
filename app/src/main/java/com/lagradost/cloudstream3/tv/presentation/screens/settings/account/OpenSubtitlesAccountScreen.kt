@@ -55,6 +55,7 @@ fun OpenSubtitlesAccountScreen(
     providerName: String,
     createAccountUrl: String?,
     isPreview: Boolean,
+    onBack: () -> Unit,
     onAccountChanged: () -> Unit,
     onOpenCreateAccount: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -71,10 +72,17 @@ fun OpenSubtitlesAccountScreen(
         viewModel.refreshAccountState()
     }
 
-    BackHandler(
-        enabled = !isPreview && uiState.showLoginForm && uiState.accounts.isNotEmpty()
-    ) {
-        viewModel.hideLoginForm()
+    val backAction = resolveOpenSubtitlesBackAction(
+        isPreview = isPreview,
+        showLoginForm = uiState.showLoginForm,
+    )
+
+    BackHandler(enabled = backAction != OpenSubtitlesBackAction.None) {
+        when (backAction) {
+            OpenSubtitlesBackAction.HideLoginForm -> viewModel.hideLoginForm()
+            OpenSubtitlesBackAction.NavigateBack -> onBack()
+            OpenSubtitlesBackAction.None -> Unit
+        }
     }
 
     LazyColumn(
@@ -278,6 +286,23 @@ fun OpenSubtitlesAccountScreen(
                 }
             }
         }
+    }
+}
+
+internal enum class OpenSubtitlesBackAction {
+    None,
+    HideLoginForm,
+    NavigateBack,
+}
+
+internal fun resolveOpenSubtitlesBackAction(
+    isPreview: Boolean,
+    showLoginForm: Boolean,
+): OpenSubtitlesBackAction {
+    return when {
+        isPreview -> OpenSubtitlesBackAction.None
+        showLoginForm -> OpenSubtitlesBackAction.HideLoginForm
+        else -> OpenSubtitlesBackAction.NavigateBack
     }
 }
 

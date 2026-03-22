@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveDone
@@ -466,6 +467,7 @@ private fun DetailsActionsRow(
         MovieDetailsDownloadActionState.Downloaded -> Icons.Default.DownloadDone
         MovieDetailsDownloadActionState.Failed -> Icons.Outlined.ErrorOutline
     }
+    val moreLabel = stringResource(R.string.episode_more_options_des)
 
     Row(
         modifier = modifier,
@@ -479,7 +481,19 @@ private fun DetailsActionsRow(
             modifier = playButtonModifier,
         )
 
-        val actions =
+        val actions = remember(
+            watchedIcon,
+            watchedLabel,
+            watchedAction,
+            watchedUpToIcon,
+            watchedUpToLabel,
+            watchedUpToAction,
+            downloadIcon,
+            downloadLabel,
+            downloadProgressFraction,
+            actionTestTagPrefix,
+            moreLabel,
+        ) {
             listOf(
                 ActionIconSpec(
                     icon = watchedIcon,
@@ -500,7 +514,14 @@ private fun DetailsActionsRow(
                     action = MovieDetailsQuickAction.Download,
                     progressFraction = downloadProgressFraction
                 ),
+                ActionIconSpec(
+                    icon = Icons.Default.MoreVert,
+                    label = moreLabel,
+                    testTag = "${actionTestTagPrefix}action_more",
+                    action = MovieDetailsQuickAction.More,
+                ),
             )
+        }
 
         ActionIconsPill(
             actions = actions,

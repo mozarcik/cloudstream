@@ -14,6 +14,7 @@ internal data class DetailsRouteSource(
 internal data class DetailsScreenRouteArgs(
     val sourceUrl: String?,
     val sourceApiName: String?,
+    val tmdbResolveRequest: DetailsTmdbResolveRequest?,
     val loadingPreview: DetailsLoadingPreview,
     val unavailableDetails: UnavailableDetailsUiModel,
 ) {
@@ -36,11 +37,27 @@ internal fun SavedStateHandle.toDetailsScreenRouteArgs(
 ): DetailsScreenRouteArgs {
     val sourceApiName = get<String>(DetailsScreenNavigation.ApiNameBundleKey)
         ?.takeIf { it.isNotBlank() }
+    val tmdbResolveRequest = get<String>(DetailsScreenNavigation.ResolveTitleBundleKey)
+        ?.takeIf { it.isNotBlank() }
+        ?.let { title ->
+            val tmdbId = get<Int>(DetailsScreenNavigation.ResolveTmdbIdBundleKey)
+                ?.takeIf { it > 0 }
+                ?: return@let null
+            DetailsTmdbResolveRequest(
+                title = title,
+                tmdbId = tmdbId,
+                preferredApiName = get<String>(DetailsScreenNavigation.ResolvePreferredApiBundleKey)
+                    ?.takeIf { it.isNotBlank() },
+                expectedType = get<String>(DetailsScreenNavigation.ResolveTypeBundleKey)
+                    .toTvTypeOrNull(),
+            )
+        }
 
     return DetailsScreenRouteArgs(
         sourceUrl = get<String>(DetailsScreenNavigation.UrlBundleKey)
             ?.takeIf { it.isNotBlank() },
         sourceApiName = sourceApiName,
+        tmdbResolveRequest = tmdbResolveRequest,
         loadingPreview = DetailsLoadingPreview(
             title = get<String>(DetailsScreenNavigation.LoadingTitleBundleKey)
                 ?.takeIf { it.isNotBlank() },
@@ -65,7 +82,7 @@ internal fun SavedStateHandle.toDetailsScreenRouteArgs(
             year = get<Int>(DetailsScreenNavigation.LoadingYearBundleKey),
             providerName = get<String>(DetailsScreenNavigation.LoadingProviderBundleKey)
                 ?.takeIf { it.isNotBlank() }
-                ?: sourceApiName,
+                ?: sourceApiName.takeUnless { tmdbResolveRequest != null },
         )
     )
 }
@@ -76,11 +93,4 @@ internal fun DetailsScreenRouteArgs.canRemoveFromLibrary(): Boolean {
         sourceUrl = source.url,
         apiName = source.apiName,
     )
-}
-
-private fun String?.toTvTypeOrNull(): TvType? {
-    if (this.isNullOrBlank()) return null
-    return TvType.entries.firstOrNull { type ->
-        type.name == this
-    }
 }

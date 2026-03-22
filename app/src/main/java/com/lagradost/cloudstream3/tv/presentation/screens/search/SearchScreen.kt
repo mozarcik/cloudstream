@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.search
 
+import android.util.Log
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -57,6 +58,7 @@ import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.HaloHost
+import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedSection
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
@@ -69,6 +71,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
 ) {
+    val searchNavLogTag = "TvSearchNav"
     val uiState by viewModel.uiState.collectAsState()
     val pendingPrefillQuery by SearchPrefillStore.pendingQuery.collectAsState()
     val listState = rememberLazyListState()
@@ -96,8 +99,11 @@ fun SearchScreen(
         val query = pendingPrefillQuery?.trim().orEmpty()
         if (query.isBlank()) return@LaunchedEffect
 
+        Log.d(searchNavLogTag, "search screen consuming prefill query=$query")
         viewModel.onQueryChanged(query)
+        viewModel.onSearchSubmitted()
         SearchPrefillStore.clearPendingQuery()
+        searchFieldFocusRequester.requestFocusWithRetry()
     }
 
     HaloHost(

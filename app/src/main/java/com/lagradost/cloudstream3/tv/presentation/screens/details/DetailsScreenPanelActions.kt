@@ -8,8 +8,6 @@ import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionEvent
 import com.lagradost.cloudstream3.tv.compat.DownloadMirrorSelectionStateHolder
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatActionOutcome
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
-import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
-import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -48,12 +46,9 @@ internal fun handleDetailsActionOutcome(
 internal fun executeDetailsAction(
     mode: DetailsScreenMode,
     actionId: Int,
-    context: Context,
-    details: MovieDetails,
-    actionsCompat: MovieDetailsEpisodeActionsCompat,
     panelsStateHolder: DetailsPanelsStateHolder,
     scope: CoroutineScope,
-    goToPlayer: (PlayerStartTarget) -> Unit,
+    onCompleted: suspend () -> Unit = {},
 ) {
     if (!mode.allowsExtendedActions ||
         panelsStateHolder.isActionInProgress ||
@@ -62,23 +57,19 @@ internal fun executeDetailsAction(
         return
     }
 
+    val selection = panelsStateHolder.currentActionSelection ?: return
+
     scope.launch {
         panelsStateHolder.updateActionInProgress(true)
         try {
-            val selection = panelsStateHolder.panelSelection
-            val outcome = if (selection != null) {
-                selection.onOptionSelected(actionId)
-            } else {
-                actionsCompat.execute(
-                    actionId = actionId,
-                    context = context,
-                    onPlayInApp = { goToPlayer(resolveDefaultPlaybackTarget(details)) },
-                )
-            }
+            val outcome = selection.onOptionSelected(actionId)
             handleDetailsActionOutcome(
                 outcome = outcome,
                 panelsStateHolder = panelsStateHolder,
             )
+            if (outcome == MovieDetailsCompatActionOutcome.Completed) {
+                onCompleted()
+            }
         } finally {
             panelsStateHolder.updateActionInProgress(false)
         }
@@ -92,6 +83,10 @@ internal fun openDetailsActionsPanel(
     panelsStateHolder: DetailsPanelsStateHolder,
     scope: CoroutineScope,
     closeDownloadPanel: () -> Unit,
+    preferredSeason: Int? = null,
+    preferredEpisode: Int? = null,
+    title: String? = null,
+    onPlayInApp: (String?) -> Unit,
 ) {
     if (!mode.allowsExtendedActions ||
         panelsStateHolder.isPanelLoading ||
@@ -107,14 +102,25 @@ internal fun openDetailsActionsPanel(
     scope.launch {
         panelsStateHolder.updatePanelLoading(true)
         try {
-            val loadedActions = withContext(Dispatchers.IO) {
-                actionsCompat.loadPanelActions(context)
+            val request = withContext(Dispatchers.IO) {
+                actionsCompat.buildActionMenuRequest(
+                    context = context,
+                    preferredSeason = preferredSeason,
+                    preferredEpisode = preferredEpisode,
+                    title = title,
+                    onPlayInApp = onPlayInApp,
+                )
             }
-            panelsStateHolder.updatePanelItems(loadedActions)
 
-            if (loadedActions.isEmpty()) {
+            if (!panelsStateHolder.isActionsPanelVisible) {
+                return@launch
+            }
+
+            if (request == null || request.options.isEmpty()) {
                 panelsStateHolder.closeActionsPanel()
                 CommonActivity.showToast(R.string.no_links_found_toast, Toast.LENGTH_SHORT)
+            } else {
+                panelsStateHolder.showRootActionSelection(request)
             }
         } finally {
             panelsStateHolder.updatePanelLoading(false)

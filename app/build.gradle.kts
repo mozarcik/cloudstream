@@ -88,6 +88,18 @@ android {
             "SIMKL_CLIENT_SECRET",
             "\"" + (System.getenv("SIMKL_CLIENT_SECRET") ?: localProperties["simkl.secret"]) + "\""
         )
+        buildConfigField(
+            "String",
+            "TMDB_READ_ACCESS_TOKEN",
+            "\"" + ((System.getenv("TMDB_READ_ACCESS_TOKEN")
+                ?: localProperties["TMDB_READ_ACCESS_TOKEN"]) ?: "") + "\""
+        )
+        buildConfigField(
+            "String",
+            "TMDB_API_KEY",
+            "\"" + ((System.getenv("TMDB_API_KEY")
+                ?: localProperties["TMDB_API_KEY"]) ?: "") + "\""
+        )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

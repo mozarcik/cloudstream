@@ -32,6 +32,10 @@ private const val PRIORITY_WATCHING = 1
 private const val PRIORITY_PLAN_TO_WATCH = 2
 private const val PRIORITY_DEFAULT = 3
 
+internal fun resolveLibraryGridRatingHundred(item: SyncAPI.LibraryItem): Int? {
+    return item.personalRating?.toInt(100) ?: item.score?.toInt(100)
+}
+
 @Immutable
 data class LibraryScreenUiState(
     val isLoading: Boolean = true,
@@ -192,7 +196,7 @@ class LibraryViewModel : ViewModel() {
                         mediaItem = item.toMediaItemCompat(),
                         originalIndex = itemIndex,
                         name = item.name,
-                        personalRatingHundred = item.personalRating?.toInt(100),
+                        personalRatingHundred = resolveLibraryGridRatingHundred(item),
                         lastUpdatedUnixTime = item.lastUpdatedUnixTime,
                         releaseDateUnixTimeMs = item.releaseDate?.time,
                     )

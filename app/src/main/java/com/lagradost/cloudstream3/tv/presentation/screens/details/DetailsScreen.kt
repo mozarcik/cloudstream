@@ -86,6 +86,7 @@ internal fun DetailsScreenRouteContent(
             actionsCompat = actionsCompat,
             goToPlayer = goToPlayer,
             onBackPressed = onBackPressed,
+            onManualSearchRequested = onManualSearchRequested,
             refreshScreenWithNewItem = refreshScreenWithNewItem,
             onFavoriteClick = onFavoriteClick,
             onBookmarkClick = onBookmarkClick,

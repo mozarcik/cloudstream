@@ -1,8 +1,8 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatPanelItem
-import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatSelectionRequest
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatActionOutcome
+import com.lagradost.cloudstream3.tv.compat.MovieDetailsCompatSelectionRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -11,43 +11,35 @@ import org.junit.Test
 
 class DetailsPanelsStateHolderTest {
     @Test
-    fun `navigateActionsBack clears selection before closing panel`() {
+    fun `navigateActionsBack pops nested selection before closing panel`() {
         val stateHolder = DetailsPanelsStateHolder()
-        stateHolder.showActionSelection(
-            MovieDetailsCompatSelectionRequest(
-                title = "Sources",
-                options = listOf(MovieDetailsCompatPanelItem(id = 1, label = "One")),
-                onOptionSelected = { MovieDetailsCompatActionOutcome.Completed },
-            )
-        )
+        val root = createSelectionRequest(title = "Root")
+        val nested = createSelectionRequest(title = "Nested")
+
+        stateHolder.showRootActionSelection(root)
+        stateHolder.showActionSelection(nested)
 
         stateHolder.navigateActionsBack()
 
         assertTrue(stateHolder.isActionsPanelVisible)
-        assertNull(stateHolder.panelSelection)
+        assertEquals(root, stateHolder.currentActionSelection)
 
         stateHolder.navigateActionsBack()
 
         assertFalse(stateHolder.isActionsPanelVisible)
+        assertNull(stateHolder.currentActionSelection)
     }
 
     @Test
-    fun `openActionsPanel resets previous selection and items`() {
+    fun `openActionsPanel resets previous selection stack`() {
         val stateHolder = DetailsPanelsStateHolder()
-        stateHolder.updatePanelItems(listOf(MovieDetailsCompatPanelItem(id = 1, label = "Old")))
-        stateHolder.showActionSelection(
-            MovieDetailsCompatSelectionRequest(
-                title = "Old selection",
-                options = emptyList(),
-                onOptionSelected = { MovieDetailsCompatActionOutcome.Completed },
-            )
-        )
+        stateHolder.showRootActionSelection(createSelectionRequest(title = "Root"))
+        stateHolder.showActionSelection(createSelectionRequest(title = "Nested"))
 
         stateHolder.openActionsPanel()
 
         assertTrue(stateHolder.isActionsPanelVisible)
-        assertNull(stateHolder.panelSelection)
-        assertEquals(emptyList<MovieDetailsCompatPanelItem>(), stateHolder.panelItems)
+        assertNull(stateHolder.currentActionSelection)
     }
 
     @Test
@@ -57,7 +49,7 @@ class DetailsPanelsStateHolderTest {
         stateHolder.openBookmarkPanel()
         stateHolder.updateActionInProgress(true)
         stateHolder.updatePanelLoading(true)
-        stateHolder.updatePanelItems(listOf(MovieDetailsCompatPanelItem(id = 7, label = "Item")))
+        stateHolder.showRootActionSelection(createSelectionRequest(title = "Root"))
 
         stateHolder.resetTransientState()
 
@@ -65,6 +57,14 @@ class DetailsPanelsStateHolderTest {
         assertFalse(stateHolder.isBookmarkPanelVisible)
         assertFalse(stateHolder.isActionInProgress)
         assertFalse(stateHolder.isPanelLoading)
-        assertEquals(emptyList<MovieDetailsCompatPanelItem>(), stateHolder.panelItems)
+        assertNull(stateHolder.currentActionSelection)
     }
+
+    private fun createSelectionRequest(
+        title: String,
+    ) = MovieDetailsCompatSelectionRequest(
+        title = title,
+        options = listOf(MovieDetailsCompatPanelItem(id = 1, label = "One")),
+        onOptionSelected = { MovieDetailsCompatActionOutcome.Completed },
+    )
 }

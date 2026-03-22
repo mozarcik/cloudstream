@@ -73,7 +73,6 @@ class OpenSubtitlesAccountViewModel(
     }
 
     fun hideLoginForm() {
-        if (_uiState.value.accounts.isEmpty()) return
         _uiState.value = _uiState.value.copy(
             showLoginForm = false,
             password = "",
