@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Build
 import android.widget.Toast
+import androidx.multidex.MultiDex
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import coil3.ImageLoader
@@ -16,6 +17,7 @@ import com.lagradost.api.setContext
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.mvvm.safeAsync
 import com.lagradost.cloudstream3.plugins.PluginManager
+import com.lagradost.cloudstream3.reporting.AppErrorReporter
 import com.lagradost.cloudstream3.ui.settings.Globals.EMULATOR
 import com.lagradost.cloudstream3.ui.settings.Globals.TV
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
@@ -42,6 +44,7 @@ class ExceptionHandler(
 ) : Thread.UncaughtExceptionHandler {
 
     override fun uncaughtException(thread: Thread, error: Throwable) {
+        val loadingExtension = PluginManager.currentlyLoading ?: "none"
         try {
             val threadId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
                 thread.threadId()
@@ -51,12 +54,22 @@ class ExceptionHandler(
             }
 
             PrintStream(errorFile).use { ps ->
-                ps.println("Currently loading extension: ${PluginManager.currentlyLoading ?: "none"}")
+                ps.println("Currently loading extension: $loadingExtension")
                 ps.println("Fatal exception on thread ${thread.name} ($threadId)")
-                error.printStackTrace(ps)
+                ps.println(error::class.java.simpleName)
+                error.localizedMessage
+                    ?.lineSequence()
+                    ?.firstOrNull()
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let(ps::println)
             }
         } catch (_: FileNotFoundException) {
         }
+        AppErrorReporter.reportFatal(
+            throwable = error,
+            loadingExtension = loadingExtension.takeUnless { it == "none" },
+        )
         try {
             onError()
         } catch (_: Exception) {
@@ -73,6 +86,7 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
         // If we want to initialize Coil as early as possible, maybe when
         // loading an image or GIF in a splash screen activity.
         // buildImageLoader(applicationContext)
+        AppErrorReporter.init(this)
 
         ExceptionHandler(filesDir.resolve("last_error")) {
             val intent = context!!.packageManager.getLaunchIntentForPackage(context!!.packageName)
@@ -85,6 +99,7 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
 
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base)
+        MultiDex.install(this)
         context = base
         // This can be removed without deprecation after next stable
         AcraApplication.context = context

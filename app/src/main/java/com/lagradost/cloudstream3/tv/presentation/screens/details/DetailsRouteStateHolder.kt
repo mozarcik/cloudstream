@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,9 +27,14 @@ internal class DetailsRouteStateHolder(
         _baseUiState.value = DetailsScreenUiState.Loading(preview = loadingPreview)
     }
 
-    fun showError() {
+    fun showUnavailable() {
         currentActionsCompat = null
-        _baseUiState.value = DetailsScreenUiState.Error
+        _baseUiState.value = DetailsScreenUiState.Unavailable
+    }
+
+    fun showError(error: TvErrorUiModel) {
+        currentActionsCompat = null
+        _baseUiState.value = DetailsScreenUiState.Error(error = error)
     }
 
     fun applyPrimary(primary: DetailsPrimaryStageResult) {

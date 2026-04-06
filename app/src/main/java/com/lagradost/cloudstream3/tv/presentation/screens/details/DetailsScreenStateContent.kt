@@ -9,8 +9,8 @@ import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.Movie
-import com.lagradost.cloudstream3.tv.presentation.common.Error
 import com.lagradost.cloudstream3.tv.presentation.common.Loading
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsLoadingPlaceholder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
@@ -47,7 +47,6 @@ internal fun DetailsScreenLoadingStateContent(
 
 @Composable
 internal fun DetailsScreenErrorStateContent(
-    shouldShowUnavailableState: Boolean,
     unavailableDetails: UnavailableDetailsUiModel,
     canRemoveFromLibrary: Boolean,
     onRemoveUnavailable: () -> Unit,
@@ -55,22 +54,33 @@ internal fun DetailsScreenErrorStateContent(
     onBackPressed: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (shouldShowUnavailableState) {
-        UnavailableDetailsScreen(
-            state = unavailableDetails,
-            showRemoveFromLibraryAction = canRemoveFromLibrary,
-            onRemoveFromLibrary = onRemoveUnavailable,
-            onManualSearch = onManualSearchRequested,
-            onBackPressed = onBackPressed,
-            modifier = modifier.fillMaxSize()
-        )
-    } else {
-        Error(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-        )
-    }
+    UnavailableDetailsScreen(
+        state = unavailableDetails,
+        showRemoveFromLibraryAction = canRemoveFromLibrary,
+        onRemoveFromLibrary = onRemoveUnavailable,
+        onManualSearch = onManualSearchRequested,
+        onBackPressed = onBackPressed,
+        modifier = modifier.fillMaxSize()
+    )
+}
+
+@Composable
+internal fun DetailsScreenFailureStateContent(
+    state: DetailsScreenUiState.Error,
+    title: String,
+    onRetry: () -> Unit,
+    onBackPressed: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TvErrorScreen(
+        error = state.error,
+        onRetry = onRetry,
+        onBackPressed = onBackPressed,
+        title = title,
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    )
 }
 
 @Composable

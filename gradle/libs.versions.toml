@@ -41,6 +41,7 @@ previewseekbarMedia3 = "1.1.1.0"
 qrcodeKotlin = "4.5.0"
 rhino = { strictly = "1.8.1" } # Requires minSdk 26 or later beginning at version 1.9.0
 safefile = "0.0.8"
+sdkSentry = "8.6.0"
 shimmer = "0.5.0"
 tmdbJava = "2.13.0"
 torrentserver = "7861970e038b35cd8c6918384e49caf26903e09e"
@@ -113,6 +114,7 @@ previewseekbar-media3 = { module = "com.github.rubensousa:previewseekbar-media3"
 qrcode-kotlin = { module = "io.github.g0dkar:qrcode-kotlin", version.ref = "qrcodeKotlin" }
 rhino = { module = "org.mozilla:rhino", version.ref = "rhino" }
 safefile = { module = "com.github.LagradOst:SafeFile", version.ref = "safefile" }
+sentry-android-core = { module = "io.sentry:sentry-android-core", version.ref = "sdkSentry" }
 shimmer = { module = "com.facebook.shimmer:shimmer", version.ref = "shimmer" }
 tmdb-java = { module = "com.uwetrottmann.tmdb2:tmdb-java", version.ref = "tmdbJava" }
 torrentserver = { module = "com.github.recloudstream:torrentserver", version.ref = "torrentserver" }

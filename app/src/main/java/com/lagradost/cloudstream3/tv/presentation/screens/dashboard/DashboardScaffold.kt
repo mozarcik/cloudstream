@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
@@ -66,6 +67,7 @@ internal fun resolveDashboardBackAction(
     isTopBarFocused: Boolean,
 ): DashboardBackAction {
     return when {
+        currentTopBarSelectedTabIndex < 0 && !isTopBarFocused -> DashboardBackAction.FocusSelectedTab
         !isOnTopBarTab && hasPreviousBackStackEntry -> DashboardBackAction.PopBackStack
         !isTopBarVisible -> DashboardBackAction.ShowTopBarAndFocusSelectedTab
         !isTopBarFocused -> DashboardBackAction.FocusSelectedTab
@@ -76,10 +78,13 @@ internal fun resolveDashboardBackAction(
 
 data class DashboardBodyContext(
     val topBarSelectedFocusRequester: FocusRequester,
+    val isTopBarFocused: Boolean,
     val homeRestoreFocusToken: Int,
     val libraryRestoreFocusToken: Int,
     val homeFeedGridRestoreFocusToken: Int,
     val libraryFeedGridRestoreFocusToken: Int,
+    val homeContentRefreshToken: Int,
+    val accountRefreshToken: Int,
     val updateTopBarVisibility: (Boolean) -> Unit,
     val updateTopBarFocusable: (Boolean) -> Unit,
     val updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
@@ -139,6 +144,8 @@ fun DashboardScaffold(
     var libraryRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var homeFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var libraryFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var homeContentRefreshToken by rememberSaveable { mutableIntStateOf(0) }
+    var accountRefreshToken by rememberSaveable { mutableIntStateOf(0) }
     var pendingTopBarFocusTabIndex by rememberSaveable { mutableIntStateOf(-1) }
     var topBarFocusRestorerResetToken by rememberSaveable { mutableIntStateOf(0) }
     val currentTopBarSelectedTabIndex by remember(
@@ -157,6 +164,9 @@ fun DashboardScaffold(
             }
             if (destination == Screens.SearchFeedGrid.name) {
                 return@derivedStateOf searchTabIndex
+            }
+            if (destination == Screens.Profile.name) {
+                return@derivedStateOf -1
             }
 
             val screen = runCatching { Screens.valueOf(destination) }.getOrNull()
@@ -177,6 +187,24 @@ fun DashboardScaffold(
 
         onDispose {
             navController.removeOnDestinationChangedListener(listener)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        val reloadHomeObserver: (Boolean) -> Unit = {
+            homeContentRefreshToken += 1
+        }
+        val reloadAccountObserver: (Boolean) -> Unit = {
+            accountRefreshToken += 1
+            homeContentRefreshToken += 1
+        }
+
+        MainActivity.reloadHomeEvent += reloadHomeObserver
+        MainActivity.reloadAccountEvent += reloadAccountObserver
+
+        onDispose {
+            MainActivity.reloadHomeEvent -= reloadHomeObserver
+            MainActivity.reloadAccountEvent -= reloadAccountObserver
         }
     }
 
@@ -277,7 +305,7 @@ fun DashboardScaffold(
 
     suspend fun requestTopBarFocusWithRetry(tabIndex: Int): Boolean {
         val requesterIndex = (tabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
-        repeat(20) {
+        repeat(120) {
             topBarFocusRequesters[requesterIndex].requestFocus()
             delay(16L)
             if (focusedTopBarTabIndex == tabIndex) {
@@ -392,6 +420,7 @@ fun DashboardScaffold(
                     bottom = DashboardTopBarVerticalPadding
                 ),
             selectedTabIndex = currentTopBarSelectedTabIndex,
+            accountRefreshToken = accountRefreshToken,
             focusRequesters = topBarFocusRequesters,
             isFocusable = isTopBarFocusable,
             isDownNavigationEnabled = isTopBarDownNavigationEnabled,
@@ -408,10 +437,13 @@ fun DashboardScaffold(
             Modifier.padding(top = navHostTopPaddingDp),
             DashboardBodyContext(
                 topBarSelectedFocusRequester = currentTopBarFocusRequester,
+                isTopBarFocused = isTopBarFocused,
                 homeRestoreFocusToken = homeRestoreFocusToken,
                 libraryRestoreFocusToken = libraryRestoreFocusToken,
                 homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
                 libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
+                homeContentRefreshToken = homeContentRefreshToken,
+                accountRefreshToken = accountRefreshToken,
                 updateTopBarVisibility = { isTopBarVisible = it },
                 updateTopBarFocusable = { isTopBarFocusable = it },
                 updateTopBarDownNavigationEnabled = { isTopBarDownNavigationEnabled = it },

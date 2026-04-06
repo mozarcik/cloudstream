@@ -222,6 +222,10 @@
     <string name="tv_player_source_unavailable">Niedostępne</string>
     <string name="tv_player_source_error_dialog_http_code" formatted="true">Nie udało się załadować tego źródła (HTTP %1$d).</string>
     <string name="tv_player_source_error_dialog_unavailable">To źródło jest obecnie niedostępne.</string>
+    <string name="tv_crash_reporting_title">Raportowanie błędów</string>
+    <string name="tv_crash_reporting_summary">Raporty błędów są wysyłane do Sentry, aby ułatwić diagnozowanie crashy oraz awarii odtwarzania i szczegółów.</string>
+    <string name="tv_crash_reporting_builds_summary">Raportowanie błędów jest włączone w buildach debug, stable i prerelease.</string>
+    <string name="tv_crash_reporting_privacy_summary">Raporty celowo nie dołączają pełnych adresów URL, tokenów ani ciasteczek.</string>
     <string name="remote_error">Zdalny błąd</string>
     <string name="render_error">Błąd renderowania</string>
     <string name="unexpected_error">Nieoczekiwany błąd odtwarzacza</string>
@@ -358,6 +362,8 @@
     <string name="error_invalid_data">Niepoprawne dane</string>
     <string name="error_invalid_url">Niepoprawny URL</string>
     <string name="error">Błąd</string>
+    <string name="builds">Buildy</string>
+    <string name="privacy">Prywatność</string>
     <string name="subtitles_remove_captions">Usuń CC z napisów</string>
     <string name="subtitles_remove_bloat">Usuń nadmiarowe informacje z napisów</string>
     <string name="subtitles_filter_lang">Filtrowanie wg preferowanego języka</string>

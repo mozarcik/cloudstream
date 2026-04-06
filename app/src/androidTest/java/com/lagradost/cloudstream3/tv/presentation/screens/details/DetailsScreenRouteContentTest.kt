@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -32,6 +33,8 @@ import com.lagradost.cloudstream3.tv.data.entities.TvSeason
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -163,6 +166,90 @@ class DetailsScreenRouteContentTest {
     }
 
     @Test
+    fun doneState_upToEpisodeOne_recreatedHeroPlayDoesNotStealFocusWithoutExtraInput() {
+        setDoneStateContent(details = fakeDetailsWithEpisodes(episodeCount = 10))
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("details_play_button").assertIsFocused()
+
+        composeRule.onNodeWithTag("details_play_button").performKeyInput {
+            pressKey(Key.DirectionDown)
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("details_season_tab_season-1").assertIsFocused()
+
+        composeRule.onNodeWithTag("details_season_tab_season-1").performKeyInput {
+            pressKey(Key.DirectionDown)
+        }
+        composeRule.waitUntil(timeoutMillis = 2_000L) {
+            isNodeFocused("episode_card_episode-1")
+        }
+
+        repeat(7) { index ->
+            composeRule.onNodeWithTag("episode_card_episode-${index + 1}").performKeyInput {
+                pressKey(Key.DirectionDown)
+            }
+            composeRule.waitUntil(timeoutMillis = 2_000L) {
+                isNodeFocused("episode_card_episode-${index + 2}")
+            }
+        }
+
+        composeRule.waitUntil(timeoutMillis = 2_000L) {
+            !doesNodeExist("details_play_button")
+        }
+
+        repeat(6) { offset ->
+            val sourceEpisode = 8 - offset
+            val targetEpisode = sourceEpisode - 1
+            composeRule.onNodeWithTag("episode_card_episode-$sourceEpisode").performKeyInput {
+                pressKey(Key.DirectionUp)
+            }
+            composeRule.waitUntil(timeoutMillis = 2_000L) {
+                isNodeFocused("episode_card_episode-$targetEpisode")
+            }
+        }
+
+        composeRule.onNodeWithTag("episode_card_episode-2").assertIsFocused()
+        composeRule.waitUntil(timeoutMillis = 2_000L) {
+            !doesNodeExist("details_play_button")
+        }
+
+        composeRule.mainClock.autoAdvance = false
+        try {
+            var episodeOneFocusedAtLeastOnce = false
+            var heroPlayFocusedAfterEpisodeOne = false
+            val focusTrace = StringBuilder()
+
+            composeRule.onNodeWithTag("episode_card_episode-2").performKeyInput {
+                pressKey(Key.DirectionUp)
+            }
+
+            repeat(120) { frame ->
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+
+                val episodeOneFocused = isNodeFocused("episode_card_episode-1")
+                val heroPlayFocused = isNodeFocused("details_play_button")
+                focusTrace.append(
+                    "frame=$frame episode1=$episodeOneFocused hero=$heroPlayFocused\n"
+                )
+
+                if (episodeOneFocused) {
+                    episodeOneFocusedAtLeastOnce = true
+                } else if (episodeOneFocusedAtLeastOnce && heroPlayFocused) {
+                    heroPlayFocusedAfterEpisodeOne = true
+                }
+            }
+
+            assertTrue(focusTrace.toString(), episodeOneFocusedAtLeastOnce)
+            assertFalse(focusTrace.toString(), heroPlayFocusedAfterEpisodeOne)
+            assertTrue(focusTrace.toString(), isNodeFocused("episode_card_episode-1"))
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    @Test
     fun loadingState_rendersPreviewTitlePlaceholder() {
         composeRule.setContent {
             MaterialTheme {
@@ -175,13 +262,13 @@ class DetailsScreenRouteContentTest {
                         )
                     ),
                     actionsCompat = null,
-                    shouldShowUnavailableState = false,
                     unavailableDetails = fakeUnavailableDetails(),
                     canRemoveFromLibrary = false,
                     goToPlayer = {},
                     onBackPressed = {},
                     onManualSearchRequested = {},
                     refreshScreenWithNewItem = {},
+                    onRetry = {},
                     onFavoriteClick = {},
                     onBookmarkClick = {},
                     onRemoveUnavailable = {},
@@ -236,6 +323,34 @@ private fun fakeDetails(): MovieDetails {
     )
 }
 
+private fun fakeDetailsWithEpisodes(episodeCount: Int): MovieDetails {
+    val season = TvSeason(
+        id = "season-1",
+        seasonNumber = 1,
+        displaySeasonNumber = 1,
+        title = "Season 1",
+        episodes = (1..episodeCount).map { episodeNumber ->
+            TvEpisode(
+                id = "episode-$episodeNumber",
+                data = "episode-data-$episodeNumber",
+                seasonNumber = 1,
+                episodeNumber = episodeNumber,
+                title = "Episode $episodeNumber",
+                description = "Episode description $episodeNumber",
+                durationMinutes = 44 + episodeNumber,
+                ratingText = "8.$episodeNumber",
+                releaseDateMillis = 1_700_000_000_000L + (episodeNumber * 86_400_000L),
+                posterUri = "episode-poster-$episodeNumber",
+            )
+        },
+    )
+
+    return fakeDetails().copy(
+        seasons = listOf(season),
+        episodeCount = episodeCount,
+    )
+}
+
 private fun fakeUnavailableDetails(): UnavailableDetailsUiModel {
     return UnavailableDetailsUiModel(
         title = "Unavailable",
@@ -285,17 +400,33 @@ private fun DetailsScreenRouteContentTest.setDoneStateContent(
                 actionsCompat = MovieDetailsEpisodeActionsCompat(
                     loadResponse = FakeDetailsRouteLoadResponse()
                 ),
-                shouldShowUnavailableState = false,
                 unavailableDetails = fakeUnavailableDetails(),
                 canRemoveFromLibrary = false,
                 goToPlayer = {},
                 onBackPressed = {},
                 onManualSearchRequested = {},
                 refreshScreenWithNewItem = {},
+                onRetry = {},
                 onFavoriteClick = {},
                 onBookmarkClick = {},
                 onRemoveUnavailable = {},
             )
         }
     }
+}
+
+private fun DetailsScreenRouteContentTest.isNodeFocused(tag: String): Boolean {
+    return composeRule
+        .onAllNodes(hasTestTag(tag), useUnmergedTree = true)
+        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .any { node ->
+            node.config.getOrElse(SemanticsProperties.Focused) { false }
+        }
+}
+
+private fun DetailsScreenRouteContentTest.doesNodeExist(tag: String): Boolean {
+    return composeRule
+        .onAllNodes(hasTestTag(tag), useUnmergedTree = true)
+        .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        .isNotEmpty()
 }

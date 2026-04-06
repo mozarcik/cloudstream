@@ -148,7 +148,9 @@ fun MovieDetails(
     goToMoviePlayer: () -> Unit,
     playButtonLabel: String? = null,
     downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
+    requestInitialPlayButtonFocus: Boolean = true,
     onPrimaryActionsFocused: () -> Unit = {},
+    onInitialPlayButtonFocused: () -> Unit = {},
     onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -233,6 +235,8 @@ fun MovieDetails(
     FocusRequestEffect(
         requester = playButtonFocusRequester,
         requestKey = movieDetails.id,
+        enabled = requestInitialPlayButtonFocus,
+        onFocused = onInitialPlayButtonFocused,
     )
 
     Box(

@@ -7,14 +7,13 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +56,7 @@ internal fun PlayerPlaybackContent(
     onPlayerResizeModeChanged: (PlayerResizeMode) -> Unit,
 ) {
     val context = LocalContext.current
+    val previewKeyState = remember { PlayerPreviewKeyState() }
     val hasSidePanel = panelsState.activePanel != TvPlayerSidePanel.None ||
         runtimeTracksState.audioPanelVisible ||
         runtimeTracksState.videoPanelVisible ||
@@ -65,6 +65,7 @@ internal fun PlayerPlaybackContent(
 
     fun registerControlsInteraction() {
         overlayState.startupAutoHideArmed = false
+        overlayState.hideExtendedMetadata()
         controlsInteractionEvents.tryEmit(Unit)
     }
 
@@ -91,6 +92,7 @@ internal fun PlayerPlaybackContent(
             .onPreviewKeyEvent { event ->
                 handlePlayerPreviewKeyEvent(
                     event = event,
+                    previewKeyState = previewKeyState,
                     hasSidePanel = hasSidePanel,
                     controlsVisible = overlayState.controlsVisible,
                     overlayState = overlayState,
@@ -114,6 +116,7 @@ internal fun PlayerPlaybackContent(
             player = exoPlayer,
             resizeMode = playerResizeMode.resizeMode,
             subtitleSyncController = subtitleSyncController,
+            controlsVisible = overlayState.controlsVisible,
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -127,6 +130,7 @@ internal fun PlayerPlaybackContent(
             metadata = state.metadata,
             link = state.link,
             isPlaying = overlayState.isPlaying,
+            showExtendedMetadata = overlayState.showExtendedMetadata,
             showAudioTracksButton = runtimeTracksState.showRuntimeAudioTracksButton,
             showVideoTracksButton = runtimeTracksState.showRuntimeVideoTracksButton,
             showSyncButton = catalogState.selectedSubtitleIndex >= 0,
@@ -174,8 +178,33 @@ internal fun PlayerPlaybackContent(
     }
 }
 
-private fun handlePlayerPreviewKeyEvent(
+internal class PlayerPreviewKeyState {
+    private var suppressedConfirmKeyUpDownTime: Long? = null
+
+    fun suppressConfirmKeyUp(downTime: Long) {
+        suppressedConfirmKeyUpDownTime = downTime
+    }
+
+    fun consumeSuppressedConfirmKeyUp(
+        eventType: KeyEventType,
+        keyCode: Int,
+        downTime: Long,
+    ): Boolean {
+        val expectedDownTime = suppressedConfirmKeyUpDownTime ?: return false
+        if (!isPlayerConfirmKeyCode(keyCode) || eventType != KeyEventType.KeyUp) {
+            return false
+        }
+        if (downTime != expectedDownTime) {
+            return false
+        }
+        suppressedConfirmKeyUpDownTime = null
+        return true
+    }
+}
+
+internal fun handlePlayerPreviewKeyEvent(
     event: KeyEvent,
+    previewKeyState: PlayerPreviewKeyState,
     hasSidePanel: Boolean,
     controlsVisible: Boolean,
     overlayState: PlayerOverlayStateHolder,
@@ -187,11 +216,47 @@ private fun handlePlayerPreviewKeyEvent(
     onSeekForward: () -> Unit,
     onPauseForControls: () -> Unit,
 ): Boolean {
-    if (event.type != KeyEventType.KeyDown) {
+    return handlePlayerPreviewKeyEvent(
+        eventType = event.type,
+        keyCode = event.nativeKeyEvent.keyCode,
+        downTime = event.nativeKeyEvent.downTime,
+        previewKeyState = previewKeyState,
+        hasSidePanel = hasSidePanel,
+        controlsVisible = controlsVisible,
+        overlayState = overlayState,
+        rootFocusRequester = rootFocusRequester,
+        playerWantsToPlay = playerWantsToPlay,
+        showBufferingOverlay = showBufferingOverlay,
+        registerControlsInteraction = registerControlsInteraction,
+        onSeekBackward = onSeekBackward,
+        onSeekForward = onSeekForward,
+        onPauseForControls = onPauseForControls,
+    )
+}
+
+internal fun handlePlayerPreviewKeyEvent(
+    eventType: KeyEventType,
+    keyCode: Int,
+    downTime: Long,
+    previewKeyState: PlayerPreviewKeyState,
+    hasSidePanel: Boolean,
+    controlsVisible: Boolean,
+    overlayState: PlayerOverlayStateHolder,
+    rootFocusRequester: FocusRequester,
+    playerWantsToPlay: Boolean,
+    showBufferingOverlay: Boolean,
+    registerControlsInteraction: () -> Unit,
+    onSeekBackward: () -> Unit,
+    onSeekForward: () -> Unit,
+    onPauseForControls: () -> Unit,
+): Boolean {
+    if (previewKeyState.consumeSuppressedConfirmKeyUp(eventType, keyCode, downTime)) {
+        return true
+    }
+    if (eventType != KeyEventType.KeyDown) {
         return false
     }
-    val isBackKey = event.key == Key.Back ||
-        event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_BACK
+    val isBackKey = keyCode == AndroidKeyEvent.KEYCODE_BACK
 
     if (!isBackKey) {
         registerControlsInteraction()
@@ -212,12 +277,23 @@ private fun handlePlayerPreviewKeyEvent(
         }
     }
 
-    return when (event.key) {
-        Key.DirectionCenter,
-        Key.Enter,
-        Key.NumPadEnter -> {
+    return when {
+        isPlayerConfirmKeyCode(keyCode) -> {
             if (!controlsVisible) {
-                onPauseForControls()
+                if (playerWantsToPlay) {
+                    onPauseForControls()
+                }
+                overlayState.controlsVisible = true
+                // Swallow the matching key-up so restored focus does not instantly click Play/Pause.
+                previewKeyState.suppressConfirmKeyUp(downTime)
+                true
+            } else {
+                false
+            }
+        }
+
+        isPlayerVerticalKeyCode(keyCode) -> {
+            if (!controlsVisible) {
                 overlayState.controlsVisible = true
                 true
             } else {
@@ -225,17 +301,7 @@ private fun handlePlayerPreviewKeyEvent(
             }
         }
 
-        Key.DirectionUp,
-        Key.DirectionDown -> {
-            if (!controlsVisible) {
-                overlayState.controlsVisible = true
-                true
-            } else {
-                false
-            }
-        }
-
-        Key.DirectionLeft -> {
+        isPlayerLeftKeyCode(keyCode) -> {
             if (!controlsVisible) {
                 onSeekBackward()
                 true
@@ -244,7 +310,7 @@ private fun handlePlayerPreviewKeyEvent(
             }
         }
 
-        Key.DirectionRight -> {
+        isPlayerRightKeyCode(keyCode) -> {
             if (!controlsVisible) {
                 onSeekForward()
                 true
@@ -255,6 +321,29 @@ private fun handlePlayerPreviewKeyEvent(
 
         else -> false
     }
+}
+
+private fun isPlayerConfirmKeyCode(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+}
+
+private fun isPlayerVerticalKeyCode(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_UP ||
+        keyCode == AndroidKeyEvent.KEYCODE_DPAD_DOWN ||
+        keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP ||
+        keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN
+}
+
+private fun isPlayerLeftKeyCode(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_LEFT ||
+        keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_LEFT
+}
+
+private fun isPlayerRightKeyCode(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_RIGHT ||
+        keyCode == AndroidKeyEvent.KEYCODE_SYSTEM_NAVIGATION_RIGHT
 }
 
 private fun handlePlayerControlsEvent(

@@ -2,14 +2,10 @@ package com.lagradost.cloudstream3.tv.presentation.screens.player.overlay
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AspectRatio
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.HighQuality
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.Source
-import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -157,6 +153,7 @@ internal fun PlayerBottomTrailingControls(
     ) {
         PlayerControlButton(
             icon = Icons.Outlined.Subtitles,
+            contentDescription = stringResource(R.string.player_subtitles_settings),
             tooltipText = stringResource(R.string.player_subtitles_settings),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -171,6 +168,7 @@ internal fun PlayerBottomTrailingControls(
         if (config.showSyncButton) {
             PlayerControlButton(
                 icon = ImageVector.vectorResource(id = R.drawable.subtitles_gear_24px),
+                contentDescription = stringResource(R.string.subtitle_offset),
                 tooltipText = stringResource(R.string.subtitle_offset),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -186,6 +184,7 @@ internal fun PlayerBottomTrailingControls(
         if (config.showAudioTracksButton) {
             PlayerControlButton(
                 icon = Icons.Outlined.AudioFile,
+                contentDescription = stringResource(R.string.audio_tracks),
                 tooltipText = stringResource(R.string.audio_tracks),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -200,6 +199,7 @@ internal fun PlayerBottomTrailingControls(
         }
         PlayerControlButton(
             icon = Icons.Default.AspectRatio,
+            contentDescription = stringResource(R.string.video_aspect_ratio_resize),
             tooltipText = stringResource(R.string.video_aspect_ratio_resize),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -232,6 +232,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
         ) {
             PlayerControlButton(
                 icon = Icons.Default.SkipNext,
+                contentDescription = stringResource(R.string.next_episode),
                 tooltipText = stringResource(R.string.next_episode),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -253,6 +254,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
     ) {
         PlayerControlButton(
             icon = Icons.Outlined.Source,
+            contentDescription = stringResource(R.string.sources),
             tooltipText = stringResource(R.string.sources),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -263,6 +265,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
             onTooltipVisible = state::showTooltip,
             onTooltipHidden = state::hideTooltip,
             onFocused = { state.lastFocusedControl = PlayerControlFocusTarget.Sources },
+            testTag = PlayerControlsTestTags.SourcesButton,
         )
     }
 
@@ -274,6 +277,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
         ) {
             PlayerControlButton(
                 icon = Icons.Outlined.HighQuality,
+                contentDescription = stringResource(R.string.video_tracks),
                 tooltipText = stringResource(R.string.video_tracks),
                 style = PlayerControlButtonStyle.Secondary,
                 controlsEnabled = controlsEnabled,
@@ -295,6 +299,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
     ) {
         PlayerControlButton(
             icon = Icons.Default.Replay,
+            contentDescription = stringResource(R.string.restart),
             tooltipText = stringResource(R.string.restart),
             style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
@@ -309,13 +314,15 @@ internal fun BoxScope.PlayerBottomCenteredControls(
     }
 
     Box(modifier = Modifier.align(Alignment.Center)) {
+        val playPauseContentDescription = if (isPlaying) {
+            stringResource(R.string.pause)
+        } else {
+            stringResource(R.string.home_play)
+        }
         PlayerControlButton(
             icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-            tooltipText = if (isPlaying) {
-                stringResource(R.string.pause)
-            } else {
-                stringResource(R.string.home_play)
-            },
+            contentDescription = playPauseContentDescription,
+            tooltipText = null,
             style = PlayerControlButtonStyle.Primary,
             controlsEnabled = controlsEnabled,
             focusRequester = state.playPauseFocusRequester,
@@ -325,6 +332,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
             onTooltipVisible = state::showTooltip,
             onTooltipHidden = state::hideTooltip,
             onFocused = { state.lastFocusedControl = PlayerControlFocusTarget.PlayPause },
+            testTag = PlayerControlsTestTags.PlayPauseButton,
         )
     }
 }

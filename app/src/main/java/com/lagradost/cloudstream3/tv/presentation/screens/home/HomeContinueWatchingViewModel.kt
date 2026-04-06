@@ -26,6 +26,10 @@ class HomeContinueWatchingViewModel(
         loadContinueWatching()
     }
 
+    fun refresh() {
+        loadContinueWatching(forceReload = true)
+    }
+
     fun removeItem(parentId: Int?) {
         if (parentId == null) return
 

@@ -26,7 +26,10 @@ internal fun MediaItemCompat.continueWatchingMetadataLabel(remainingSuffix: Stri
         isSeriesContent && safeEpisode != null -> "E${safeEpisode}"
         else -> null
     }
-    val remaining = continueWatching?.remainingMs?.toRemainingLabel(remainingSuffix = remainingSuffix)
+    val remaining = continueWatching
+        ?.remainingMs
+        ?.takeIf { remainingMs -> remainingMs > 0L }
+        ?.toRemainingLabel(remainingSuffix = remainingSuffix)
 
     return when {
         !seasonEpisode.isNullOrBlank() && !remaining.isNullOrBlank() -> "$seasonEpisode • $remaining"

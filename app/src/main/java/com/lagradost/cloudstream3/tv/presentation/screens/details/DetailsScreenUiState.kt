@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import androidx.compose.runtime.Immutable
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import com.lagradost.cloudstream3.ui.WatchType
 
@@ -12,7 +13,12 @@ sealed interface DetailsScreenUiState {
         val preview: DetailsLoadingPreview = DetailsLoadingPreview()
     ) : DetailsScreenUiState
 
-    data object Error : DetailsScreenUiState
+    data object Unavailable : DetailsScreenUiState
+
+    @Immutable
+    data class Error(
+        val error: TvErrorUiModel,
+    ) : DetailsScreenUiState
 
     @Immutable
     data class Done(

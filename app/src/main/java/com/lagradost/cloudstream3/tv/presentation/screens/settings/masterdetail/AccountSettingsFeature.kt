@@ -12,6 +12,7 @@ import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getActivity
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.openBrowser
 import com.lagradost.cloudstream3.CommonActivity.showToast
+import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.aniListApi
 import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.kitsuApi
@@ -23,9 +24,8 @@ import com.lagradost.cloudstream3.syncproviders.AccountManager.Companion.tmdbApi
 import com.lagradost.cloudstream3.syncproviders.AuthRepo
 import com.lagradost.cloudstream3.syncproviders.SubtitleRepo
 import com.lagradost.cloudstream3.syncproviders.SyncRepo
-import com.lagradost.cloudstream3.ui.settings.SettingsAccount
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.OpenSubtitlesAccountScreen
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.OpenSubtitlesAccountViewModel
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.ProviderAccountScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.account.ProviderAccountViewModel
 import com.lagradost.cloudstream3.utils.BackupUtils
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.BiometricCallback
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.authCallback
@@ -36,12 +36,16 @@ import com.lagradost.cloudstream3.utils.BiometricAuthenticator.startBiometricAut
 private object AccountSettingsScreenIds {
     const val Prefix = "settings_account"
     const val AccountMain = "settings_account"
-    const val OpenSubtitles = "$Prefix/opensubtitles"
+
+    fun provider(stableId: String): String {
+        return "$Prefix/$stableId"
+    }
 }
 
-private data class AccountProvider(
+internal data class AccountProviderController(
     val stableId: String,
-    val authRepo: AuthRepo
+    val authRepo: AuthRepo,
+    val viewModel: ProviderAccountViewModel,
 )
 
 @Composable
@@ -49,25 +53,51 @@ fun rememberAccountSettingsFeature(
     accountTitle: String
 ): AccountSettingsFeature {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val openSubtitlesRepo = remember { SubtitleRepo(openSubtitlesApi) }
-    val openSubtitlesViewModel = remember {
-        OpenSubtitlesAccountViewModel(openSubtitlesRepo)
+    val providers = remember {
+        listOf(
+            createAccountProviderController(
+                stableId = "mal",
+                authRepo = SyncRepo(malApi)
+            ),
+            createAccountProviderController(
+                stableId = "kitsu",
+                authRepo = SyncRepo(kitsuApi)
+            ),
+            createAccountProviderController(
+                stableId = "anilist",
+                authRepo = SyncRepo(aniListApi)
+            ),
+            createAccountProviderController(
+                stableId = "simkl",
+                authRepo = SyncRepo(simklApi)
+            ),
+            createAccountProviderController(
+                stableId = "tmdb",
+                authRepo = SyncRepo(tmdbApi)
+            ),
+            createAccountProviderController(
+                stableId = "opensubtitles",
+                authRepo = SubtitleRepo(openSubtitlesApi)
+            ),
+            createAccountProviderController(
+                stableId = "subdl",
+                authRepo = SubtitleRepo(subDlApi)
+            )
+        )
     }
-    return remember(context, accountTitle, openSubtitlesRepo, openSubtitlesViewModel) {
+    return remember(context, accountTitle, providers) {
         AccountSettingsFeature(
             context = context,
             accountTitle = accountTitle,
-            openSubtitlesRepo = openSubtitlesRepo,
-            openSubtitlesViewModel = openSubtitlesViewModel
+            providers = providers
         )
     }
 }
 
-class AccountSettingsFeature(
+class AccountSettingsFeature internal constructor(
     private val context: Context,
     private val accountTitle: String,
-    private val openSubtitlesRepo: AuthRepo,
-    private val openSubtitlesViewModel: OpenSubtitlesAccountViewModel
+    private val providers: List<AccountProviderController>,
 ) {
     private val settingsManager by lazy {
         PreferenceManager.getDefaultSharedPreferences(context)
@@ -82,15 +112,15 @@ class AccountSettingsFeature(
 
     val staticScreens: List<SettingsScreen> = listOf(
         AccountMainScreen(),
-        OpenSubtitlesScreen()
-    )
+    ) + providers.map { provider ->
+        ProviderScreen(provider)
+    }
 
     private inner class AccountMainScreen : SettingsScreen {
         override val id: String = AccountSettingsScreenIds.AccountMain
         override val title: String = accountTitle
 
         override suspend fun load(): List<SettingsEntry> {
-            val providers = accountProviders()
             return buildList {
                 add(
                     headerEntry(
@@ -107,7 +137,6 @@ class AccountSettingsFeature(
                             fallbackIconRes = provider.authRepo.icon
                                 ?: R.drawable.ic_outline_account_circle_24,
                             nextScreenId = providerScreenId(provider),
-                            action = providerAction(provider)
                         )
                     )
                 }
@@ -147,41 +176,7 @@ class AccountSettingsFeature(
         }
     }
 
-    private fun accountProviders(): List<AccountProvider> {
-        return listOf(
-            AccountProvider(
-                stableId = "mal",
-                authRepo = SyncRepo(malApi)
-            ),
-            AccountProvider(
-                stableId = "kitsu",
-                authRepo = SyncRepo(kitsuApi)
-            ),
-            AccountProvider(
-                stableId = "anilist",
-                authRepo = SyncRepo(aniListApi)
-            ),
-            AccountProvider(
-                stableId = "simkl",
-                authRepo = SyncRepo(simklApi)
-            ),
-            AccountProvider(
-                stableId = "tmdb",
-                authRepo = SyncRepo(tmdbApi)
-            ),
-            AccountProvider(
-                stableId = "opensubtitles",
-                authRepo = openSubtitlesRepo
-            ),
-            AccountProvider(
-                stableId = "subdl",
-                authRepo = SubtitleRepo(subDlApi)
-            )
-        )
-    }
-
-    private fun providerSubtitle(provider: AccountProvider): String? {
-        if (provider.stableId != "opensubtitles") return null
+    private fun providerSubtitle(provider: AccountProviderController): String? {
         return selectedAccountLabel(provider.authRepo)
             ?.let { accountName ->
                 context.getString(R.string.logged_account, accountName)
@@ -189,20 +184,8 @@ class AccountSettingsFeature(
             ?: context.getString(R.string.no_account)
     }
 
-    private fun providerScreenId(provider: AccountProvider): String? {
-        return if (provider.stableId == "opensubtitles") {
-            AccountSettingsScreenIds.OpenSubtitles
-        } else {
-            null
-        }
-    }
-
-    private fun providerAction(provider: AccountProvider): (() -> Unit)? {
-        return if (provider.stableId == "opensubtitles") {
-            null
-        } else {
-            { openAccountManager(provider.authRepo) }
-        }
+    private fun providerScreenId(provider: AccountProviderController): String {
+        return AccountSettingsScreenIds.provider(provider.stableId)
     }
 
     private fun selectedAccountLabel(authRepo: AuthRepo): String? {
@@ -215,17 +198,6 @@ class AccountSettingsFeature(
         val account = authRepo.accounts[selectedIndex]
         return account.user.name?.takeIf { it.isNotBlank() }
             ?: context.getString(R.string.login_format, context.getString(R.string.account), selectedIndex + 1)
-    }
-
-    private fun openAccountManager(authRepo: AuthRepo) {
-        val activity = context.getActivity() as? FragmentActivity ?: return
-        val info = authRepo.authUser()
-        val index = authRepo.accounts.indexOfFirst { account -> account.user.id == info?.id }
-        if (authRepo.accounts.isNotEmpty()) {
-            SettingsAccount.showLoginInfo(activity, authRepo, info, index)
-        } else {
-            SettingsAccount.addAccount(activity, authRepo)
-        }
     }
 
     private fun handleBiometricAction() {
@@ -267,9 +239,11 @@ class AccountSettingsFeature(
         }
     }
 
-    private inner class OpenSubtitlesScreen : SettingsScreen {
-        override val id: String = AccountSettingsScreenIds.OpenSubtitles
-        override val title: String = openSubtitlesRepo.name
+    private inner class ProviderScreen(
+        private val provider: AccountProviderController
+    ) : SettingsScreen {
+        override val id: String = AccountSettingsScreenIds.provider(provider.stableId)
+        override val title: String = provider.authRepo.name
         override val hasCustomContent: Boolean = true
 
         @Composable
@@ -281,14 +255,17 @@ class AccountSettingsFeature(
             onDataChanged: (String) -> Unit
         ) {
             val activity = context.getActivity() as? FragmentActivity
-            OpenSubtitlesAccountScreen(
-                stateFlow = openSubtitlesViewModel.uiState,
-                viewModel = openSubtitlesViewModel,
-                providerName = openSubtitlesRepo.name,
-                createAccountUrl = openSubtitlesRepo.createAccountUrl,
+            ProviderAccountScreen(
+                stateFlow = provider.viewModel.uiState,
+                viewModel = provider.viewModel,
+                providerName = provider.authRepo.name,
+                createAccountUrl = provider.authRepo.createAccountUrl,
                 isPreview = isPreview,
                 onBack = onBack,
                 onAccountChanged = {
+                    if (provider.authRepo is SyncRepo) {
+                        MainActivity.reloadLibraryEvent(true)
+                    }
                     onDataChanged(AccountSettingsScreenIds.Prefix)
                 },
                 onOpenCreateAccount = { url ->
@@ -299,6 +276,17 @@ class AccountSettingsFeature(
             )
         }
     }
+}
+
+private fun createAccountProviderController(
+    stableId: String,
+    authRepo: AuthRepo
+): AccountProviderController {
+    return AccountProviderController(
+        stableId = stableId,
+        authRepo = authRepo,
+        viewModel = ProviderAccountViewModel(authRepo)
+    )
 }
 
 private fun itemEntry(

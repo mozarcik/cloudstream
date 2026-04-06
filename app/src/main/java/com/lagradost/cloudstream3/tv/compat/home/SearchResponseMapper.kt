@@ -234,12 +234,18 @@ object SearchResponseMapper {
         val shouldTreatAsSeries =
             mediaType.isEpisodeBased() || inferredSeriesType != null || hasSeriesResumeMarker
         val normalizedWatchPos = watchPos?.fixVisual()
-        val progress = normalizedWatchPos?.let { posDur ->
+        // WHY: po dojściu do końca odcinka resume może już wskazywać kolejny epizod,
+        // ale w datastore nadal istnieje "ukończony" progress (position == duration).
+        // Taki stan nie powinien renderować pełnego progress bara ani "0:00 left".
+        val resumableWatchPos = normalizedWatchPos?.takeIf { posDur ->
+            posDur.duration > 0L && posDur.position < posDur.duration
+        }
+        val progress = resumableWatchPos?.let { posDur ->
             if (posDur.duration <= 0L) null else (posDur.position.toFloat() / posDur.duration.toFloat()).coerceIn(0f, 1f)
         }
-        val remainingMs = normalizedWatchPos?.let { posDur ->
+        val remainingMs = resumableWatchPos?.let { posDur ->
             (posDur.duration - posDur.position).coerceAtLeast(0L)
-        }
+        }?.takeIf { remaining -> remaining > 0L }
 
         if (shouldTreatAsSeries) {
             return MediaItemCompat.TvSeries(

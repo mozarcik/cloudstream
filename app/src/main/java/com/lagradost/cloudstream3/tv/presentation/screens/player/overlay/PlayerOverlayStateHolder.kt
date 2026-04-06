@@ -20,19 +20,39 @@ internal class PlayerOverlayStateHolder(
     var isPlaying by mutableStateOf(initialIsPlaying)
     var playerPlaybackState by mutableIntStateOf(initialPlaybackState)
     var playerWantsToPlay by mutableStateOf(initialPlayWhenReady)
+    var showExtendedMetadata by mutableStateOf(true)
     var startupAutoHideArmed by mutableStateOf(true)
     var errorHandled by mutableStateOf(false)
     var sourceErrorDialogEffect by mutableStateOf<TvPlayerPanelEffect.OpenSourceErrorDialog?>(null)
+    internal var metadataRevealGeneration by mutableIntStateOf(0)
+        private set
 
     val showBufferingOverlay: Boolean
         get() = playerWantsToPlay &&
             !isPlaying &&
             (playerPlaybackState == Player.STATE_BUFFERING || playerPlaybackState == Player.STATE_IDLE)
 
+    private fun advanceMetadataRevealGeneration(): Int {
+        metadataRevealGeneration += 1
+        return metadataRevealGeneration
+    }
+
+    fun hideExtendedMetadata(): Int {
+        showExtendedMetadata = false
+        return advanceMetadataRevealGeneration()
+    }
+
+    fun showSourceStartMetadata(): Int {
+        showExtendedMetadata = true
+        return advanceMetadataRevealGeneration()
+    }
+
     fun resetForSourceChange() {
+        controlsVisible = true
         startupAutoHideArmed = true
         errorHandled = false
         sourceErrorDialogEffect = null
+        showSourceStartMetadata()
     }
 
     fun syncFromPlayer(player: Player) {

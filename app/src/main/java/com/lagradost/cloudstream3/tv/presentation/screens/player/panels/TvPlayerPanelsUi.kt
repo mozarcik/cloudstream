@@ -66,6 +66,7 @@ data class TvPlayerPlaybackErrorDetails(
     val exoErrorCode: Int,
     val exoErrorName: String,
     val httpCode: Int? = null,
+    val message: String? = null,
 )
 
 @Immutable

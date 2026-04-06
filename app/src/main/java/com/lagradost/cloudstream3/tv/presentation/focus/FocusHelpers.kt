@@ -6,7 +6,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.focus.FocusRequester
 import kotlinx.coroutines.delay
 
-private const val DefaultFocusRequestAttempts = 20
+private const val DefaultFocusRequestAttempts = 120
 private const val DefaultFocusRequestDelayMs = 16L
 
 @Composable

@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.collectLatest
 
 private const val ControlsStartupAutoHideDelayMs = 750L
 private const val ControlsInactivityAutoHideDelayMs = 4_500L
+private const val ControlsPausedMetadataRevealDelayMs = 5_000L
 
 @Composable
 internal fun PlayerPlaybackListenerEffect(
@@ -109,6 +110,7 @@ internal fun PlayerPlaybackListenerEffect(
             override fun onPlayerError(error: PlaybackException) {
                 if (currentOverlayState.errorHandled) return
                 currentOverlayState.controlsVisible = true
+                currentOverlayState.hideExtendedMetadata()
                 val currentPosition = exoPlayer.currentPosition
                 val currentPlayWhenReady = exoPlayer.playWhenReady
 
@@ -318,6 +320,32 @@ internal fun PlayerPlaybackFocusEffects(
         currentOverlayState.startupAutoHideArmed = false
     }
 
+    LaunchedEffect(
+        overlayState.controlsVisible,
+        overlayState.playerWantsToPlay,
+        overlayState.startupAutoHideArmed,
+        hasSidePanel,
+    ) {
+        if (shouldShowSourceStartMetadata(overlayState, hasSidePanel)) {
+            overlayState.showExtendedMetadata = true
+            return@LaunchedEffect
+        }
+
+        if (!shouldRevealExtendedMetadata(overlayState, hasSidePanel)) {
+            overlayState.hideExtendedMetadata()
+            return@LaunchedEffect
+        }
+
+        val revealGeneration = overlayState.hideExtendedMetadata()
+        delay(ControlsPausedMetadataRevealDelayMs)
+        if (
+            currentOverlayState.metadataRevealGeneration == revealGeneration &&
+            shouldRevealExtendedMetadata(currentOverlayState, currentHasSidePanel)
+        ) {
+            currentOverlayState.showExtendedMetadata = true
+        }
+    }
+
     LaunchedEffect(controlsInteractionEvents) {
         controlsInteractionEvents.collectLatest {
             delay(ControlsInactivityAutoHideDelayMs)
@@ -327,9 +355,29 @@ internal fun PlayerPlaybackFocusEffects(
         }
     }
 
-    LaunchedEffect(overlayState.playerWantsToPlay) {
+    LaunchedEffect(controlsInteractionEvents) {
+        controlsInteractionEvents.collectLatest {
+            val revealGeneration = currentOverlayState.metadataRevealGeneration
+            delay(ControlsPausedMetadataRevealDelayMs)
+            if (
+                currentOverlayState.metadataRevealGeneration == revealGeneration &&
+                shouldRevealExtendedMetadata(currentOverlayState, currentHasSidePanel)
+            ) {
+                currentOverlayState.showExtendedMetadata = true
+            }
+        }
+    }
+
+    LaunchedEffect(
+        overlayState.playerWantsToPlay,
+        overlayState.controlsVisible,
+        overlayState.startupAutoHideArmed,
+        hasSidePanel,
+    ) {
         if (!overlayState.playerWantsToPlay) {
             overlayState.controlsVisible = true
+        } else if (!shouldShowSourceStartMetadata(overlayState, hasSidePanel)) {
+            overlayState.hideExtendedMetadata()
         }
     }
 }
@@ -352,6 +400,24 @@ private fun shouldAutoHideControlsAfterInteraction(
     return overlayState.controlsVisible &&
         overlayState.isPlaying &&
         overlayState.playerWantsToPlay &&
+        !hasSidePanel
+}
+
+internal fun shouldRevealExtendedMetadata(
+    overlayState: PlayerOverlayStateHolder,
+    hasSidePanel: Boolean,
+): Boolean {
+    return overlayState.controlsVisible &&
+        !overlayState.playerWantsToPlay &&
+        !hasSidePanel
+}
+
+internal fun shouldShowSourceStartMetadata(
+    overlayState: PlayerOverlayStateHolder,
+    hasSidePanel: Boolean,
+): Boolean {
+    return overlayState.startupAutoHideArmed &&
+        overlayState.controlsVisible &&
         !hasSidePanel
 }
 

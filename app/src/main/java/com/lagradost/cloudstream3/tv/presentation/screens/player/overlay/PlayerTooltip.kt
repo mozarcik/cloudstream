@@ -18,10 +18,6 @@ internal fun PlayerGlobalTooltip(
     tooltipState: PlayerControlTooltipState,
     modifier: Modifier = Modifier,
 ) {
-    val verticalOffsetPx = with(androidx.compose.ui.platform.LocalDensity.current) {
-        PlayerControlsTokens.TooltipVerticalOffset.toPx()
-    }
-
     Layout(
         content = {
             Surface(
@@ -36,9 +32,9 @@ internal fun PlayerGlobalTooltip(
             ) {
                 Text(
                     text = tooltipState.text,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(
                         horizontal = PlayerControlsTokens.TooltipHorizontalPadding,
@@ -57,7 +53,7 @@ internal fun PlayerGlobalTooltip(
         val targetX = (tooltipState.anchorCenterXPx - (tooltipPlaceable.width / 2f))
             .roundToInt()
             .coerceIn(0, maxX)
-        val targetY = (tooltipState.anchorTopYPx - verticalOffsetPx - tooltipPlaceable.height).roundToInt()
+        val targetY = 0
 
         layout(constraints.maxWidth, constraints.maxHeight) {
             tooltipPlaceable.placeRelative(x = targetX, y = targetY)

@@ -284,44 +284,8 @@ class MainActivity : AppCompatActivity(), ColorPickerDialogListener, BiometricCa
                         println("Repository url: $realUrl")
                         loadRepository(realUrl)
                         return true
-                    } else if (str.contains(APP_STRING)) {
-                        for (api in AccountManager.allApis) {
-                            if (api.isValidRedirectUrl(str)) {
-                                ioSafe {
-                                    Log.i(TAG, "handleAppIntent $str")
-                                    try {
-                                        val isSuccessful = api.login(str)
-                                        if (isSuccessful) {
-                                            Log.i(TAG, "authenticated ${api.name}")
-                                        } else {
-                                            Log.i(TAG, "failed to authenticate ${api.name}")
-                                        }
-                                        showToast(
-                                            if (isSuccessful) {
-                                                txt(R.string.authenticated_user, api.name)
-                                            } else {
-                                                txt(R.string.authenticated_user_fail, api.name)
-                                            }
-                                        )
-                                    } catch (t: Throwable) {
-                                        logError(t)
-                                        showToast(
-                                            txt(R.string.authenticated_user_fail, api.name)
-                                        )
-                                    }
-                                }
-                                return true
-                            }
-                        }
-                        // This specific intent is used for the gradle deployWithAdb
-                        // https://github.com/recloudstream/gradle/blob/master/src/main/kotlin/com/lagradost/cloudstream3/gradle/tasks/DeployWithAdbTask.kt#L46
-                        if (str == "$APP_STRING:") {
-                            ioSafe {
-                                PluginManager.___DO_NOT_CALL_FROM_A_PLUGIN_hotReloadAllLocalPlugins(
-                                    activity
-                                )
-                            }
-                        }
+                    } else if (CloudstreamAppRedirectHandler.handle(activity, str)) {
+                        return true
                     } else if (safeURI(str)?.scheme == APP_STRING_REPO) {
                         val url = str.replaceFirst(APP_STRING_REPO, "https")
                         loadRepository(url)

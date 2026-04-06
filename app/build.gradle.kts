@@ -65,6 +65,7 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 67
         versionName = "4.6.2"
+        multiDexEnabled = true
 
         resValue("string", "commit_hash", getGitCommitHash())
 
@@ -99,6 +100,11 @@ android {
             "TMDB_API_KEY",
             "\"" + ((System.getenv("TMDB_API_KEY")
                 ?: localProperties["TMDB_API_KEY"]) ?: "") + "\""
+        )
+        buildConfigField(
+            "String",
+            "SENTRY_DSN",
+            "\"https://633834cb42b4bb13a7a87a7b4adb4438@o4511109550047232.ingest.de.sentry.io/4511109561843792\""
         )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -182,6 +188,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Android Core & Lifecycle
+    implementation("androidx.multidex:multidex:2.0.1")
     implementation(libs.core.ktx)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.activity.ktx)
@@ -229,6 +236,7 @@ dependencies {
     implementation(libs.conscrypt.android) // To Fix SSL Fu*kery on Android 9
     implementation(libs.jackson.module.kotlin) // JSON Parser
     implementation(libs.zipline)
+    implementation(libs.sentry.android.core)
 
     // Torrent Support
     implementation(libs.torrentserver)

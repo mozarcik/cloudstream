@@ -16,6 +16,7 @@
 
 package com.lagradost.cloudstream3.tv
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.compose.setContent
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
+import com.lagradost.cloudstream3.CloudstreamAppRedirectHandler
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.CommonActivity.setActivityInstance
 import com.lagradost.cloudstream3.network.initClient
@@ -80,9 +82,24 @@ class TvMainActivity : AppCompatActivity() {
                 }
             }
         }
+
+        handleAppIntent(intent)
     }
 
     private fun exitTvApp() {
         finishAndRemoveTask()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        setIntent(intent)
+        handleAppIntent(intent)
+        super.onNewIntent(intent)
+    }
+
+    private fun handleAppIntent(intent: Intent?) {
+        CloudstreamAppRedirectHandler.handle(
+            activity = this,
+            url = intent?.dataString
+        )
     }
 }

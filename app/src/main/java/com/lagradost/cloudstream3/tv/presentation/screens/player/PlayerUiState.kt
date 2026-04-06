@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
 import androidx.compose.runtime.Immutable
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
 @Immutable
@@ -44,6 +45,6 @@ sealed interface TvPlayerUiState {
     @Immutable
     data class Error(
         val metadata: TvPlayerMetadata,
-        val messageResId: Int,
+        val error: TvErrorUiModel,
     ) : TvPlayerUiState
 }

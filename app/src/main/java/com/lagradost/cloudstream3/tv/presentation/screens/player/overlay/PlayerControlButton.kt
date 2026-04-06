@@ -20,6 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.shape.CircleShape
 import androidx.tv.material3.Border
@@ -63,7 +66,8 @@ internal data class PlayerControlButtonStyle(
 @Composable
 internal fun PlayerControlButton(
     icon: ImageVector,
-    tooltipText: String,
+    contentDescription: String,
+    tooltipText: String?,
     onClick: () -> Unit,
     controlsEnabled: Boolean,
     focusRequester: FocusRequester,
@@ -73,6 +77,7 @@ internal fun PlayerControlButton(
     onTooltipVisible: (String, Rect) -> Unit,
     onTooltipHidden: () -> Unit,
     onFocused: () -> Unit,
+    testTag: String? = null,
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var buttonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
@@ -87,12 +92,24 @@ internal fun PlayerControlButton(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(focusRequester)
+                .then(
+                    if (testTag != null) {
+                        Modifier.testTag(testTag)
+                    } else {
+                        Modifier
+                    }
+                )
+                .semantics(mergeDescendants = true) {
+                    this.contentDescription = contentDescription
+                }
                 .onGloballyPositioned { coordinates ->
                     buttonBoundsInRoot = coordinates.boundsInRoot()
-                    if (isFocused) {
+                    if (isFocused && tooltipText != null) {
                         buttonBoundsInRoot?.let { bounds ->
                             onTooltipVisible(tooltipText, bounds)
                         }
+                    } else if (isFocused) {
+                        onTooltipHidden()
                     }
                 }
                 .onFocusChanged { focusState ->
@@ -102,8 +119,12 @@ internal fun PlayerControlButton(
                     isFocused = nowFocused
                     if (nowFocused) {
                         onFocused()
-                        buttonBoundsInRoot?.let { bounds ->
-                            onTooltipVisible(tooltipText, bounds)
+                        if (tooltipText != null) {
+                            buttonBoundsInRoot?.let { bounds ->
+                                onTooltipVisible(tooltipText, bounds)
+                            }
+                        } else {
+                            onTooltipHidden()
                         }
                     } else {
                         onTooltipHidden()
@@ -133,7 +154,7 @@ internal fun PlayerControlButton(
             ) {
                 Icon(
                     imageVector = icon,
-                    contentDescription = tooltipText,
+                    contentDescription = null,
                     modifier = Modifier.size(style.iconSize),
                 )
             }

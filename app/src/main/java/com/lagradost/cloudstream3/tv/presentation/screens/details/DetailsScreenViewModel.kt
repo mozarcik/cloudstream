@@ -3,9 +3,14 @@ package com.lagradost.cloudstream3.tv.presentation.screens.details
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream3.CloudStreamApp
+import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.reporting.AppErrorReporter
+import com.lagradost.cloudstream3.reporting.HandledAppErrorContext
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
 import kotlinx.coroutines.flow.SharingStarted
@@ -33,9 +38,6 @@ class DetailsScreenViewModel(
 
     val unavailableDetails: UnavailableDetailsUiModel
         get() = routeArgs.unavailableDetails
-
-    val shouldShowUnavailableState: Boolean
-        get() = routeArgs.shouldShowUnavailableState
 
     val canRemoveFromLibrary: Boolean by lazy {
         routeArgs.canRemoveFromLibrary()
@@ -93,11 +95,26 @@ class DetailsScreenViewModel(
         )
     }
 
+    fun retry() {
+        loadDetails()
+    }
+
     private fun loadDetails() {
         val originSource = routeArgs.source
         if (originSource == null) {
             DetailsScreenLoadLogger.logMissingArgs()
-            routeStateHolder.showError()
+            routeStateHolder.showError(
+                error = createDetailsError(
+                    throwable = null,
+                    fallbackResId = R.string.error_invalid_data,
+                )
+            )
+            reportHandledDetailsError(
+                throwable = null,
+                uiMessage = localizeString(R.string.error_invalid_data),
+                eventMessage = "TV details missing navigation args",
+                source = null,
+            )
             return
         }
 
@@ -122,7 +139,7 @@ class DetailsScreenViewModel(
                             request = request,
                             mode = mode,
                         )
-                        routeStateHolder.showError()
+                        routeStateHolder.showUnavailable()
                         return@launch
                     }
                 } ?: originSource
@@ -145,12 +162,72 @@ class DetailsScreenViewModel(
                     is DetailsScreenLoadOutcome.SecondaryFailure -> {
                         DetailsScreenLoadLogger.logSecondaryFailure(source, mode, outcome.error)
                         routeStateHolder.finishSecondaryLoading()
+                        reportHandledDetailsError(
+                            throwable = outcome.error,
+                            uiMessage = localizeString(R.string.tv_home_failed_to_load),
+                            eventMessage = "TV details secondary load failed",
+                            source = source,
+                        )
                     }
                 }
             } catch (e: Exception) {
                 DetailsScreenLoadLogger.logPrimaryFailure(activeSource ?: originSource, mode, e)
-                routeStateHolder.showError()
+                val uiMessage = createDetailsError(
+                    throwable = e,
+                    fallbackResId = R.string.tv_home_failed_to_load,
+                )
+                routeStateHolder.showError(uiMessage)
+                reportHandledDetailsError(
+                    throwable = e,
+                    uiMessage = uiMessage.message,
+                    eventMessage = "TV details failed to load",
+                    source = activeSource ?: originSource,
+                )
             }
         }
+    }
+
+    private fun reportHandledDetailsError(
+        throwable: Throwable?,
+        uiMessage: String,
+        eventMessage: String,
+        source: DetailsRouteSource?,
+    ) {
+        AppErrorReporter.reportHandled(
+            context = HandledAppErrorContext(
+                screen = "tv_details_${mode.name.lowercase()}",
+                uiMessage = uiMessage,
+                eventMessage = eventMessage,
+                providerName = source?.apiName,
+                itemTitle = routeArgs.loadingPreview.title,
+                mediaType = mode.name,
+            ),
+            throwable = throwable,
+        )
+    }
+
+    private fun createDetailsError(
+        throwable: Throwable?,
+        fallbackResId: Int,
+    ): TvErrorUiModel {
+        val message = throwable
+            ?.localizedMessage
+            ?.lineSequence()
+            ?.firstOrNull()
+            ?.trim()
+            .orEmpty()
+            .takeIf { it.isNotBlank() }
+            ?: localizeString(fallbackResId)
+
+        return TvErrorUiModel(message = message)
+    }
+
+    private fun localizeString(resId: Int): String {
+        return CloudStreamApp.context?.getString(resId)
+            ?: when (resId) {
+                R.string.error_invalid_data -> "Invalid data"
+                R.string.tv_home_failed_to_load -> "Failed to load"
+                else -> "Error"
+            }
     }
 }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGri
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
+import com.lagradost.cloudstream3.tv.presentation.screens.profile.ProfileScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchScreen
@@ -86,10 +88,12 @@ fun DashboardScreen(
             updateTopBarFocusable = bodyContext.updateTopBarFocusable,
             updateTopBarDownNavigationEnabled = bodyContext.updateTopBarDownNavigationEnabled,
             topBarSelectedFocusRequester = bodyContext.topBarSelectedFocusRequester,
+            isTopBarFocused = bodyContext.isTopBarFocused,
             homeRestoreFocusToken = bodyContext.homeRestoreFocusToken,
             libraryRestoreFocusToken = bodyContext.libraryRestoreFocusToken,
             homeFeedGridRestoreFocusToken = bodyContext.homeFeedGridRestoreFocusToken,
             libraryFeedGridRestoreFocusToken = bodyContext.libraryFeedGridRestoreFocusToken,
+            homeContentRefreshToken = bodyContext.homeContentRefreshToken,
             requestHomeTopBarFocus = bodyContext.requestHomeTopBarFocus,
             navController = controller,
             modifier = bodyModifier,
@@ -108,10 +112,12 @@ private fun Body(
     updateTopBarFocusable: (Boolean) -> Unit,
     updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
     topBarSelectedFocusRequester: FocusRequester,
+    isTopBarFocused: Boolean,
     homeRestoreFocusToken: Int,
     libraryRestoreFocusToken: Int,
     homeFeedGridRestoreFocusToken: Int,
     libraryFeedGridRestoreFocusToken: Int,
+    homeContentRefreshToken: Int,
     requestHomeTopBarFocus: () -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
@@ -122,45 +128,55 @@ private fun Body(
         startDestination = Screens.Home(),
     ) {
         composable(Screens.Profile()) {
-            PlaceholderScreen("Profile")
+            ProfileScreen(
+                topBarFocusRequester = topBarSelectedFocusRequester,
+                isTopBarFocused = isTopBarFocused,
+                onTopBarVisibilityChanged = updateTopBarVisibility,
+                onTopBarFocusableChanged = updateTopBarFocusable,
+                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         composable(Screens.Sources()) {
              PlaceholderScreen("Sources - Coming Soon")
         }
         composable(Screens.Home()) {
-            HomeScreenV2(
-                onMediaClick = { item ->
-                    when (item) {
-                        is MediaItemCompat.Movie -> {
-                            openMovieDetailsScreen(item)
+            key(homeContentRefreshToken) {
+                HomeScreenV2(
+                    onMediaClick = { item ->
+                        when (item) {
+                            is MediaItemCompat.Movie -> {
+                                openMovieDetailsScreen(item)
+                            }
+                            is MediaItemCompat.TvSeries -> {
+                                openTvSeriesDetailsScreen(item)
+                            }
+                            is MediaItemCompat.Other -> {
+                                openMediaDetailsScreen(item)
+                            }
                         }
-                        is MediaItemCompat.TvSeries -> {
-                            openTvSeriesDetailsScreen(item)
-                        }
-                        is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen(item)
-                        }
-                    }
-                },
-                onContinueWatchingPlay = { item ->
-                    val playbackTarget = item.continueWatching?.let { continueWatching ->
-                        val episodeId = continueWatching.episodeId ?: return@let PlayerStartTarget.Default
-                        if (continueWatching.isFromDownload) {
-                            PlayerStartTarget.DownloadedEpisode(episodeId)
-                        } else {
-                            PlayerStartTarget.ResumeEpisode(episodeId)
-                        }
-                    } ?: PlayerStartTarget.Default
-                    openVideoPlayer(item.url, item.apiName, playbackTarget)
-                },
-                onOpenFeedGrid = { feed ->
-                    HomeFeedGridSelectionStore.setSelectedFeed(feed)
-                    navController.navigate(Screens.HomeFeedGrid())
-                },
-                onScroll = updateTopBarVisibility,
-                topBarFocusRequester = topBarSelectedFocusRequester,
-                restoreFocusToken = homeRestoreFocusToken
-            )
+                    },
+                    onContinueWatchingPlay = { item ->
+                        val playbackTarget = item.continueWatching?.let { continueWatching ->
+                            val episodeId = continueWatching.episodeId
+                                ?: return@let PlayerStartTarget.Default
+                            if (continueWatching.isFromDownload) {
+                                PlayerStartTarget.DownloadedEpisode(episodeId)
+                            } else {
+                                PlayerStartTarget.ResumeEpisode(episodeId)
+                            }
+                        } ?: PlayerStartTarget.Default
+                        openVideoPlayer(item.url, item.apiName, playbackTarget)
+                    },
+                    onOpenFeedGrid = { feed ->
+                        HomeFeedGridSelectionStore.setSelectedFeed(feed)
+                        navController.navigate(Screens.HomeFeedGrid())
+                    },
+                    onScroll = updateTopBarVisibility,
+                    topBarFocusRequester = topBarSelectedFocusRequester,
+                    restoreFocusToken = homeRestoreFocusToken
+                )
+            }
         }
         composable(Screens.HomeFeedGrid()) {
             HomeFeedGridScreen(

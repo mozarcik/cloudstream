@@ -98,9 +98,15 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
 
     if (downloadedEpisodeId == null && (url.isBlank() || apiName.isBlank())) {
         Log.e(DebugTag, "missing args: url=$url apiName=$apiName")
+        val uiError = playerUiErrorFromRes(R.string.error_loading_links_toast)
         context.core.uiState.value = TvPlayerUiState.Error(
             metadata = TvPlayerMetadata.Empty,
-            messageResId = R.string.error_loading_links_toast,
+            error = uiError,
+        )
+        reportPlayerHandledError(
+            metadata = TvPlayerMetadata.Empty,
+            uiMessage = uiError.message,
+            eventMessage = "TV player missing navigation args",
         )
         return
     }
@@ -115,14 +121,21 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
             }
             if (downloadedTarget == null) {
                 Log.e(DebugTag, "downloaded playback target unavailable episodeId=$downloadedEpisodeId")
+                val metadata = TvPlayerMetadata(
+                    title = apiName.ifBlank { "Downloads" },
+                    subtitle = "",
+                    backdropUri = null,
+                    apiName = apiName,
+                )
+                val uiError = playerUiErrorFromRes(R.string.no_links_found_toast)
                 context.core.uiState.value = TvPlayerUiState.Error(
-                    metadata = TvPlayerMetadata(
-                        title = apiName.ifBlank { "Downloads" },
-                        subtitle = "",
-                        backdropUri = null,
-                        apiName = apiName,
-                    ),
-                    messageResId = R.string.no_links_found_toast,
+                    metadata = metadata,
+                    error = uiError,
+                )
+                reportPlayerHandledError(
+                    metadata = metadata,
+                    uiMessage = uiError.message,
+                    eventMessage = "TV player downloaded target unavailable episodeId=$downloadedEpisodeId",
                 )
                 return@launch
             }
@@ -137,13 +150,21 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
         val api = APIHolder.getApiFromNameNull(apiName)
         if (api == null) {
             Log.e(DebugTag, "provider not found api=$apiName")
+            val metadata = TvPlayerMetadata(
+                title = apiName,
+                subtitle = "",
+                backdropUri = null,
+                apiName = apiName,
+            )
+            val uiError = playerUiErrorFromRes(R.string.error_loading_links_toast)
             context.core.uiState.value = TvPlayerUiState.Error(
-                metadata = TvPlayerMetadata(
-                    title = apiName,
-                    subtitle = "",
-                    backdropUri = null,
-                ),
-                messageResId = R.string.error_loading_links_toast,
+                metadata = metadata,
+                error = uiError,
+            )
+            reportPlayerHandledError(
+                metadata = metadata,
+                uiMessage = uiError.message,
+                eventMessage = "TV player provider not found api=$apiName",
             )
             return@launch
         }
@@ -159,13 +180,21 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
         }
 
         if (target == null) {
+            val metadata = TvPlayerMetadata(
+                title = apiName,
+                subtitle = "",
+                backdropUri = null,
+                apiName = apiName,
+            )
+            val uiError = playerUiErrorFromRes(R.string.no_links_found_toast)
             context.core.uiState.value = TvPlayerUiState.Error(
-                metadata = TvPlayerMetadata(
-                    title = apiName,
-                    subtitle = "",
-                    backdropUri = null,
-                ),
-                messageResId = R.string.no_links_found_toast,
+                metadata = metadata,
+                error = uiError,
+            )
+            reportPlayerHandledError(
+                metadata = metadata,
+                uiMessage = uiError.message,
+                eventMessage = "TV player resolved no playable links api=$apiName",
             )
             return@launch
         }
@@ -667,9 +696,15 @@ internal fun finalizeLoading(
     if (forceError) {
         context.catalog.hasFinalized = true
         context.core.loadingUseBlackBackground = false
+        val uiError = playerUiErrorFromRes(R.string.no_links_found_toast)
         context.core.uiState.value = TvPlayerUiState.Error(
             metadata = context.core.metadata,
-            messageResId = R.string.no_links_found_toast,
+            error = uiError,
+        )
+        reportPlayerHandledError(
+            metadata = context.core.metadata,
+            uiMessage = uiError.message,
+            eventMessage = "TV player exhausted all links during finalizeLoading",
         )
     }
 }

@@ -71,7 +71,6 @@ internal class PlayerBottomControlBarState(
         tooltipState = PlayerControlTooltipState(
             text = tooltipText,
             anchorCenterXPx = boundsInRoot.center.x - parentBounds.left,
-            anchorTopYPx = boundsInRoot.top - parentBounds.top,
         )
     }
 

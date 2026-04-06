@@ -163,9 +163,15 @@ internal fun onPlaybackError(
         return
     }
 
+    val uiError = playbackErrorUiModel(error)
     context.core.uiState.value = TvPlayerUiState.Error(
         metadata = context.core.metadata,
-        messageResId = R.string.no_links_found_toast,
+        error = uiError,
+    )
+    reportPlayerHandledError(
+        metadata = context.core.metadata,
+        uiMessage = uiError.message,
+        eventMessage = playbackErrorEventMessage(error),
     )
 }
 

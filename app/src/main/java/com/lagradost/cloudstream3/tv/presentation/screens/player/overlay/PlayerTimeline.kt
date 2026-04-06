@@ -33,6 +33,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.MaterialTheme
@@ -113,6 +114,7 @@ internal fun PlaybackTimeline(
     Box(
         modifier = modifier
             .height(PlayerControlsTokens.TimelineContainerHeight)
+            .testTag(PlayerControlsTestTags.Timeline)
             .focusRequester(focusRequester)
             .focusProperties {
                 canFocus = controlsEnabled

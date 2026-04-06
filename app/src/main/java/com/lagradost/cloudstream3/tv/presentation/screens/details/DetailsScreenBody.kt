@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
@@ -48,6 +52,9 @@ internal fun DetailsScreenBody(
     modifier: Modifier = Modifier,
 ) {
     val coroutineScope = rememberCoroutineScope()
+    var shouldRequestHeroPlayFocus by rememberSaveable(details.id) {
+        mutableStateOf(true)
+    }
 
     Box(modifier = modifier) {
         MovieDetailsBackdrop(
@@ -69,6 +76,7 @@ internal fun DetailsScreenBody(
                     goToMoviePlayer = { goToPlayer(resolveDefaultPlaybackTarget(details)) },
                     playButtonLabel = heroState.playButtonLabel,
                     downloadActionState = heroState.downloadActionState,
+                    requestInitialPlayButtonFocus = shouldRequestHeroPlayFocus,
                     onPrimaryActionsFocused = {
                         if (listState.firstVisibleItemIndex == 0 &&
                             listState.firstVisibleItemScrollOffset == 0
@@ -79,6 +87,9 @@ internal fun DetailsScreenBody(
                         coroutineScope.launch {
                             listState.animateScrollToItem(0)
                         }
+                    },
+                    onInitialPlayButtonFocused = {
+                        shouldRequestHeroPlayFocus = false
                     },
                     onQuickActionClick = { quickAction ->
                         onAction(DetailsUiAction.HeroQuickAction(quickAction))

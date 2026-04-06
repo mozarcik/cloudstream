@@ -29,13 +29,13 @@ fun DetailsScreen(
         mode = mode,
         uiState = uiState,
         actionsCompat = actionsCompat,
-        shouldShowUnavailableState = detailsScreenViewModel.shouldShowUnavailableState,
         unavailableDetails = detailsScreenViewModel.unavailableDetails,
         canRemoveFromLibrary = detailsScreenViewModel.canRemoveFromLibrary,
         goToPlayer = goToPlayer,
         onBackPressed = onBackPressed,
         onManualSearchRequested = onManualSearchRequested,
         refreshScreenWithNewItem = refreshScreenWithNewItem,
+        onRetry = detailsScreenViewModel::retry,
         onFavoriteClick = detailsScreenViewModel::onFavoriteClick,
         onBookmarkClick = detailsScreenViewModel::onBookmarkClick,
         onRemoveUnavailable = {
@@ -51,13 +51,13 @@ internal fun DetailsScreenRouteContent(
     mode: DetailsScreenMode,
     uiState: DetailsScreenUiState,
     actionsCompat: MovieDetailsEpisodeActionsCompat?,
-    shouldShowUnavailableState: Boolean,
     unavailableDetails: UnavailableDetailsUiModel,
     canRemoveFromLibrary: Boolean,
     goToPlayer: (PlayerStartTarget) -> Unit,
     onBackPressed: () -> Unit,
     onManualSearchRequested: (String) -> Unit,
     refreshScreenWithNewItem: (Movie) -> Unit,
+    onRetry: () -> Unit,
     onFavoriteClick: () -> Unit,
     onBookmarkClick: (WatchType) -> Unit,
     onRemoveUnavailable: () -> Unit,
@@ -70,12 +70,19 @@ internal fun DetailsScreenRouteContent(
             modifier = modifier,
         )
 
-        DetailsScreenUiState.Error -> DetailsScreenErrorStateContent(
-            shouldShowUnavailableState = shouldShowUnavailableState,
+        DetailsScreenUiState.Unavailable -> DetailsScreenErrorStateContent(
             unavailableDetails = unavailableDetails,
             canRemoveFromLibrary = canRemoveFromLibrary,
             onRemoveUnavailable = onRemoveUnavailable,
             onManualSearchRequested = onManualSearchRequested,
+            onBackPressed = onBackPressed,
+            modifier = modifier,
+        )
+
+        is DetailsScreenUiState.Error -> DetailsScreenFailureStateContent(
+            state = state,
+            title = unavailableDetails.title,
+            onRetry = onRetry,
             onBackPressed = onBackPressed,
             modifier = modifier,
         )

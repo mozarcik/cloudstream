@@ -43,6 +43,7 @@ internal fun PlaybackException.toTvPlayerPlaybackErrorDetails(): TvPlayerPlaybac
         exoErrorCode = errorCode,
         exoErrorName = errorCodeName,
         httpCode = findHttpStatusCode(),
+        message = localizedMessage,
     )
 }
 

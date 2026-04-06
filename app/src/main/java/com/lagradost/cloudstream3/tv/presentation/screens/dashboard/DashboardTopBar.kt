@@ -47,6 +47,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import com.lagradost.cloudstream3.tv.presentation.theme.IconSize
 import com.lagradost.cloudstream3.tv.presentation.utils.occupyScreenSize
+import com.lagradost.cloudstream3.utils.DataStoreHelper
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -88,6 +89,7 @@ internal fun shouldClearPendingFocusedScreen(
 fun DashboardTopBar(
     modifier: Modifier = Modifier,
     selectedTabIndex: Int,
+    accountRefreshToken: Int = 0,
     screens: List<Screens> = TopBarTabs,
     focusRequesters: List<FocusRequester>,
     isFocusable: Boolean = true,
@@ -106,7 +108,11 @@ fun DashboardTopBar(
     var isHomeTabFocused by remember { mutableStateOf(false) }
     var isTabRowFocused by remember { mutableStateOf(false) }
     val homeTabIndex = remember(screens) { screens.indexOf(Screens.Home).coerceAtLeast(0) }
-    val isAccountFocusable = isFocusable && (isAccountFocused || isHomeTabFocused)
+    val isAccountFocusable = isFocusable && (
+        selectedTabIndex == PROFILE_SCREEN_INDEX ||
+            isAccountFocused ||
+            isHomeTabFocused
+        )
     val selectedScreen = screens.getOrNull(selectedTabIndex)
     val selectedTopBarItemIndex = if (selectedTabIndex >= 0) {
         (selectedTabIndex + 1).coerceAtMost(focusRequesters.lastIndex)
@@ -114,6 +120,14 @@ fun DashboardTopBar(
         0
     }
     val restoreFocusRequester = focusRequesters[selectedTopBarItemIndex]
+    val currentAccount = remember(accountRefreshToken) {
+        DataStoreHelper.getCurrentAccount()
+    }
+    val avatarFallbackDrawableRes = remember(accountRefreshToken) {
+        currentAccount?.let { account ->
+            DataStoreHelper.profileImages.getOrNull(account.defaultImageIndex)
+        }
+    }
 
     LaunchedEffect(pendingFocusedScreen, selectedScreen, isTabRowFocused, suppressDelayedNavigation) {
         val targetScreen = resolveDelayedTopBarNavigationTarget(
@@ -170,6 +184,8 @@ fun DashboardTopBar(
                         .onFocusChanged { focusState ->
                             isAccountFocused = focusState.isFocused
                             if (focusState.isFocused) {
+                                onFocusedTabIndexChangedState(PROFILE_SCREEN_INDEX)
+                            } else if (!focusState.hasFocus) {
                                 onFocusedTabIndexChangedState(null)
                             }
                         }
@@ -187,6 +203,8 @@ fun DashboardTopBar(
                                 StringConstants.Composable.ContentDescription.UserAvatar
                         },
                     selected = selectedTabIndex == PROFILE_SCREEN_INDEX,
+                    customImageUrl = currentAccount?.customImage,
+                    fallbackDrawableRes = avatarFallbackDrawableRes,
                     onClick = {
                         onScreenSelection(Screens.Profile)
                     }

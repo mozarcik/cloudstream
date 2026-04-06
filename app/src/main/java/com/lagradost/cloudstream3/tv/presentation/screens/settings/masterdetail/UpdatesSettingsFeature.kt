@@ -41,6 +41,7 @@ private object UpdatesSettingsScreenIds {
     const val UpdatesBackupFrequency = "settings_updates/backup_frequency"
     const val UpdatesBackupPath = "settings_updates/backup_path"
     const val UpdatesAutoPluginDownload = "settings_updates/auto_plugin_download"
+    const val UpdatesCrashReporting = "settings_updates/crash_reporting"
     const val UpdatesLogcat = "settings_updates/logcat"
 }
 
@@ -89,6 +90,7 @@ class UpdatesSettingsFeature(
         BackupFrequencyScreen(),
         BackupPathScreen(),
         AutoPluginDownloadScreen(),
+        CrashReportingScreen(),
         LogcatScreen()
     )
 
@@ -268,6 +270,15 @@ class UpdatesSettingsFeature(
                 )
                 add(
                     itemEntry(
+                        stableKey = "updates_crash_reporting",
+                        title = context.getString(R.string.tv_crash_reporting_title),
+                        subtitle = context.getString(R.string.tv_crash_reporting_summary),
+                        fallbackIconRes = R.drawable.ic_outline_info_24,
+                        nextScreenId = UpdatesSettingsScreenIds.UpdatesCrashReporting
+                    )
+                )
+                add(
+                    itemEntry(
                         stableKey = "updates_logcat",
                         title = context.getString(R.string.show_log_cat),
                         subtitle = null,
@@ -412,6 +423,31 @@ class UpdatesSettingsFeature(
                     )
                 }
             }
+        }
+    }
+
+    private inner class CrashReportingScreen : SettingsScreen {
+        override val id: String = UpdatesSettingsScreenIds.UpdatesCrashReporting
+        override val title: String = context.getString(R.string.tv_crash_reporting_title)
+
+        override suspend fun load(): List<SettingsEntry> {
+            return listOf(
+                itemEntry(
+                    stableKey = "updates_crash_reporting_vendor",
+                    title = "Sentry",
+                    subtitle = context.getString(R.string.tv_crash_reporting_summary)
+                ),
+                itemEntry(
+                    stableKey = "updates_crash_reporting_builds",
+                    title = context.getString(R.string.builds),
+                    subtitle = context.getString(R.string.tv_crash_reporting_builds_summary)
+                ),
+                itemEntry(
+                    stableKey = "updates_crash_reporting_privacy",
+                    title = context.getString(R.string.privacy),
+                    subtitle = context.getString(R.string.tv_crash_reporting_privacy_summary)
+                )
+            )
         }
     }
 

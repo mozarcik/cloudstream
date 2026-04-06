@@ -494,6 +494,10 @@
     <string name="tv_player_source_trying_next" formatted="true">Source &quot;%1$s&quot; failed. Trying the next source…</string>
     <string name="tv_player_source_trying_next_generic">This source failed. Trying the next one…</string>
     <string name="tv_search_failed_to_load">Couldn\'t load results from this source</string>
+    <string name="tv_crash_reporting_title">Crash reporting</string>
+    <string name="tv_crash_reporting_summary">Error reports are sent to Sentry to help diagnose crashes and playback or details failures.</string>
+    <string name="tv_crash_reporting_builds_summary">Crash reporting is enabled in debug, stable and prerelease builds.</string>
+    <string name="tv_crash_reporting_privacy_summary">Reports avoid intentionally attaching full URLs, tokens or cookies.</string>
     <string name="tv_home_back">Back</string>
     <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>
     <string name="tv_home_no_feeds">No feeds available for this source</string>
@@ -533,6 +537,8 @@
     <string name="error_invalid_data">Invalid data</string>
     <string name="error_invalid_url">Invalid URL</string>
     <string name="error">Error</string>
+    <string name="builds">Builds</string>
+    <string name="privacy">Privacy</string>
     <string name="subtitles_remove_captions">Remove closed captions from subtitles</string>
     <string name="subtitles_remove_bloat">Remove bloat from subtitles</string>
     <string name="subtitles_filter_lang">Filter by preferred media language</string>

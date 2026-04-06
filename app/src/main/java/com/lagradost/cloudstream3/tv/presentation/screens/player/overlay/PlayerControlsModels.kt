@@ -21,7 +21,7 @@ internal object PlayerControlsTokens {
     val OverlayHorizontalPadding = 48.dp
     val OverlayVerticalPadding = 20.dp
     val MetadataToTimelineSpacing = 16.dp
-    val TimelineToControlsSpacing = 18.dp
+    val TimelineToControlsSpacing = 12.dp
     const val EpisodeTitleTextAlpha = 1f
     const val InfoMetadataTextAlpha = 0.7f
 
@@ -36,13 +36,16 @@ internal object PlayerControlsTokens {
 
     val ButtonsSpacing = 8.dp
 
-    val TooltipShape = RoundedCornerShape(12.dp)
-    val TooltipHorizontalPadding = 16.dp
-    val TooltipVerticalPadding = 6.dp
+    val TooltipShape = RoundedCornerShape(10.dp)
+    val TooltipHorizontalPadding = 12.dp
+    val TooltipVerticalPadding = 4.dp
     val TooltipTonalElevation = 5.dp
     const val TooltipAlpha = 0.95f
-    val TooltipVerticalOffset = 16.dp
-    val TooltipMaxWidth = 220.dp
+    val TooltipLaneHeight = 30.dp
+    val TooltipControlsOverlap = 20.dp
+    val TooltipLiftAboveLane = 8.dp
+    val TooltipVerticalFootprintAboveControls = TooltipLaneHeight - TooltipControlsOverlap
+    val TooltipMaxWidth = 180.dp
     const val TooltipFadeInMs = 150
     const val TooltipFadeOutMs = 0
 
@@ -51,12 +54,24 @@ internal object PlayerControlsTokens {
     val TimelineFocusedTrackHeight = 8.dp
     val TimelineTrackPadding = 8.dp
     const val TimelineFocusAnimationMs = 120
+    val SubtitleControlsVisibleOffset =
+        OverlayVerticalPadding +
+            TimelineContainerHeight +
+            TimelineToControlsSpacing +
+            PlayButtonSize +
+            TooltipVerticalFootprintAboveControls
+}
+
+internal object PlayerControlsTestTags {
+    const val PlayPauseButton = "player_controls_play_pause"
+    const val SourcesButton = "player_controls_sources"
+    const val TooltipLane = "player_controls_tooltip_lane"
+    const val Timeline = "player_controls_timeline"
 }
 
 internal data class PlayerControlTooltipState(
     val text: String,
     val anchorCenterXPx: Float,
-    val anchorTopYPx: Float,
 )
 
 internal enum class PlayerControlFocusTarget {

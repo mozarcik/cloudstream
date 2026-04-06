@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.TrailerData
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -100,6 +101,45 @@ class DetailsRouteStateHolderTest {
         val currentState = stateHolder.baseUiState.value as DetailsScreenUiState.Done
         assertEquals("details-1", currentState.details.id)
         assertTrue(!currentState.isSecondaryContentLoading)
+    }
+
+    @Test
+    fun `showUnavailable publishes unavailable state and clears actions compat`() {
+        val stateHolder = DetailsRouteStateHolder(
+            loadingPreview = DetailsLoadingPreview(title = "Loading")
+        )
+        stateHolder.applyPrimary(
+            DetailsPrimaryStageResult(
+                details = fakeMovieDetails(),
+                loadResponse = FakeDetailsLoadResponse(),
+                actionsCompat = fakeActionsCompat(),
+            )
+        )
+
+        stateHolder.showUnavailable()
+
+        assertEquals(DetailsScreenUiState.Unavailable, stateHolder.baseUiState.value)
+        assertNull(stateHolder.actionsCompat)
+    }
+
+    @Test
+    fun `showError publishes retryable error state and clears actions compat`() {
+        val stateHolder = DetailsRouteStateHolder(
+            loadingPreview = DetailsLoadingPreview(title = "Loading")
+        )
+        stateHolder.applyPrimary(
+            DetailsPrimaryStageResult(
+                details = fakeMovieDetails(),
+                loadResponse = FakeDetailsLoadResponse(),
+                actionsCompat = fakeActionsCompat(),
+            )
+        )
+        val error = TvErrorUiModel(message = "Failed to load details")
+
+        stateHolder.showError(error)
+
+        assertEquals(DetailsScreenUiState.Error(error = error), stateHolder.baseUiState.value)
+        assertNull(stateHolder.actionsCompat)
     }
 }
 

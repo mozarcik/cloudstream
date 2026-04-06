@@ -23,6 +23,7 @@ internal fun PlayerOverlay(
     link: ExtractorLink,
     isPlaying: Boolean,
     controlsEnabled: Boolean,
+    showExtendedMetadata: Boolean,
     showAudioTracksButton: Boolean,
     showVideoTracksButton: Boolean,
     showSyncButton: Boolean,
@@ -62,6 +63,11 @@ internal fun PlayerOverlay(
         link.type.name.takeIf { it.isNotBlank() },
         link.name.takeIf { it.isNotBlank() },
     )
+    val hasExtendedMetadata = showExtendedMetadata && (
+        metadata.title.isNotBlank() ||
+            episodeTexts.isNotEmpty() ||
+            infoTexts.isNotEmpty()
+        )
 
     Column(
         modifier = Modifier
@@ -72,42 +78,44 @@ internal fun PlayerOverlay(
             ),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Bottom,
     ) {
-        if (metadata.title.isNotBlank()) {
-            Text(
-                text = metadata.title,
-                style = MaterialTheme.typography.headlineLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        if (hasExtendedMetadata) {
+            if (metadata.title.isNotBlank()) {
+                Text(
+                    text = metadata.title,
+                    style = MaterialTheme.typography.headlineLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
-        if (episodeTexts.isNotEmpty()) {
-            DotSeparatedRow(
-                texts = episodeTexts,
-                textStyle = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = PlayerControlsTokens.EpisodeTitleTextAlpha,
+            if (episodeTexts.isNotEmpty()) {
+                DotSeparatedRow(
+                    texts = episodeTexts,
+                    textStyle = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = PlayerControlsTokens.EpisodeTitleTextAlpha,
+                        ),
                     ),
-                ),
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
 
-        if (infoTexts.isNotEmpty()) {
-            DotSeparatedRow(
-                texts = infoTexts,
-                textStyle = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurface.copy(
-                        alpha = PlayerControlsTokens.InfoMetadataTextAlpha,
+            if (infoTexts.isNotEmpty()) {
+                DotSeparatedRow(
+                    texts = infoTexts,
+                    textStyle = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurface.copy(
+                            alpha = PlayerControlsTokens.InfoMetadataTextAlpha,
+                        ),
                     ),
-                ),
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
 
-        Spacer(modifier = Modifier.height(PlayerControlsTokens.MetadataToTimelineSpacing))
+            Spacer(modifier = Modifier.height(PlayerControlsTokens.MetadataToTimelineSpacing))
+        }
 
         PlaybackTimelineSection(
             exoPlayer = exoPlayer,
