@@ -12,6 +12,7 @@ internal fun buildPlayerPanelsUiState(
     subtitles: List<SubtitleData>,
     selectedSubtitleIndex: Int,
     selectedAudioTrackIndex: Int,
+    subtitleEncodingLabel: String,
     preferredSubtitleLanguageKey: String,
     preferredSubtitleBaseLanguageKey: String,
     showOnlineSubtitleActions: Boolean,
@@ -25,6 +26,7 @@ internal fun buildPlayerPanelsUiState(
     val subtitlePanel = buildSubtitlePanelItems(
         subtitles = subtitles,
         selectedSubtitleIndex = selectedSubtitleIndex,
+        subtitleEncodingLabel = subtitleEncodingLabel,
         preferredSubtitleLanguageKey = preferredSubtitleLanguageKey,
         preferredSubtitleBaseLanguageKey = preferredSubtitleBaseLanguageKey,
         showOnlineSubtitleActions = showOnlineSubtitleActions,

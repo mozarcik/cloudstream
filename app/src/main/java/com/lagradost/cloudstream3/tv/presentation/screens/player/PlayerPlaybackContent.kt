@@ -29,6 +29,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.runtime.PlayerRuntimeTracksStateHolder
+import com.lagradost.cloudstream3.tv.presentation.screens.player.video.TvPlayerSubtitleLayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.video.TvPlayerVideoSurface
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -115,6 +116,11 @@ internal fun PlayerPlaybackContent(
         TvPlayerVideoSurface(
             player = exoPlayer,
             resizeMode = playerResizeMode.resizeMode,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        TvPlayerSubtitleLayer(
+            player = exoPlayer,
             subtitleSyncController = subtitleSyncController,
             controlsVisible = overlayState.controlsVisible,
             modifier = Modifier.fillMaxSize(),

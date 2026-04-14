@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -218,6 +219,7 @@ fun OpenSubtitlesAccountScreen(
                         onValueChange = viewModel::updateUsername,
                         label = context.getString(R.string.username),
                         placeholder = context.getString(R.string.example_username),
+                        inputModifier = Modifier.testTag(ProviderAccountUsernameFieldTag),
                         enabled = isInteractive,
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Next,
@@ -233,6 +235,7 @@ fun OpenSubtitlesAccountScreen(
                         onValueChange = viewModel::updatePassword,
                         label = context.getString(R.string.password),
                         placeholder = context.getString(R.string.example_password),
+                        inputModifier = Modifier.testTag(ProviderAccountPasswordFieldTag),
                         enabled = isInteractive,
                         keyboardOptions = KeyboardOptions(
                             imeAction = ImeAction.Done,
@@ -264,7 +267,9 @@ fun OpenSubtitlesAccountScreen(
                                 )
                             },
                             enabled = isInteractive,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(ProviderAccountLoginButtonTag)
                         ) {
                             Text(
                                 text = context.getString(R.string.login)
@@ -372,6 +377,7 @@ private fun TvAccountTextField(
     onValueChange: (String) -> Unit,
     label: String,
     placeholder: String,
+    inputModifier: Modifier = Modifier,
     enabled: Boolean,
     keyboardOptions: KeyboardOptions,
     keyboardActions: KeyboardActions,
@@ -429,7 +435,9 @@ private fun TvAccountTextField(
                 keyboardActions = keyboardActions,
                 visualTransformation = visualTransformation,
                 textStyle = fieldTextStyle,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(inputModifier),
                 decorationBox = { innerTextField ->
                     Box(
                         modifier = Modifier

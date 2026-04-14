@@ -39,7 +39,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
         val payload = context.resultPayload(resultId) ?: run {
             context.updateState(
                 currentState.copy(
-                    status = TvPlayerOnlineSubtitlesStatus.Results,
+                    status = TvPlayerOnlineSubtitlesStatus.Error,
                     errorMessage = onlineSubtitlesSearchFailedMessage(context.stringResolver),
                 )
             )
@@ -52,7 +52,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
         } ?: run {
             context.updateState(
                 currentState.copy(
-                    status = TvPlayerOnlineSubtitlesStatus.Results,
+                    status = TvPlayerOnlineSubtitlesStatus.Error,
                     errorMessage = onlineSubtitlesSearchFailedMessage(context.stringResolver),
                 )
             )
@@ -63,6 +63,16 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
         loadJob?.cancel()
         loadJob = context.coroutineScope.launch {
             val subtitleEntry = payload.toSubtitleEntity()
+            if (provider.requiresLogin && provider.authUser() == null) {
+                context.updateState(
+                    context.state().copy(
+                        status = TvPlayerOnlineSubtitlesStatus.Error,
+                        errorMessage = onlineSubtitlesLoginRequiredMessage(context.stringResolver),
+                    )
+                )
+                context.refreshVisibleUi()
+                return@launch
+            }
             when (val resource = Resource.fromResult(provider.resource(subtitleEntry))) {
                 is Resource.Success -> {
                     val downloadedSubtitles = mapDownloadedSubtitles(
@@ -77,7 +87,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
                     if (downloadedSubtitles.isEmpty()) {
                         context.updateState(
                             context.state().copy(
-                                status = TvPlayerOnlineSubtitlesStatus.Results,
+                                status = TvPlayerOnlineSubtitlesStatus.Error,
                                 errorMessage = onlineSubtitlesNoSubtitlesLoadedMessage(context.stringResolver),
                             )
                         )
@@ -91,7 +101,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
                 is Resource.Failure -> {
                     context.updateState(
                         context.state().copy(
-                            status = TvPlayerOnlineSubtitlesStatus.Results,
+                            status = TvPlayerOnlineSubtitlesStatus.Error,
                             errorMessage = resource.errorString,
                         )
                     )

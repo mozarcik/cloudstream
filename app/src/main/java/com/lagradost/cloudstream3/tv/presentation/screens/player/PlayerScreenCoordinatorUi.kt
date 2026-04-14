@@ -7,6 +7,9 @@ import com.lagradost.cloudstream3.LoadResponse.Companion.getMalId
 import com.lagradost.cloudstream3.LoadResponse.Companion.getTMDbId
 import com.lagradost.cloudstream3.subtitles.AbstractSubtitleEntities.SubtitleSearch
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.subtitleSyncDebugLog
+import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSubtitlePanelScreen
+import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.readSubtitleEncodingSelection
+import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSubtitleEncodingSelection
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceState
@@ -189,6 +192,7 @@ internal fun applyOnlineSubtitlesSelection(
             " selectedSubtitleId=$selectedSubtitleId",
     )
     context.panels.stateHolder.selectSubtitleById(selectedSubtitleId)
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.resetNavigation()
     postReadyStateForCurrentLink(context)
 }
@@ -228,6 +232,11 @@ internal fun buildPanelsUiState(
     sourceStatesSnapshot: Map<String, TvPlayerSourceState>,
     subtitlesForUi: List<SubtitleData>,
 ): TvPlayerPanelsUiState {
+    val subtitleEncodingSelection = subtitleEncodingSelection(context)
+    val subtitleEncodingPanelContent = context.panels.subtitleEncodingController.buildPanelContent(
+        options = subtitleEncodingSelection.options,
+        selectedValue = subtitleEncodingSelection.value,
+    )
     val onlinePanelContent = context.panels.onlineSubtitlesController.buildPanelContent()
     val hasOnlineSubtitleProviders = context.panels.onlineSubtitlesController.hasOnlineSubtitleProviders()
     val canLoadFirstAvailableSubtitle = context.panels.onlineSubtitlesController.canLoadFirstAvailableSubtitle()
@@ -237,15 +246,31 @@ internal fun buildPanelsUiState(
         sourceStates = sourceStatesSnapshot,
         currentLink = link,
         subtitles = subtitlesForUi,
+        subtitleEncodingLabel = subtitleEncodingSelection.label,
         showOnlineSubtitleActions = hasOnlineSubtitleProviders,
         showFirstAvailableSubtitleAction = canLoadFirstAvailableSubtitle,
     )
+    val shouldUseEncodingNavigation = subtitleEncodingPanelContent.screen == TvPlayerSubtitlePanelScreen.EncodingSelection ||
+        subtitleEncodingPanelContent.overrideMainInitialFocusedItemId != null
     return basePanelsState.copy(
-        subtitlePanelScreen = onlinePanelContent.screen,
-        subtitlePanelNavigationDirection = onlinePanelContent.direction,
+        selectedSubtitleEncodingValue = subtitleEncodingSelection.value,
+        selectedSubtitleEncodingLabel = subtitleEncodingSelection.label,
+        subtitlePanelScreen = if (subtitleEncodingPanelContent.screen == TvPlayerSubtitlePanelScreen.EncodingSelection) {
+            subtitleEncodingPanelContent.screen
+        } else {
+            onlinePanelContent.screen
+        },
+        subtitlePanelNavigationDirection = if (shouldUseEncodingNavigation) {
+            subtitleEncodingPanelContent.direction
+        } else {
+            onlinePanelContent.direction
+        },
+        subtitleEncodingItems = subtitleEncodingPanelContent.items,
         subtitleOnlineItems = onlinePanelContent.items,
-        subtitleInitialFocusedItemId = onlinePanelContent.overrideMainInitialFocusedItemId
+        subtitleInitialFocusedItemId = subtitleEncodingPanelContent.overrideMainInitialFocusedItemId
+            ?: onlinePanelContent.overrideMainInitialFocusedItemId
             ?: basePanelsState.subtitleInitialFocusedItemId,
+        subtitleEncodingInitialFocusedItemId = subtitleEncodingPanelContent.initialFocusedItemId,
         subtitleOnlineInitialFocusedItemId = onlinePanelContent.initialFocusedItemId,
     )
 }
@@ -264,4 +289,23 @@ internal fun refreshPanelsUiStateForCurrentLink(context: PlayerScreenCoordinator
         sourceStatesSnapshot = sourceStatesSnapshot,
         subtitlesForUi = subtitlesForUi,
     )
+}
+
+private fun subtitleEncodingSelection(
+    context: PlayerScreenCoordinatorContext,
+): TvPlayerSubtitleEncodingSelection {
+    val appContext = CloudStreamApp.context
+    return if (appContext == null) {
+        TvPlayerSubtitleEncodingSelection(
+            value = null,
+            label = stringFromAppContext(
+                context = context,
+                resId = com.lagradost.cloudstream3.R.string.automatic,
+                fallback = "Automatic",
+            ),
+            options = emptyList(),
+        )
+    } else {
+        readSubtitleEncodingSelection(appContext)
+    }
 }

@@ -35,6 +35,7 @@ internal class TvPlayerSubtitleSyncController(
     private val decoderFactory = CustomSubtitleDecoderFactory()
     private var currentTextRenderer: TextRenderer? = null
     private var subtitleViewRef: WeakReference<SubtitleView>? = null
+    private var lastDispatchedCues: List<Cue> = emptyList()
     private var subtitleDelayMs: Long = initialSubtitleDelayMs
     private var rendererOffsetMs: Long = -initialSubtitleDelayMs
     private var lastLoggedCueCount = Int.MIN_VALUE
@@ -106,6 +107,7 @@ internal class TvPlayerSubtitleSyncController(
 
     fun attachSubtitleView(subtitleView: SubtitleView?) {
         subtitleViewRef = subtitleView?.let(::WeakReference)
+        subtitleView?.setCues(lastDispatchedCues)
         debugLog(
             "attachSubtitleView: attached=${subtitleView != null}",
         )
@@ -117,6 +119,7 @@ internal class TvPlayerSubtitleSyncController(
     }
 
     fun dispatchStyledCues(cues: List<Cue>): Boolean {
+        lastDispatchedCues = cues
         val subtitleView = subtitleViewRef?.get() ?: return false
         // WHY: parity z legacy (CS3IPlayer) - ustawiamy cue bezpośrednio na SubtitleView.
         subtitleView.setCues(cues)

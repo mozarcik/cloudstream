@@ -8,6 +8,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayer
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSidePanel
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceErrorDialog
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceStatus
+import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.persistSubtitleEncodingSelection
 import com.lagradost.cloudstream3.ui.player.PlayerSubtitleHelper.Companion.toSubtitleMimeType
 import com.lagradost.cloudstream3.ui.player.SubtitleData
 import com.lagradost.cloudstream3.ui.player.SubtitleOrigin
@@ -21,6 +22,7 @@ internal fun openPanel(
     if (!context.catalog.hasFinalized) return
     if (context.panels.stateHolder.openPanel(panel)) {
         if (panel == TvPlayerSidePanel.Subtitles) {
+            context.panels.subtitleEncodingController.resetNavigation()
             context.panels.onlineSubtitlesController.resetNavigation()
             postReadyStateForCurrentLink(context)
         } else {
@@ -34,6 +36,7 @@ internal fun closePanel(context: PlayerScreenCoordinatorContext) {
     val wasSubtitlesPanelOpen =
         context.panels.uiState.value.activePanel == TvPlayerSidePanel.Subtitles
     if (context.panels.stateHolder.closePanel()) {
+        context.panels.subtitleEncodingController.resetNavigation()
         context.panels.onlineSubtitlesController.resetNavigation()
         if (wasSubtitlesPanelOpen) {
             postReadyStateForCurrentLink(context)
@@ -63,6 +66,7 @@ internal fun closePanel(context: PlayerScreenCoordinatorContext) {
 internal fun disableSubtitlesFromPlaybackError(context: PlayerScreenCoordinatorContext) {
     if (!context.catalog.hasFinalized) return
     if (context.panels.stateHolder.disableSubtitlesFromPlaybackError()) {
+        context.panels.subtitleEncodingController.resetNavigation()
         context.panels.onlineSubtitlesController.resetNavigation()
         postReadyStateForCurrentLink(context)
     }
@@ -82,6 +86,12 @@ internal fun onPanelItemAction(
         TvPlayerPanelItemAction.OpenOnlineSubtitles -> {
             context.panels.onlineSubtitlesController.openOnlineSubtitlesPanel()
             postReadyStateForCurrentLink(context)
+            return
+        }
+        TvPlayerPanelItemAction.OpenSubtitleEncodingSelection -> {
+            if (context.panels.subtitleEncodingController.openSelection()) {
+                postReadyStateForCurrentLink(context)
+            }
             return
         }
         TvPlayerPanelItemAction.LoadFirstAvailableSubtitle -> {
@@ -122,6 +132,25 @@ internal fun onPanelItemAction(
             context.panels.onlineSubtitlesController.selectOnlineSubtitleResult(action.resultId)
             return
         }
+        is TvPlayerPanelItemAction.SelectSubtitleEncodingOption -> {
+            val currentEncodingValue = context.panels.uiState.value.selectedSubtitleEncodingValue
+            val didEncodingChange =
+                normalizeSubtitleEncodingValue(currentEncodingValue) !=
+                    normalizeSubtitleEncodingValue(action.value)
+            if (didEncodingChange) {
+                CloudStreamApp.context?.let { appContext ->
+                    persistSubtitleEncodingSelection(
+                        context = appContext,
+                        value = action.value,
+                    )
+                }
+            }
+            val navigationChanged = context.panels.subtitleEncodingController.returnToMainAfterSelection()
+            if (didEncodingChange || navigationChanged) {
+                postReadyStateForCurrentLink(context)
+            }
+            return
+        }
         is TvPlayerPanelItemAction.InspectSourceError -> {
             openSourceErrorDialog(
                 context = context,
@@ -151,6 +180,7 @@ internal fun onPanelItemAction(
         is TvPlayerPanelItemAction.SelectSubtitle,
         TvPlayerPanelItemAction.SelectDefaultTrack,
         is TvPlayerPanelItemAction.SelectTrack -> {
+            context.panels.subtitleEncodingController.resetNavigation()
             context.panels.onlineSubtitlesController.resetNavigation()
         }
         else -> Unit
@@ -191,6 +221,7 @@ internal fun onSubtitleFileSelected(
     context.catalog.store.insertSubtitle(subtitle)
     context.catalog.store.refreshOrderedSubtitles()
     context.panels.stateHolder.selectSubtitleById(subtitle.getId())
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.resetNavigation()
     postReadyStateForCurrentLink(context)
 }
@@ -200,7 +231,8 @@ internal fun onSubtitlesSidePanelBackPressed(context: PlayerScreenCoordinatorCon
     if (context.panels.uiState.value.activePanel != TvPlayerSidePanel.Subtitles) {
         return false
     }
-    val navigatedBack = context.panels.onlineSubtitlesController.navigateBack()
+    val navigatedBack = context.panels.subtitleEncodingController.navigateBack() ||
+        context.panels.onlineSubtitlesController.navigateBack()
     if (navigatedBack) {
         postReadyStateForCurrentLink(context)
     }

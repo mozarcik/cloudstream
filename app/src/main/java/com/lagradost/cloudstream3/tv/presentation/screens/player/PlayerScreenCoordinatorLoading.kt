@@ -70,6 +70,7 @@ internal fun retry(context: PlayerScreenCoordinatorContext) {
     context.core.currentEpisode = null
     context.core.episodeQueue = emptyList()
     context.core.currentEpisodeIndex = -1
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.reset()
     context.core.playbackProgressState.reset()
     context.panels.stateHolder.reset()
@@ -209,6 +210,7 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
         context.core.episodeQueue = target.episodes
         context.core.currentEpisodeIndex = target.selectedEpisodeIndex
         context.core.currentLoadResponse = target.page
+        context.panels.subtitleEncodingController.resetNavigation()
         context.panels.onlineSubtitlesController.reset(
             query = defaultOnlineSubtitlesQuery(context),
         )
@@ -392,6 +394,7 @@ private suspend fun applyDownloadedPlaybackTarget(
     context.core.episodeQueue = target.episodes
     context.core.currentEpisodeIndex = target.selectedEpisodeIndex
     context.core.currentLoadResponse = null
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.reset(
         query = defaultOnlineSubtitlesQuery(context),
     )

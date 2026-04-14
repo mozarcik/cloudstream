@@ -8,6 +8,8 @@ import kotlinx.collections.immutable.persistentListOf
 internal const val SubtitleLoadFromInternetItemId = "subtitle_load_online"
 internal const val SubtitleLoadFromFileItemId = "subtitle_load_file"
 internal const val SubtitleLoadFirstAvailableItemId = "subtitle_load_first_available"
+internal const val SubtitleEncodingItemId = "subtitle_encoding"
+internal const val SubtitleEncodingOptionItemPrefix = "subtitle_encoding_option_"
 internal const val SubtitleOnlineQueryItemId = "subtitle_online_query"
 internal const val SubtitleOnlineLanguageItemId = "subtitle_online_language"
 internal const val SubtitleOnlineLanguageOptionItemPrefix = "subtitle_online_language_option_"
@@ -25,6 +27,7 @@ enum class TvPlayerSidePanel {
 
 enum class TvPlayerSubtitlePanelScreen {
     Main,
+    EncodingSelection,
     OnlineSearch,
     OnlineLanguageSelection,
 }
@@ -120,6 +123,8 @@ sealed interface TvPlayerPanelItemAction {
     data object LoadSubtitleFromFile : TvPlayerPanelItemAction
     data object OpenOnlineSubtitles : TvPlayerPanelItemAction
     data object LoadFirstAvailableSubtitle : TvPlayerPanelItemAction
+    data object OpenSubtitleEncodingSelection : TvPlayerPanelItemAction
+    data class SelectSubtitleEncodingOption(val value: String?) : TvPlayerPanelItemAction
     data object BackFromOnlineSubtitles : TvPlayerPanelItemAction
     data object EditOnlineSubtitlesQuery : TvPlayerPanelItemAction
     data class UpdateOnlineSubtitlesQuery(val query: String) : TvPlayerPanelItemAction
@@ -134,11 +139,15 @@ data class TvPlayerPanelsUiState(
     val sourceItems: List<SidePanelMenuItem> = emptyList(),
     val subtitleItems: List<SidePanelMenuItem> = emptyList(),
     val trackItems: List<SidePanelMenuItem> = emptyList(),
+    val selectedSubtitleEncodingValue: String? = null,
+    val selectedSubtitleEncodingLabel: String = "",
     val subtitlePanelScreen: TvPlayerSubtitlePanelScreen = TvPlayerSubtitlePanelScreen.Main,
     val subtitlePanelNavigationDirection: TvPlayerSubtitlePanelNavigationDirection = TvPlayerSubtitlePanelNavigationDirection.Forward,
+    val subtitleEncodingItems: List<SidePanelMenuItem> = emptyList(),
     val subtitleOnlineItems: List<SidePanelMenuItem> = emptyList(),
     val sourceInitialFocusedItemId: String? = null,
     val subtitleInitialFocusedItemId: String? = null,
+    val subtitleEncodingInitialFocusedItemId: String? = null,
     val subtitleOnlineInitialFocusedItemId: String? = null,
     val trackInitialFocusedItemId: String? = null,
 )

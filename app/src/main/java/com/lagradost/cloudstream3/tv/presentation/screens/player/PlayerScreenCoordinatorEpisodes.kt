@@ -50,6 +50,7 @@ internal fun playNextEpisode(
         episode = nextEpisode,
     )
     context.core.loadingUseBlackBackground = true
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.reset(
         query = defaultOnlineSubtitlesQuery(context),
     )

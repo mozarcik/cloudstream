@@ -20,6 +20,7 @@ private data class SubtitleLanguageGroup(
 internal fun buildSubtitlePanelItems(
     subtitles: List<SubtitleData>,
     selectedSubtitleIndex: Int,
+    subtitleEncodingLabel: String,
     preferredSubtitleLanguageKey: String,
     preferredSubtitleBaseLanguageKey: String,
     showOnlineSubtitleActions: Boolean,
@@ -41,6 +42,18 @@ internal fun buildSubtitlePanelItems(
                 ),
                 selected = selectedSubtitleIndex == -1,
                 actionToken = TvPlayerPanelItemAction.DisableSubtitles,
+            )
+        )
+        add(
+            SidePanelMenuItem(
+                id = SubtitleEncodingItemId,
+                title = playerString(
+                    resId = R.string.subtitles_encoding,
+                    fallback = "Subtitle encoding",
+                ),
+                supportingTexts = listOf(subtitleEncodingLabel),
+                showChevron = true,
+                actionToken = TvPlayerPanelItemAction.OpenSubtitleEncodingSelection,
             )
         )
         add(

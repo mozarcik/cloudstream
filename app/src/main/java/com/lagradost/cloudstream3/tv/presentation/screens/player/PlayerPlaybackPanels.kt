@@ -40,7 +40,18 @@ internal fun PlayerPlaybackPanelsLayer(
             onSubtitlesBackRequested = onSubtitlesSidePanelBackPressed,
             onItemAction = { action ->
                 registerControlsInteraction()
-                if (action.requiresPlaybackRestore()) {
+                val shouldCapturePlaybackRestore = when {
+                    action.requiresPlaybackRestore() -> true
+                    action is TvPlayerPanelItemAction.SelectSubtitleEncodingOption -> {
+                        shouldRestorePlaybackForSubtitleEncodingChange(
+                            selectedSubtitle = selectedSubtitle,
+                            currentEncodingValue = panelsState.selectedSubtitleEncodingValue,
+                            newEncodingValue = action.value,
+                        )
+                    }
+                    else -> false
+                }
+                if (shouldCapturePlaybackRestore) {
                     onPendingPlaybackRestoreCaptured(
                         exoPlayer.currentPosition,
                         exoPlayer.playWhenReady,

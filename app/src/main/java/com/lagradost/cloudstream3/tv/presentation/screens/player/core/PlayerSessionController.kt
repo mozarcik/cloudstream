@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import com.lagradost.cloudstream3.ui.player.SubtitleData
+import com.lagradost.cloudstream3.ui.player.CustomDecoder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerSubtitleSyncController
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
@@ -48,6 +49,7 @@ internal class PlayerSessionController(
             player = player,
             newSubtitleDelayMs = subtitleDelayMs,
         )
+        CustomDecoder.updateForcedEncoding(appContext)
         val mediaSource = buildPlayerMediaSource(
             context = appContext,
             link = link,

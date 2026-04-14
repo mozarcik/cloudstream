@@ -777,6 +777,7 @@
     <string name="preview_seekbar">Seekbar preview</string>
     <string name="preview_seekbar_desc">Enable preview thumbnail on seekbar</string>
     <string name="no_subtitles_loaded">No subtitles loaded yet</string>
+    <string name="tv_player_online_subtitles_login_required">Log in to download subtitles from this source</string>
     <string name="backup_path_title">Backup folder location</string>
     <string name="custom">Custom</string>
     <!--confirm exit dialog-->

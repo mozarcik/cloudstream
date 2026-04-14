@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.state
 
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.PlayerOnlineSubtitlesController
+import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.PlayerSubtitleEncodingController
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsStateHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
@@ -26,6 +27,7 @@ internal class PlayerPanelsStateModule(
     )
     internal val panelEffects: SharedFlow<TvPlayerPanelEffect> = mutablePanelEffects.asSharedFlow()
     internal val stateHolder = TvPlayerPanelsStateHolder()
+    internal val subtitleEncodingController = PlayerSubtitleEncodingController()
     internal val onlineSubtitlesController = PlayerOnlineSubtitlesController(
         coroutineScope = coroutineScope,
         stringResolver = stringResolver,

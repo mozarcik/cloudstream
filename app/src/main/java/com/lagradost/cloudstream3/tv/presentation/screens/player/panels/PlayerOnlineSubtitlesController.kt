@@ -93,6 +93,7 @@ internal class PlayerOnlineSubtitlesController(
     fun navigateBack(): Boolean {
         return when (navigationState.screen) {
             TvPlayerSubtitlePanelScreen.Main -> false
+            TvPlayerSubtitlePanelScreen.EncodingSelection -> false
             TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> {
                 navigationState = PlayerOnlineSubtitlesNavigationState(
                     screen = TvPlayerSubtitlePanelScreen.OnlineSearch,

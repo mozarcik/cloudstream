@@ -71,6 +71,50 @@ class PlayerPlaybackLoadSupportTest {
         )
     }
 
+    @Test
+    fun `subtitle encoding change reloads playback for external subtitle`() {
+        assertTrue(
+            shouldRestorePlaybackForSubtitleEncodingChange(
+                selectedSubtitle = testSubtitle(origin = SubtitleOrigin.URL),
+                currentEncodingValue = null,
+                newEncodingValue = "Windows-1250",
+            )
+        )
+    }
+
+    @Test
+    fun `subtitle encoding change does not reload playback for embedded subtitle`() {
+        assertFalse(
+            shouldRestorePlaybackForSubtitleEncodingChange(
+                selectedSubtitle = testSubtitle(origin = SubtitleOrigin.EMBEDDED_IN_VIDEO),
+                currentEncodingValue = null,
+                newEncodingValue = "Windows-1250",
+            )
+        )
+    }
+
+    @Test
+    fun `subtitle encoding change does not reload playback when encoding stays the same`() {
+        assertFalse(
+            shouldRestorePlaybackForSubtitleEncodingChange(
+                selectedSubtitle = testSubtitle(origin = SubtitleOrigin.DOWNLOADED_FILE),
+                currentEncodingValue = "UTF-8",
+                newEncodingValue = "UTF-8",
+            )
+        )
+    }
+
+    @Test
+    fun `subtitle encoding change does not reload playback without active subtitle`() {
+        assertFalse(
+            shouldRestorePlaybackForSubtitleEncodingChange(
+                selectedSubtitle = null,
+                currentEncodingValue = null,
+                newEncodingValue = "Windows-1250",
+            )
+        )
+    }
+
     private fun testSubtitle(origin: SubtitleOrigin): SubtitleData {
         return SubtitleData(
             originalName = "English",

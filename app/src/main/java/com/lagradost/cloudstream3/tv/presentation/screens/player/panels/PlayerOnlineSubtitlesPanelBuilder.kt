@@ -15,6 +15,7 @@ internal fun buildOnlineSubtitlesPanelContent(
             state = state,
             subtitleLanguageOptions = subtitleLanguageOptions,
         )
+        TvPlayerSubtitlePanelScreen.EncodingSelection,
         TvPlayerSubtitlePanelScreen.OnlineSearch,
         TvPlayerSubtitlePanelScreen.Main -> buildOnlinePanelItems(
             state = state,
@@ -73,6 +74,7 @@ private fun buildOnlinePanelItems(
         add(
             SidePanelMenuItem(
                 id = SubtitleOnlineQueryItemId,
+                testTag = SubtitleOnlineQueryItemId,
                 title = stringResolver(
                     R.string.search,
                     "Search",
@@ -87,6 +89,7 @@ private fun buildOnlinePanelItems(
         add(
             SidePanelMenuItem(
                 id = SubtitleOnlineLanguageItemId,
+                testTag = SubtitleOnlineLanguageItemId,
                 title = stringResolver(
                     R.string.subs_subtitle_languages,
                     "Subtitle language",
@@ -102,6 +105,7 @@ private fun buildOnlinePanelItems(
                 add(
                     SidePanelMenuItem(
                         id = SubtitleOnlineLoadingItemId,
+                        testTag = SubtitleOnlineLoadingItemId,
                         title = stringResolver(
                             R.string.loading,
                             "Loading…",
@@ -115,6 +119,7 @@ private fun buildOnlinePanelItems(
                 add(
                     SidePanelMenuItem(
                         id = SubtitleOnlineEmptyItemId,
+                        testTag = SubtitleOnlineEmptyItemId,
                         title = stringResolver(
                             R.string.tv_feed_empty,
                             "No items in this list",
@@ -128,6 +133,7 @@ private fun buildOnlinePanelItems(
                 add(
                     SidePanelMenuItem(
                         id = SubtitleOnlineErrorItemId,
+                        testTag = SubtitleOnlineErrorItemId,
                         title = state.errorMessage?.takeIf { message ->
                             message.isNotBlank()
                         } ?: onlineSubtitlesSearchFailedMessage(stringResolver),
@@ -137,6 +143,7 @@ private fun buildOnlinePanelItems(
                 add(
                     SidePanelMenuItem(
                         id = SubtitleOnlineRetryItemId,
+                        testTag = SubtitleOnlineRetryItemId,
                         title = stringResolver(
                             R.string.tv_player_retry,
                             "Try again",
@@ -147,10 +154,23 @@ private fun buildOnlinePanelItems(
             }
 
             TvPlayerOnlineSubtitlesStatus.Results -> {
+                state.errorMessage?.takeIf { message ->
+                    message.isNotBlank()
+                }?.let { message ->
+                    add(
+                        SidePanelMenuItem(
+                            id = SubtitleOnlineErrorItemId,
+                            testTag = SubtitleOnlineErrorItemId,
+                            title = message,
+                            enabled = false,
+                        )
+                    )
+                }
                 state.results.forEach { result ->
                     add(
                         SidePanelMenuItem(
                             id = result.id,
+                            testTag = result.id,
                             title = result.title,
                             titleMaxLines = 1,
                             supportingTexts = result.supportingTexts,
@@ -213,5 +233,14 @@ internal fun onlineSubtitlesNoSubtitlesLoadedMessage(
     return stringResolver(
         R.string.no_subtitles_loaded,
         "No subtitles loaded yet",
+    )
+}
+
+internal fun onlineSubtitlesLoginRequiredMessage(
+    stringResolver: (Int, String) -> String,
+): String {
+    return stringResolver(
+        R.string.tv_player_online_subtitles_login_required,
+        "Log in to download subtitles from this source",
     )
 }

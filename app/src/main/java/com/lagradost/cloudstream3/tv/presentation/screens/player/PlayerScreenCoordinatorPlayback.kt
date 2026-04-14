@@ -54,6 +54,7 @@ internal fun selectSource(
         state = TvPlayerSourceState(status = TvPlayerSourceStatus.Loading),
     )
     context.panels.stateHolder.onSourceChanged(selectedLink)
+    context.panels.subtitleEncodingController.resetNavigation()
     context.panels.onlineSubtitlesController.resetNavigation()
     context.catalog.store.setCurrentLinkIndex(index)
     postReadyState(
@@ -153,6 +154,7 @@ internal fun onPlaybackError(
             newLink = nextLink,
             preserveSourcesPanel = true,
         )
+        context.panels.subtitleEncodingController.resetNavigation()
         context.panels.onlineSubtitlesController.resetNavigation()
         context.catalog.store.setCurrentLinkIndex(nextIndex)
         postReadyState(

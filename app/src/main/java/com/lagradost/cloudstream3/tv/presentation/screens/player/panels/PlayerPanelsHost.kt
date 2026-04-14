@@ -48,11 +48,13 @@ internal fun PlayerSidePanels(
                 },
                 title = when (panels.subtitlePanelScreen) {
                     TvPlayerSubtitlePanelScreen.Main -> stringResource(R.string.player_subtitles_settings)
+                    TvPlayerSubtitlePanelScreen.EncodingSelection -> stringResource(R.string.subtitles_encoding)
                     TvPlayerSubtitlePanelScreen.OnlineSearch -> stringResource(R.string.player_load_subtitles_online)
                     TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> stringResource(R.string.subs_subtitle_languages)
                 },
                 items = when (panels.subtitlePanelScreen) {
                     TvPlayerSubtitlePanelScreen.Main -> panels.subtitleItems
+                    TvPlayerSubtitlePanelScreen.EncodingSelection -> panels.subtitleEncodingItems
                     TvPlayerSubtitlePanelScreen.OnlineSearch,
                     TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> panels.subtitleOnlineItems
                 },
@@ -60,6 +62,7 @@ internal fun PlayerSidePanels(
                 selectionIndicatorStyle = SidePanelSelectionIndicatorStyle.Checkmark,
                 initialFocusedItemId = when (panels.subtitlePanelScreen) {
                     TvPlayerSubtitlePanelScreen.Main -> panels.subtitleInitialFocusedItemId
+                    TvPlayerSubtitlePanelScreen.EncodingSelection -> panels.subtitleEncodingInitialFocusedItemId
                     TvPlayerSubtitlePanelScreen.OnlineSearch,
                     TvPlayerSubtitlePanelScreen.OnlineLanguageSelection -> panels.subtitleOnlineInitialFocusedItemId
                 },
