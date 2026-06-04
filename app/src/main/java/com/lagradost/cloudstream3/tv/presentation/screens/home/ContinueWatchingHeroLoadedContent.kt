@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -46,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
+import androidx.tv.material3.Border
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -54,6 +56,7 @@ import androidx.tv.material3.OutlinedButtonDefaults
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.compat.home.preferredBackdropUriOrNull
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconContent
 import com.lagradost.cloudstream3.tv.presentation.common.ActionIconsPillDefaults
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
@@ -91,6 +94,11 @@ internal fun ContinueWatchingHeroLoadedState(
 
     val safeSelectedIndex = selectedIndex.coerceIn(0, items.lastIndex)
     val selectedItem = items[safeSelectedIndex]
+    val selectedBackdropUrl = selectedItem.preferredBackdropUriOrNull()
+    val colorTokens = rememberContinueWatchingHeroColorTokens(
+        artworkUrl = selectedBackdropUrl,
+        baseColorScheme = MaterialTheme.colorScheme,
+    )
 
     LaunchedEffect(items.size) {
         selectedIndex = selectedIndex.coerceIn(0, items.lastIndex)
@@ -162,13 +170,14 @@ internal fun ContinueWatchingHeroLoadedState(
             .background(MaterialTheme.colorScheme.surface)
     ) {
         ContinueWatchingHeroBackdrop(
-            posterUrl = selectedItem.posterUri,
+            imageUrl = selectedBackdropUrl,
             applyBlur = selectedItem.continueWatching?.hasBackdrop != true,
             modifier = Modifier.matchParentSize()
         )
 
         ContinueWatchingHeroInfo(
             item = selectedItem,
+            colorTokens = colorTokens,
             remainingSuffix = remainingSuffix,
             isInteractive = isInteractive,
             upFocusRequester = upFocusRequester,
@@ -211,6 +220,7 @@ internal fun ContinueWatchingHeroLoadedState(
                 val cardFocusRequester = cardFocusRequesters[cardTargetId(item)] ?: return@itemsIndexed
                 ContinueWatchingHeroCard(
                     item = item,
+                    colorTokens = colorTokens,
                     focusRequester = if (index == lastFocusedCardIndex) {
                         cardsFocusRequester
                     } else {
@@ -235,6 +245,7 @@ internal fun ContinueWatchingHeroLoadedState(
 @Composable
 private fun ContinueWatchingHeroInfo(
     item: MediaItemCompat,
+    colorTokens: ContinueWatchingHeroColorTokens,
     remainingSuffix: String,
     isInteractive: Boolean,
     upFocusRequester: FocusRequester,
@@ -286,12 +297,12 @@ private fun ContinueWatchingHeroInfo(
                 onClick = { onResumeClick(item) },
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
                 colors = ButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    focusedContainerColor = MaterialTheme.colorScheme.primary,
-                    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
-                    pressedContainerColor = MaterialTheme.colorScheme.primary,
-                    pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = colorTokens.resumeContainerColor,
+                    contentColor = colorTokens.resumeContentColor,
+                    focusedContainerColor = colorTokens.resumeFocusedContainerColor,
+                    focusedContentColor = colorTokens.resumeFocusedContentColor,
+                    pressedContainerColor = colorTokens.resumeFocusedContainerColor,
+                    pressedContentColor = colorTokens.resumeFocusedContentColor,
                 ),
                 modifier = Modifier
                     .testTag("home_continue_watching_resume_button")
@@ -334,7 +345,35 @@ private fun ContinueWatchingHeroInfo(
             OutlinedButton(
                 onClick = { onDetailsClick(item) },
                 contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+                colors = OutlinedButtonDefaults.colors(
+                    contentColor = colorTokens.detailsContentColor,
+                    focusedContainerColor = colorTokens.detailsFocusedContainerColor,
+                    focusedContentColor = colorTokens.detailsFocusedContentColor,
+                    pressedContainerColor = colorTokens.detailsFocusedContainerColor,
+                    pressedContentColor = colorTokens.detailsFocusedContentColor,
+                ),
+                border = OutlinedButtonDefaults.border(
+                    border = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedBorderWidth,
+                            color = colorTokens.detailsBorderColor,
+                        ),
+                    ),
+                    focusedBorder = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedFocusedBorderWidth,
+                            color = colorTokens.detailsFocusedBorderColor,
+                        ),
+                    ),
+                    pressedBorder = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedBorderWidth,
+                            color = colorTokens.detailsFocusedBorderColor,
+                        ),
+                    ),
+                ),
                 modifier = Modifier
+                    .testTag("home_continue_watching_details_button")
                     .focusRequester(detailsFocusRequester)
                     .focusProperties {
                         canFocus = isInteractive
@@ -379,8 +418,36 @@ private fun ContinueWatchingHeroInfo(
                 } else {
                     OutlinedButtonDefaults.ContentPadding
                 },
+                colors = OutlinedButtonDefaults.colors(
+                    contentColor = colorTokens.removeContentColor,
+                    focusedContainerColor = colorTokens.removeFocusedContainerColor,
+                    focusedContentColor = colorTokens.removeFocusedContentColor,
+                    pressedContainerColor = colorTokens.removeFocusedContainerColor,
+                    pressedContentColor = colorTokens.removeFocusedContentColor,
+                ),
+                border = OutlinedButtonDefaults.border(
+                    border = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedBorderWidth,
+                            color = colorTokens.removeBorderColor,
+                        ),
+                    ),
+                    focusedBorder = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedFocusedBorderWidth,
+                            color = colorTokens.removeFocusedBorderColor,
+                        ),
+                    ),
+                    pressedBorder = Border(
+                        border = BorderStroke(
+                            width = ContinueWatchingOutlinedBorderWidth,
+                            color = colorTokens.removeFocusedBorderColor,
+                        ),
+                    ),
+                ),
                 interactionSource = removeInteractionSource,
                 modifier = Modifier
+                    .testTag("home_continue_watching_remove_button")
                     .focusRequester(removeFocusRequester)
                     .focusProperties {
                         canFocus = isInteractive

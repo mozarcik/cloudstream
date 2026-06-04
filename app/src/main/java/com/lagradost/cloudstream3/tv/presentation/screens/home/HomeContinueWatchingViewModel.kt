@@ -21,6 +21,7 @@ class HomeContinueWatchingViewModel(
     val uiState = _uiState.asStateFlow()
 
     private var continueWatchingLoadJob: Job? = null
+    private var nextRemoveActionToken = 0
 
     init {
         loadContinueWatching()
@@ -32,21 +33,34 @@ class HomeContinueWatchingViewModel(
 
     fun removeItem(parentId: Int?) {
         if (parentId == null) return
+        val removeActionToken = nextRemoveActionToken()
 
         viewModelScope.launch {
             continueWatchingRepository.removeItem(parentId)
                 .fold(
                     onSuccess = {
-                        loadContinueWatching(forceReload = true)
+                        loadContinueWatching(forceReload = true) {
+                            publishRemoveResult(
+                                token = removeActionToken,
+                                wasSuccessful = true,
+                            )
+                        }
                     },
                     onFailure = { throwable ->
                         Log.e(TAG, "Failed to remove continue watching item", throwable)
+                        publishRemoveResult(
+                            token = removeActionToken,
+                            wasSuccessful = false,
+                        )
                     }
                 )
         }
     }
 
-    private fun loadContinueWatching(forceReload: Boolean = false) {
+    private fun loadContinueWatching(
+        forceReload: Boolean = false,
+        onLoaded: (() -> Unit)? = null,
+    ) {
         val currentState = _uiState.value.state
         if (!forceReload && currentState !is HomeFeedLoadState.Loading) {
             return
@@ -75,7 +89,25 @@ class HomeContinueWatchingViewModel(
             _uiState.update { state ->
                 state.copy(state = nextState)
             }
+            onLoaded?.invoke()
         }
+    }
+
+    private fun publishRemoveResult(
+        token: Int,
+        wasSuccessful: Boolean,
+    ) {
+        _uiState.update { state ->
+            state.copy(
+                lastRemoveActionToken = token,
+                lastRemoveSucceeded = wasSuccessful,
+            )
+        }
+    }
+
+    private fun nextRemoveActionToken(): Int {
+        nextRemoveActionToken += 1
+        return nextRemoveActionToken
     }
 
     private companion object {

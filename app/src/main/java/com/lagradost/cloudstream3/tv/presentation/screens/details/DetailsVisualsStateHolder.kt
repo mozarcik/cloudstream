@@ -16,12 +16,12 @@ internal fun rememberDetailsVisualsState(
     details: MovieDetails,
     baseColorScheme: ColorScheme,
 ): DetailsVisualsState {
-    val artworkKey = remember(details.id, details.posterUri) {
-        "details:${details.id}:${details.posterUri}"
+    val artworkUrl = remember(details.id, details.backdropUri, details.posterUri) {
+        details.backdropUri.takeIf { it.isNotBlank() }
+            ?: details.posterUri.takeIf { it.isNotBlank() }
     }
     val dynamicColorScheme = rememberDetailsDynamicColorScheme(
-        artworkKey = artworkKey,
-        artworkUrl = details.posterUri.takeIf { it.isNotBlank() },
+        artworkUrl = artworkUrl,
         baseColorScheme = baseColorScheme,
     )
 

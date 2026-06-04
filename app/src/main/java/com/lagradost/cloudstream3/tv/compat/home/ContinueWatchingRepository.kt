@@ -5,8 +5,12 @@ import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.lagradost.cloudstream3.ui.home.HomeViewModel
+import com.lagradost.cloudstream3.tv.util.warmArtworkSeedColor
 import com.lagradost.cloudstream3.tv.compat.home.SearchResponseMapper.toMediaItemCompat
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 interface ContinueWatchingRepository {
@@ -34,6 +38,8 @@ class ContinueWatchingRepositoryImpl : ContinueWatchingRepository {
 class ContinueWatchingImagePrefetcher(
     private val context: Context,
 ) {
+    private val colorWarmupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     fun prefetch(items: List<MediaItemCompat>) {
         if (items.isEmpty()) return
 
@@ -46,6 +52,15 @@ class ContinueWatchingImagePrefetcher(
 
             imageLoader.enqueue(request)
         }
+
+        colorWarmupScope.launch {
+            buildColorWarmupUrls(items).forEach { imageUrl ->
+                warmArtworkSeedColor(
+                    context = context,
+                    artworkUrl = imageUrl,
+                )
+            }
+        }
     }
 
     private fun buildPrefetchUrls(items: List<MediaItemCompat>): List<String> {
@@ -55,12 +70,18 @@ class ContinueWatchingImagePrefetcher(
             primaryItem?.backdropUri
                 ?.takeIf { url -> url.isNotBlank() }
                 ?.let(::add)
-            primaryItem?.posterUri
-                ?.takeIf { url -> url.isNotBlank() }
-                ?.let(::add)
+            primaryItem?.preferredBackdropUriOrNull()?.let(::add)
 
             items.take(CONTINUE_WATCHING_PREFETCH_CARD_COUNT).forEach { item ->
-                item.posterUri.takeIf { url -> url.isNotBlank() }?.let(::add)
+                item.preferredBackdropUriOrNull()?.let(::add)
+            }
+        }.distinct()
+    }
+
+    private fun buildColorWarmupUrls(items: List<MediaItemCompat>): List<String> {
+        return buildList {
+            items.take(CONTINUE_WATCHING_PREFETCH_CARD_COUNT).forEach { item ->
+                item.preferredBackdropUriOrNull()?.let(::add)
             }
         }.distinct()
     }

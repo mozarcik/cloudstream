@@ -457,6 +457,9 @@
     <string name="subtitle_offset_extra_hint_later_format">Use this if the subtitles are shown %d ms too early</string>
     <string name="subtitle_offset_extra_hint_before_format">Use this if subtitles are shown %d ms too late</string>
     <string name="subtitle_offset_extra_hint_none_format">No subtitle delay</string>
+    <string name="tv_player_subtitle_sync_controls_hint">Use these if subtitles are shown:</string>
+    <string name="tv_player_subtitle_sync_controls_too_late">too late</string>
+    <string name="tv_player_subtitle_sync_controls_too_early">too early</string>
     <string name="tv_player_subtitle_sync_enable_subtitles">Enable subtitles to synchronize them.</string>
     <!--
     Example text (pangram) can optionally be translated; if you do, include all the letters in the alphabet,
@@ -499,6 +502,7 @@
     <string name="tv_crash_reporting_builds_summary">Crash reporting is enabled in debug, stable and prerelease builds.</string>
     <string name="tv_crash_reporting_privacy_summary">Reports avoid intentionally attaching full URLs, tokens or cookies.</string>
     <string name="tv_home_back">Back</string>
+    <string name="tv_press_back_again_to_exit">Press back again to exit</string>
     <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>
     <string name="tv_home_no_feeds">No feeds available for this source</string>
     <string name="tv_feed_empty">No items in this list</string>
@@ -715,6 +719,10 @@
     <string name="already_voted">You have already voted</string>
     <string name="favorites_list_name">Favorites</string>
     <string name="watchlist_list_name">Watchlist</string>
+    <string name="favorite_movies_list_name">Favorite movies</string>
+    <string name="favorite_tv_series_list_name">Favorite TV series</string>
+    <string name="movie_watchlist_list_name">Movie watchlist</string>
+    <string name="tv_series_watchlist_list_name">TV series watchlist</string>
     <string name="favorite_added">%s added to favorites</string>
     <string name="favorite_removed">%s removed from favorites</string>
     <string name="action_add_to_favorites">Add to favorites</string>

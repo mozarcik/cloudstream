@@ -200,6 +200,7 @@ dependencies {
     // Design & UI
     implementation(libs.preference.ktx)
     implementation(libs.material)
+    implementation(libs.material.color.utilities.android)
     implementation(libs.constraintlayout)
 
     // Coil Image Loading

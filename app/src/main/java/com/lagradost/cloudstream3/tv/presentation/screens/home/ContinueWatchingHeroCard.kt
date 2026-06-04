@@ -27,12 +27,14 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import coil3.compose.AsyncImage
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.compat.home.preferredBackdropUriOrNull
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamCardShape
 import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamSurfaceDefaults
 
 @Composable
 internal fun ContinueWatchingHeroCard(
     item: MediaItemCompat,
+    colorTokens: ContinueWatchingHeroColorTokens,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester,
     downFocusRequester: FocusRequester,
@@ -43,7 +45,7 @@ internal fun ContinueWatchingHeroCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val progress = (item.continueWatching?.progress ?: 0f).coerceIn(0f, 1f)
-    val imageRequest = rememberContinueWatchingImageRequest(item.posterUri)
+    val imageRequest = rememberContinueWatchingImageRequest(item.preferredBackdropUriOrNull())
 
     Surface(
         onClick = onClick,
@@ -53,7 +55,7 @@ internal fun ContinueWatchingHeroCard(
             focusedBorder = Border(
                 border = androidx.compose.foundation.BorderStroke(
                     1.dp,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+                    colorTokens.cardFocusedBorderColor
                 ),
                 shape = CloudStreamCardShape
             )
@@ -111,7 +113,7 @@ internal fun ContinueWatchingHeroCard(
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(progress)
-                        .background(MaterialTheme.colorScheme.primary)
+                        .background(colorTokens.progressIndicatorColor)
                 )
             }
         }

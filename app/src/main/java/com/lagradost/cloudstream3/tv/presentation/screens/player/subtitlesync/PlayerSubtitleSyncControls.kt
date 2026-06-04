@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.OutlinedButton
@@ -39,6 +40,33 @@ internal fun RowScope.PlayerSubtitleSyncControlsColumn(
             ),
             style = MaterialTheme.typography.headlineMedium,
         )
+        Text(
+            text = stringResource(R.string.tv_player_subtitle_sync_controls_hint),
+            modifier = Modifier.padding(bottom = PlayerSubtitleSyncTokens.ControlsHintBottomPadding),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = PlayerSubtitleSyncTokens.ControlsLabelsBottomPadding),
+            horizontalArrangement = Arrangement.spacedBy(PlayerSubtitleSyncTokens.ControlsButtonsSpacing),
+        ) {
+            Text(
+                text = stringResource(R.string.tv_player_subtitle_sync_controls_too_late),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                text = stringResource(R.string.tv_player_subtitle_sync_controls_too_early),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),

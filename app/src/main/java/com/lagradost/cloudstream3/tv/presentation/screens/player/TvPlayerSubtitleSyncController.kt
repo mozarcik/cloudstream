@@ -145,11 +145,8 @@ internal class TvPlayerSubtitleSyncController(
         )
     }
 
-    fun setSubtitleDelayMs(
-        player: ExoPlayer,
-        newSubtitleDelayMs: Long,
-    ) {
-        if (subtitleDelayMs == newSubtitleDelayMs) return
+    fun setSubtitleDelayMs(newSubtitleDelayMs: Long): Boolean {
+        if (subtitleDelayMs == newSubtitleDelayMs) return false
         val previousDelayMs = subtitleDelayMs
         val previousRendererOffsetMs = rendererOffsetMs
         subtitleDelayMs = newSubtitleDelayMs
@@ -157,20 +154,24 @@ internal class TvPlayerSubtitleSyncController(
         CustomDecoder.subtitleOffset = rendererOffsetMs
         debugLog(
             "setSubtitleDelayMs: delay $previousDelayMs -> $subtitleDelayMs," +
-                " rendererOffset $previousRendererOffsetMs -> $rendererOffsetMs," +
-                " playerPosMs=${player.currentPosition.coerceAtLeast(0L)}"
+                " rendererOffset $previousRendererOffsetMs -> $rendererOffsetMs"
         )
+        return true
+    }
 
-        val textRenderer = currentTextRenderer ?: return
+    fun resetRendererPosition(player: ExoPlayer): Boolean {
+        val textRenderer = currentTextRenderer ?: return false
         if (textRenderer.state == STATE_ENABLED || textRenderer.state == STATE_STARTED) {
             textRenderer.resetPosition(player.currentPosition.coerceAtLeast(0L))
             debugLog(
-                "setSubtitleDelayMs: resetPosition called, rendererState=${rendererStateLabel(textRenderer.state)}",
+                "resetRendererPosition: resetPosition called, rendererState=${rendererStateLabel(textRenderer.state)}",
             )
+            return true
         } else {
             debugLog(
-                "setSubtitleDelayMs: skip resetPosition, rendererState=${rendererStateLabel(textRenderer.state)}",
+                "resetRendererPosition: skip resetPosition, rendererState=${rendererStateLabel(textRenderer.state)}",
             )
+            return false
         }
     }
 

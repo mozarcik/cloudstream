@@ -18,7 +18,9 @@ package com.lagradost.cloudstream3.tv
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.CloudstreamAppRedirectHandler
 import com.lagradost.cloudstream3.CommonActivity
+import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.CommonActivity.setActivityInstance
 import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.tv.compat.TvPluginBootstrap
@@ -46,6 +49,10 @@ class TvMainActivity : AppCompatActivity() {
         // HTTP client for network requests
         private val app = Requests()
     }
+
+    private val exitRequestHandler = TvExitRequestHandler(
+        elapsedRealtime = SystemClock::elapsedRealtime,
+    )
     
     @Suppress("DEPRECATION_ERROR")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -87,7 +94,22 @@ class TvMainActivity : AppCompatActivity() {
     }
 
     private fun exitTvApp() {
-        finishAndRemoveTask()
+        when (exitRequestHandler.onExitRequested()) {
+            TvExitRequestAction.ShowExitHint -> {
+                CommonActivity.showToast(
+                    this,
+                    R.string.tv_press_back_again_to_exit,
+                    Toast.LENGTH_SHORT,
+                )
+            }
+
+            TvExitRequestAction.ExitNow -> finishAndRemoveTask()
+        }
+    }
+
+    override fun onStop() {
+        exitRequestHandler.reset()
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

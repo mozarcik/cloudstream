@@ -29,6 +29,7 @@ kotlinxCoroutinesCore = "1.10.2"
 kotlinxCollectionsImmutable = "0.4.0"
 lifecycleKtx = "2.9.4"
 material = "1.14.0-alpha08"
+materialKolor = "4.0.5"
 media3 = "1.8.0"
 navigationKtx = "2.9.6"
 newpipeextractor = "v0.24.8"
@@ -91,6 +92,7 @@ kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collec
 lifecycle-livedata-ktx = { module = "androidx.lifecycle:lifecycle-livedata-ktx", version.ref = "lifecycleKtx" }
 lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycleKtx" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
+material-color-utilities-android = { module = "com.materialkolor:material-color-utilities-android", version.ref = "materialKolor" }
 media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 media3-container  = { module = "androidx.media3:media3-container", version.ref = "media3" }

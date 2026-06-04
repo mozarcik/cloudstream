@@ -80,6 +80,10 @@ fun HomeScreenV2Content(
     var feedSectionsRestoreFocusToken by remember { mutableIntStateOf(0) }
     var armedRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var armedRestoreTargetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var continueWatchingInlineRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
+    var continueWatchingInlineRestoreTargetId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingContinueWatchingRemoveRestore by rememberSaveable { mutableStateOf(false) }
+    var handledContinueWatchingRemoveActionToken by rememberSaveable { mutableIntStateOf(0) }
     var wasMorePanelOpen by rememberSaveable { mutableStateOf(false) }
     var morePanelCloseTarget by rememberSaveable { mutableStateOf(MorePanelCloseTarget.MoreButton) }
     var featuredCenterJob by remember { mutableStateOf<Job?>(null) }
@@ -96,6 +100,17 @@ fun HomeScreenV2Content(
     val loadingLabel = stringResource(id = R.string.loading)
     val noFeedsLabel = stringResource(id = R.string.tv_home_no_feeds)
     val pendingRestoreTargetId = HomeFocusStore.pendingRestoreTargetId
+    val hasPendingExternalRestore = restoreFocusToken > 0 && pendingRestoreTargetId != null
+    val continueWatchingRestoreTargetId = when {
+        HomeFocusStore.isContinueWatchingTarget(armedRestoreTargetId) -> armedRestoreTargetId
+        armedRestoreTargetId == null -> continueWatchingInlineRestoreTargetId
+        else -> null
+    }
+    val continueWatchingRestoreFocusToken = when {
+        HomeFocusStore.isContinueWatchingTarget(armedRestoreTargetId) -> armedRestoreFocusToken
+        armedRestoreTargetId == null -> continueWatchingInlineRestoreFocusToken
+        else -> 0
+    }
     val continueWatchingDownFocusRequester = when {
         showQuickSourcesRow -> quickSourcesEntryFocusRequester
         hasFeaturedItems -> featuredFocusRequester
@@ -169,6 +184,35 @@ fun HomeScreenV2Content(
         )
     }
 
+    LaunchedEffect(
+        continueWatchingUiState.lastRemoveActionToken,
+        continueWatchingUiState.lastRemoveSucceeded,
+        hasContinueWatchingItems,
+    ) {
+        val removeActionToken = continueWatchingUiState.lastRemoveActionToken
+        if (!pendingContinueWatchingRemoveRestore || removeActionToken <= 0) {
+            return@LaunchedEffect
+        }
+        if (removeActionToken == handledContinueWatchingRemoveActionToken) {
+            return@LaunchedEffect
+        }
+
+        handledContinueWatchingRemoveActionToken = removeActionToken
+        pendingContinueWatchingRemoveRestore = false
+
+        if (!continueWatchingUiState.lastRemoveSucceeded || !hasContinueWatchingItems) {
+            continueWatchingInlineRestoreTargetId = null
+            return@LaunchedEffect
+        }
+
+        continueWatchingInlineRestoreTargetId = HomeFocusStore.ContinueWatchingRemove
+        continueWatchingInlineRestoreFocusToken += 1
+        Log.d(
+            HomeFocusDebugTag,
+            "home continue watching remove restore token=$continueWatchingInlineRestoreFocusToken"
+        )
+    }
+
     LaunchedEffect(showQuickSourcesRow, isMorePanelOpen) {
         if (!showQuickSourcesRow && isMorePanelOpen) {
             onMorePanelOpenChange(false)
@@ -213,14 +257,30 @@ fun HomeScreenV2Content(
         }
     )
 
+    LaunchedEffect(
+        continueWatchingInlineRestoreFocusToken,
+        continueWatchingInlineRestoreTargetId,
+    ) {
+        if (continueWatchingInlineRestoreFocusToken <= 0) {
+            return@LaunchedEffect
+        }
+        if (!HomeFocusStore.isContinueWatchingTarget(continueWatchingInlineRestoreTargetId)) {
+            return@LaunchedEffect
+        }
+
+        listState.scrollToItem(HomeContinueWatchingListIndex)
+        Log.d(HomeFocusDebugTag, "home inline restore scroll -> continue watching")
+    }
+
     FocusRequestEffect(
         requester = resumeFocusRequester,
         requestKey = hasContinueWatchingItems to isMorePanelVisible,
         enabled = hasContinueWatchingItems &&
             !isMorePanelVisible &&
             !hasInitialFocusBeenRequested &&
-            pendingRestoreTargetId == null &&
-            armedRestoreTargetId == null,
+            !hasPendingExternalRestore &&
+            armedRestoreTargetId == null &&
+            continueWatchingInlineRestoreTargetId == null,
         onFocused = {
             hasInitialFocusBeenRequested = true
         }
@@ -258,6 +318,13 @@ fun HomeScreenV2Content(
         }
         HomeFocusStore.clearPendingRestore(targetId)
         armedRestoreTargetId = null
+    }
+
+    fun consumeContinueWatchingInlineRestore(targetId: String) {
+        if (continueWatchingInlineRestoreTargetId != targetId) {
+            return
+        }
+        continueWatchingInlineRestoreTargetId = null
     }
 
     FocusRequestEffect(
@@ -301,8 +368,8 @@ fun HomeScreenV2Content(
                         upFocusRequester = topBarFocusRequester,
                         sourceButtonFocusRequester = continueWatchingDownFocusRequester,
                         isInteractive = !isMorePanelVisible,
-                        pendingRestoreFocusTargetId = armedRestoreTargetId,
-                        restoreFocusToken = armedRestoreFocusToken,
+                        pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
+                        restoreFocusToken = continueWatchingRestoreFocusToken,
                         modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
                         onResumeClick = { item ->
                             HomeFocusStore.scheduleRestoreToLastFocused()
@@ -312,7 +379,11 @@ fun HomeScreenV2Content(
                             HomeFocusStore.scheduleRestoreToLastFocused()
                             onMediaClick(item)
                         },
-                        onRemoveClick = onRemoveContinueWatching,
+                        onRemoveClick = { item ->
+                            pendingContinueWatchingRemoveRestore = true
+                            continueWatchingInlineRestoreTargetId = null
+                            onRemoveContinueWatching(item)
+                        },
                         onCardClick = { item ->
                             HomeFocusStore.scheduleRestoreToLastFocused()
                             onMediaClick(item)
@@ -320,6 +391,7 @@ fun HomeScreenV2Content(
                         onHeroContentFocused = ::restoreContinueWatchingToTop,
                         onFocusTargetFocused = HomeFocusStore::onTargetFocused,
                         onRestoreFocusConsumed = { targetId ->
+                            consumeContinueWatchingInlineRestore(targetId)
                             consumeArmedRestore(targetId)
                         },
                     )

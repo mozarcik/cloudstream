@@ -323,7 +323,7 @@ internal fun BoxScope.PlayerBottomCenteredControls(
             icon = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
             contentDescription = playPauseContentDescription,
             tooltipText = null,
-            style = PlayerControlButtonStyle.Primary,
+            style = PlayerControlButtonStyle.Secondary,
             controlsEnabled = controlsEnabled,
             focusRequester = state.playPauseFocusRequester,
             leftFocusRequester = state.sourcesFocusRequester,

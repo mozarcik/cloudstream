@@ -21,18 +21,18 @@ internal object PlayerControlsTokens {
     val OverlayHorizontalPadding = 48.dp
     val OverlayVerticalPadding = 20.dp
     val MetadataToTimelineSpacing = 16.dp
-    val TimelineToControlsSpacing = 12.dp
+    val TimelineToControlsSpacing = 4.dp
     const val EpisodeTitleTextAlpha = 1f
     const val InfoMetadataTextAlpha = 0.7f
 
-    val PlayButtonSize = 64.dp
-    val PlayIconSize = 28.dp
+    val PlayButtonSize = 42.dp
+    val PlayIconSize = 17.dp
     const val PlayFocusScale = 1.05f
 
     val SecondaryButtonSize = 42.dp
     val SecondaryIconSize = 17.dp
     const val SecondaryFocusScale = 1.05f
-    const val SecondaryContainerAlpha = 0.2f
+    const val SecondaryContainerAlpha = 0.1f
 
     val ButtonsSpacing = 8.dp
 
@@ -41,7 +41,7 @@ internal object PlayerControlsTokens {
     val TooltipVerticalPadding = 4.dp
     val TooltipTonalElevation = 5.dp
     const val TooltipAlpha = 0.95f
-    val TooltipLaneHeight = 30.dp
+    val TooltipLaneHeight = 40.dp
     val TooltipControlsOverlap = 20.dp
     val TooltipLiftAboveLane = 8.dp
     val TooltipVerticalFootprintAboveControls = TooltipLaneHeight - TooltipControlsOverlap
@@ -49,9 +49,9 @@ internal object PlayerControlsTokens {
     const val TooltipFadeInMs = 150
     const val TooltipFadeOutMs = 0
 
-    val TimelineContainerHeight = 24.dp
-    val TimelineInactiveTrackHeight = 6.dp
-    val TimelineFocusedTrackHeight = 8.dp
+    val TimelineContainerHeight = 32.dp
+    val TimelineInactiveTrackHeight = 4.dp
+    val TimelineFocusedTrackHeight = 6.dp
     val TimelineTrackPadding = 8.dp
     const val TimelineFocusAnimationMs = 120
     val SubtitleControlsVisibleOffset =

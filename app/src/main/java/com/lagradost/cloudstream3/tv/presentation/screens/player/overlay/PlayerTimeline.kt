@@ -1,16 +1,20 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.overlay
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -21,7 +25,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -33,7 +36,11 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.MaterialTheme
@@ -98,18 +105,17 @@ internal fun PlaybackTimeline(
 ) {
     val safeProgress = progressFraction.coerceIn(0f, 1f)
     var isFocused by remember { mutableStateOf(false) }
-    val focusScale = animateFloatAsState(
-        targetValue = if (isFocused) {
-            PlayerControlsTokens.TimelineFocusedTrackHeight.value /
-                PlayerControlsTokens.TimelineInactiveTrackHeight.value
+
+    val primaryColor by animateColorAsState(
+        if (isFocused) {
+            lerp(MaterialTheme.colorScheme.primary, Color.White, 0.2f)
         } else {
-            1f
-        },
-        animationSpec = tween(durationMillis = PlayerControlsTokens.TimelineFocusAnimationMs),
-        label = "playback_timeline_focus_scale",
-    ).value
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val trackAlpha = if (isFocused) 0.34f else 0.20f
+            MaterialTheme.colorScheme.primary
+        }
+    )
+    val trackAlpha = if (isFocused) 0.75f else 0.20f
+    val thumbSize = 16.dp
+    val height = if (isFocused) PlayerControlsTokens.TimelineFocusedTrackHeight else PlayerControlsTokens.TimelineInactiveTrackHeight
 
     Box(
         modifier = modifier
@@ -132,6 +138,11 @@ internal fun PlaybackTimeline(
                         true
                     }
 
+                    Key.DirectionCenter -> {
+                        onControlsEvent(TvPlayerControlsEvent.PlayPause)
+                        true
+                    }
+
                     else -> false
                 }
             }
@@ -142,22 +153,40 @@ internal fun PlaybackTimeline(
             .padding(vertical = PlayerControlsTokens.TimelineTrackPadding),
         contentAlignment = Alignment.CenterStart,
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(PlayerControlsTokens.TimelineInactiveTrackHeight)
-                .graphicsLayer {
-                    scaleY = focusScale
-                }
-                .clip(CircleShape)
-                .background(primaryColor.copy(alpha = trackAlpha)),
+                .height(thumbSize),
+            contentAlignment = Alignment.CenterStart,
         ) {
+            val thumbOffset = (maxWidth - thumbSize) * safeProgress
+
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(safeProgress)
-                    .background(primaryColor)
-            )
+                    .fillMaxWidth()
+                    .height(height)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = trackAlpha)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(safeProgress)
+                        .background(primaryColor)
+                )
+
+            }
+
+            if (isFocused) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = thumbOffset)
+                        .size(thumbSize)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                        .padding(2.dp)
+                        .background(primaryColor, CircleShape)
+                )
+            }
         }
     }
 }

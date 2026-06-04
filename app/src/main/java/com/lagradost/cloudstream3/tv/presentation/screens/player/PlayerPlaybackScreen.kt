@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -8,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.PlayerSessionController
 import com.lagradost.cloudstream3.tv.presentation.screens.player.overlay.rememberPlayerOverlayStateHolder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelEffect
@@ -123,6 +127,7 @@ internal fun PlayerPlaybackScreen(
     )
     PlayerPlaybackSubtitleDelayEffect(
         subtitleDelayMs = initialSubtitleDelayMs,
+        hasActiveSubtitleTrack = selectedSubtitle != null,
         playerSessionController = playerSessionController,
     )
     PlayerExtractorVerificationEffect(state = state)

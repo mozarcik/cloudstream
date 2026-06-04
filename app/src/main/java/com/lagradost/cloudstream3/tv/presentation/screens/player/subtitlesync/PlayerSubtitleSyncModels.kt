@@ -31,6 +31,8 @@ internal object PlayerSubtitleSyncTokens {
     val DialogListMaxHeight = 620.dp
     val DelayValueTopPadding = 12.dp
     val DelayValueBottomPadding = 18.dp
+    val ControlsHintBottomPadding = 10.dp
+    val ControlsLabelsBottomPadding = 8.dp
     val ControlsButtonsSpacing = 8.dp
     val ActiveProgressHeight = 5.dp
     val InactiveProgressHeight = 3.dp

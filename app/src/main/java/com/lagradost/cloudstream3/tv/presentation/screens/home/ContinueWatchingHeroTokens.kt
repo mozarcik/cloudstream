@@ -10,3 +10,5 @@ internal val ContinueWatchingCardHeight = 85.dp
 internal val ContinueWatchingInfoBottomGap = 20.dp
 internal val ContinueWatchingCardsBottomInset = 4.dp
 internal val ContinueWatchingCardsTopInset = 4.dp
+internal val ContinueWatchingOutlinedBorderWidth = 1.5.dp
+internal val ContinueWatchingOutlinedFocusedBorderWidth = 1.65.dp

@@ -225,10 +225,11 @@ object SearchResponseMapper {
     private fun ResumeWatchingResult.toContinueWatchingMediaItem(generatedId: String): MediaItemCompat {
         val mediaType = this.type ?: TvType.Movie
         val hasBackdrop = !this.backdropUrl.isNullOrBlank()
-        val artworkUri = this.backdropUrl
+        val posterUri = this.posterUrl
             ?.takeIf { it.isNotBlank() }
-            ?: this.posterUrl?.takeIf { it.isNotBlank() }
+            ?: this.backdropUrl?.takeIf { it.isNotBlank() }
             .orEmpty()
+        val backdropUri = this.backdropUrl?.takeIf { it.isNotBlank() }
         val inferredSeriesType = this.inferSeriesTypeFromUrl()
         val hasSeriesResumeMarker = (season ?: 0) > 0 || (episode ?: 0) > 0
         val shouldTreatAsSeries =
@@ -250,13 +251,13 @@ object SearchResponseMapper {
         if (shouldTreatAsSeries) {
             return MediaItemCompat.TvSeries(
                 id = generatedId,
-                posterUri = artworkUri,
+                posterUri = posterUri,
                 name = this.name,
                 url = this.url,
                 apiName = this.apiName,
                 type = if (mediaType.isEpisodeBased()) mediaType else inferredSeriesType ?: TvType.TvSeries,
                 score = this.score,
-                backdropUri = this.backdropUrl,
+                backdropUri = backdropUri,
                 episodes = null,
                 continueWatching = createContinueWatchingState(
                     progress = progress,
@@ -269,13 +270,13 @@ object SearchResponseMapper {
         if (mediaType == TvType.Movie) {
             return MediaItemCompat.Movie(
                 id = generatedId,
-                posterUri = artworkUri,
+                posterUri = posterUri,
                 name = this.name,
                 url = this.url,
                 apiName = this.apiName,
                 type = mediaType,
                 score = this.score,
-                backdropUri = this.backdropUrl,
+                backdropUri = backdropUri,
                 continueWatching = createContinueWatchingState(
                     progress = progress,
                     remainingMs = remainingMs,
@@ -286,13 +287,13 @@ object SearchResponseMapper {
 
         return MediaItemCompat.Other(
             id = generatedId,
-            posterUri = artworkUri,
+            posterUri = posterUri,
             name = this.name,
             url = this.url,
             apiName = this.apiName,
             type = mediaType,
             score = this.score,
-            backdropUri = this.backdropUrl,
+            backdropUri = backdropUri,
             continueWatching = createContinueWatchingState(
                 progress = progress,
                 remainingMs = remainingMs,

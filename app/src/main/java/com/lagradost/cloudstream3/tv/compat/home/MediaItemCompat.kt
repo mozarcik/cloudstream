@@ -119,3 +119,13 @@ fun MediaItemCompat.ratingLabelOrNull(maxScore: Int = 10): String? {
     val decimalPart = abs(rounded % 10)
     return "$integerPart.$decimalPart"
 }
+
+fun MediaItemCompat.preferredBackdropUriOrNull(): String? {
+    return backdropUri?.takeIf { uri -> uri.isNotBlank() }
+        ?: posterUri.takeIf { uri -> uri.isNotBlank() }
+}
+
+fun MediaItemCompat.preferredPosterUriOrNull(): String? {
+    return posterUri.takeIf { uri -> uri.isNotBlank() }
+        ?: backdropUri?.takeIf { uri -> uri.isNotBlank() }
+}

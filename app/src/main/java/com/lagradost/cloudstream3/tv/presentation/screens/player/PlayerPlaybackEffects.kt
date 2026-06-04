@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 private const val ControlsStartupAutoHideDelayMs = 750L
 private const val ControlsInactivityAutoHideDelayMs = 4_500L
 private const val ControlsPausedMetadataRevealDelayMs = 5_000L
+private const val SubtitleDelayRefreshDebounceMs = 120L
 
 @Composable
 internal fun PlayerPlaybackListenerEffect(
@@ -258,13 +259,19 @@ internal fun PlayerPlaybackLoadEffect(
 @Composable
 internal fun PlayerPlaybackSubtitleDelayEffect(
     subtitleDelayMs: Long,
+    hasActiveSubtitleTrack: Boolean,
     playerSessionController: PlayerSessionController,
 ) {
-    LaunchedEffect(subtitleDelayMs, playerSessionController) {
-        playerSessionController.subtitleSyncController.setSubtitleDelayMs(
-            player = playerSessionController.player,
-            newSubtitleDelayMs = subtitleDelayMs,
+    LaunchedEffect(subtitleDelayMs, hasActiveSubtitleTrack, playerSessionController) {
+        val subtitleDelayChanged = playerSessionController.subtitleSyncController.setSubtitleDelayMs(
+            subtitleDelayMs,
         )
+        if (!subtitleDelayChanged || !hasActiveSubtitleTrack) {
+            return@LaunchedEffect
+        }
+
+        delay(SubtitleDelayRefreshDebounceMs)
+        playerSessionController.refreshSubtitleTrackAtCurrentPosition()
     }
 }
 

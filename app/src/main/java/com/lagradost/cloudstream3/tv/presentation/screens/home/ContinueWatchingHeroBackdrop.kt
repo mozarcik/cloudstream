@@ -19,11 +19,11 @@ import coil3.request.crossfade
 
 @Composable
 internal fun ContinueWatchingHeroBackdrop(
-    posterUrl: String,
+    imageUrl: String?,
     applyBlur: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val imageRequest = rememberContinueWatchingImageRequest(posterUrl)
+    val imageRequest = rememberContinueWatchingImageRequest(imageUrl)
     val surfaceColor = MaterialTheme.colorScheme.surface
     val scrimColor = MaterialTheme.colorScheme.scrim
     val overlayBase = remember(surfaceColor, scrimColor) {
@@ -81,11 +81,11 @@ internal fun ContinueWatchingHeroBackdrop(
 }
 
 @Composable
-internal fun rememberContinueWatchingImageRequest(imageUrl: String): ImageRequest? {
+internal fun rememberContinueWatchingImageRequest(imageUrl: String?): ImageRequest? {
     val context = LocalContext.current
 
     return remember(context, imageUrl) {
-        imageUrl.takeIf { url ->
+        imageUrl?.takeIf { url ->
             url.isNotBlank()
         }?.let { url ->
             ImageRequest.Builder(context)

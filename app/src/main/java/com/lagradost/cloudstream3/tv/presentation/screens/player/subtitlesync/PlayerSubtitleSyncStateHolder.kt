@@ -79,12 +79,8 @@ internal class PlayerSubtitleSyncStateHolder(
     }
 
     fun updateSubtitleDelay(newDelayMs: Long) {
-        subtitleSyncController.setSubtitleDelayMs(
-            player = player,
-            newSubtitleDelayMs = newDelayMs,
-        )
-        subtitleDelayMs = subtitleSyncController.subtitleDelayMs()
-        onSubtitleDelayChanged(subtitleDelayMs)
+        subtitleDelayMs = newDelayMs
+        onSubtitleDelayChanged(newDelayMs)
     }
 
     fun syncToCue(cue: SubtitleCue) {

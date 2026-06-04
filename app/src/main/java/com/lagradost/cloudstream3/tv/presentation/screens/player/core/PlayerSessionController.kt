@@ -9,6 +9,41 @@ import com.lagradost.cloudstream3.ui.player.CustomDecoder
 import com.lagradost.cloudstream3.tv.presentation.screens.player.TvPlayerSubtitleSyncController
 import com.lagradost.cloudstream3.utils.ExtractorLink
 
+private const val SubtitleRefreshSeekStepMs = 1L
+
+internal fun resolveSubtitleRefreshSeekTarget(
+    currentPositionMs: Long,
+    durationMs: Long,
+    preferredDeltaMs: Long,
+): Long? {
+    val normalizedPositionMs = currentPositionMs.coerceAtLeast(0L)
+    val normalizedPreferredDeltaMs = preferredDeltaMs.takeIf { it != 0L } ?: SubtitleRefreshSeekStepMs
+    val preferredTargetPositionMs = clampSubtitleRefreshTarget(
+        positionMs = normalizedPositionMs + normalizedPreferredDeltaMs,
+        durationMs = durationMs,
+    )
+    if (preferredTargetPositionMs != normalizedPositionMs) {
+        return preferredTargetPositionMs
+    }
+
+    val fallbackTargetPositionMs = clampSubtitleRefreshTarget(
+        positionMs = normalizedPositionMs - normalizedPreferredDeltaMs,
+        durationMs = durationMs,
+    )
+    return fallbackTargetPositionMs.takeUnless { it == normalizedPositionMs }
+}
+
+private fun clampSubtitleRefreshTarget(
+    positionMs: Long,
+    durationMs: Long,
+): Long {
+    return if (durationMs == C.TIME_UNSET || durationMs < 0L) {
+        positionMs.coerceAtLeast(0L)
+    } else {
+        positionMs.coerceIn(0L, durationMs)
+    }
+}
+
 internal class PlayerSessionController(
     context: Context,
 ) {
@@ -22,6 +57,7 @@ internal class PlayerSessionController(
             .setPreferredAudioLanguage(null)
             .build()
     }
+    private var nextSubtitleRefreshSeekDeltaMs = SubtitleRefreshSeekStepMs
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext)
         .setRenderersFactory(
@@ -45,10 +81,7 @@ internal class PlayerSessionController(
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
             .build()
-        subtitleSyncController.setSubtitleDelayMs(
-            player = player,
-            newSubtitleDelayMs = subtitleDelayMs,
-        )
+        subtitleSyncController.setSubtitleDelayMs(subtitleDelayMs)
         CustomDecoder.updateForcedEncoding(appContext)
         val mediaSource = buildPlayerMediaSource(
             context = appContext,
@@ -61,9 +94,49 @@ internal class PlayerSessionController(
         player.playWhenReady = startPlayWhenReady
     }
 
+    fun refreshSubtitleTrackAtCurrentPosition() {
+        val currentPositionMs = player.currentPosition.coerceAtLeast(0L)
+        if (!player.isCurrentMediaItemSeekable) {
+            subtitleSyncDebugLog(
+                "refreshSubtitleTrackAtCurrentPosition: media item is not seekable," +
+                    " falling back to renderer reset at playerPosMs=$currentPositionMs",
+            )
+            subtitleSyncController.resetRendererPosition(player)
+            return
+        }
+
+        val preferredDeltaMs = nextSubtitleRefreshSeekDeltaMs
+        val targetPositionMs = resolveSubtitleRefreshSeekTarget(
+            currentPositionMs = currentPositionMs,
+            durationMs = player.duration,
+            preferredDeltaMs = preferredDeltaMs,
+        )
+        if (targetPositionMs == null) {
+            subtitleSyncDebugLog(
+                "refreshSubtitleTrackAtCurrentPosition: no valid seek target," +
+                    " falling back to renderer reset at playerPosMs=$currentPositionMs" +
+                    " durationMs=${player.duration}",
+            )
+            subtitleSyncController.resetRendererPosition(player)
+            return
+        }
+
+        nextSubtitleRefreshSeekDeltaMs = -preferredDeltaMs
+        subtitleSyncDebugLog(
+            "refreshSubtitleTrackAtCurrentPosition: seeking playerPosMs=$currentPositionMs" +
+                " targetPosMs=$targetPositionMs" +
+                " deltaMs=${targetPositionMs - currentPositionMs}",
+        )
+        player.seekTo(targetPositionMs)
+    }
+
     fun release() {
         subtitleSyncController.clearSubtitleView()
         subtitleSyncController.clearTextRenderer()
         player.release()
+    }
+
+    fun pause() {
+        player.pause()
     }
 }

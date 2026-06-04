@@ -272,24 +272,6 @@ class TmdbApi : SyncAPI() {
         )
     }
 
-    private suspend fun loadCombinedCollection(
-        accountObjectId: String,
-        accessToken: String,
-        collectionType: TmdbCollectionType,
-    ): List<LibraryItem> {
-        val movieItems = loadMediaItems(
-            url = "$TMDB_API_URL/4/account/$accountObjectId/movie/${collectionType.pathSegment}",
-            accessToken = accessToken,
-            fallbackType = TvType.Movie,
-        )
-        val tvItems = loadMediaItems(
-            url = "$TMDB_API_URL/4/account/$accountObjectId/tv/${collectionType.pathSegment}",
-            accessToken = accessToken,
-            fallbackType = TvType.TvSeries,
-        )
-        return movieItems + tvItems
-    }
-
     private suspend fun loadCustomLists(
         accountObjectId: String,
         accessToken: String,
@@ -341,15 +323,25 @@ class TmdbApi : SyncAPI() {
         accountObjectId: String,
         accessToken: String,
     ): TmdbCachedLibrary {
-        val favorites = loadCombinedCollection(
-            accountObjectId = accountObjectId,
+        val movieWatchlist = loadMediaItems(
+            url = "$TMDB_API_URL/4/account/$accountObjectId/${TmdbCollectionType.MovieWatchlist.pathSegment}",
             accessToken = accessToken,
-            collectionType = TmdbCollectionType.Favorites
+            fallbackType = TvType.Movie,
         )
-        val watchlist = loadCombinedCollection(
-            accountObjectId = accountObjectId,
+        val tvSeriesWatchlist = loadMediaItems(
+            url = "$TMDB_API_URL/4/account/$accountObjectId/${TmdbCollectionType.TvSeriesWatchlist.pathSegment}",
             accessToken = accessToken,
-            collectionType = TmdbCollectionType.Watchlist
+            fallbackType = TvType.TvSeries,
+        )
+        val favoritesMovies = loadMediaItems(
+            url = "$TMDB_API_URL/4/account/$accountObjectId/${TmdbCollectionType.FavoriteMovies.pathSegment}",
+            accessToken = accessToken,
+            fallbackType = TvType.Movie,
+        )
+        val favoritesTvSeries = loadMediaItems(
+            url = "$TMDB_API_URL/4/account/$accountObjectId/${TmdbCollectionType.FavoriteTvSeries.pathSegment}",
+            accessToken = accessToken,
+            fallbackType = TvType.TvSeries,
         )
         val customLists = loadCustomLists(
             accountObjectId = accountObjectId,
@@ -357,8 +349,10 @@ class TmdbApi : SyncAPI() {
         )
 
         return TmdbCachedLibrary(
-            favorites = favorites,
-            watchlist = watchlist,
+            favoriteMovies = favoritesMovies,
+            favoriteTvSeries = favoritesTvSeries,
+            movieWatchlist = movieWatchlist,
+            tvSeriesWatchlist = tvSeriesWatchlist,
             customLists = customLists,
         )
     }
@@ -501,14 +495,16 @@ internal suspend fun resolveTmdbLibraryCache(
 internal fun buildTmdbLibraryMetadata(cachedLibrary: TmdbCachedLibrary): SyncAPI.LibraryMetadata {
     return SyncAPI.LibraryMetadata(
         allLibraryLists = buildList {
-            add(SyncAPI.LibraryList(txt(R.string.favorites_list_name), cachedLibrary.favorites))
-            add(SyncAPI.LibraryList(txt(R.string.watchlist_list_name), cachedLibrary.watchlist))
+            add(SyncAPI.LibraryList(txt(R.string.movie_watchlist_list_name), cachedLibrary.movieWatchlist))
+            add(SyncAPI.LibraryList(txt(R.string.tv_series_watchlist_list_name), cachedLibrary.tvSeriesWatchlist))
             addAll(cachedLibrary.customLists.map { list ->
                 SyncAPI.LibraryList(
                     name = txt(list.name),
                     items = list.items,
                 )
             })
+            add(SyncAPI.LibraryList(txt(R.string.favorite_movies_list_name), cachedLibrary.favoriteMovies))
+            add(SyncAPI.LibraryList(txt(R.string.favorite_tv_series_list_name), cachedLibrary.favoriteTvSeries))
         },
         supportedListSorting = TMDB_SUPPORTED_LIST_SORTING,
     )
@@ -628,8 +624,10 @@ private interface TmdbPagedResponse<T> {
 }
 
 internal data class TmdbCachedLibrary(
-    @JsonProperty("favorites") val favorites: List<SyncAPI.LibraryItem> = emptyList(),
-    @JsonProperty("watchlist") val watchlist: List<SyncAPI.LibraryItem> = emptyList(),
+    @JsonProperty("favoriteMovies") val favoriteMovies: List<SyncAPI.LibraryItem> = emptyList(),
+    @JsonProperty("favoriteTvSeries") val favoriteTvSeries: List<SyncAPI.LibraryItem> = emptyList(),
+    @JsonProperty("movieWatchlist") val movieWatchlist: List<SyncAPI.LibraryItem> = emptyList(),
+    @JsonProperty("tvSeriesWatchlist") val tvSeriesWatchlist: List<SyncAPI.LibraryItem> = emptyList(),
     @JsonProperty("customLists") val customLists: List<TmdbCachedLibraryList> = emptyList(),
 )
 
@@ -710,6 +708,8 @@ private data class TmdbAccountDetails(
 )
 
 private enum class TmdbCollectionType(val pathSegment: String) {
-    Favorites("favorites"),
-    Watchlist("watchlist"),
+    FavoriteMovies("movie/favorites"),
+    FavoriteTvSeries("tv/favorites"),
+    MovieWatchlist("movie/watchlist"),
+    TvSeriesWatchlist("tv/watchlist"),
 }

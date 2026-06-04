@@ -33,6 +33,8 @@ data class HomeFeedsUiState(
 @Immutable
 data class HomeContinueWatchingUiState(
     val state: HomeFeedLoadState = HomeFeedLoadState.Loading,
+    val lastRemoveActionToken: Int = 0,
+    val lastRemoveSucceeded: Boolean = false,
 )
 
 @Immutable
