@@ -106,14 +106,8 @@ internal fun PlaybackTimeline(
     val safeProgress = progressFraction.coerceIn(0f, 1f)
     var isFocused by remember { mutableStateOf(false) }
 
-    val primaryColor by animateColorAsState(
-        if (isFocused) {
-            lerp(MaterialTheme.colorScheme.primary, Color.White, 0.2f)
-        } else {
-            MaterialTheme.colorScheme.primary
-        }
-    )
-    val trackAlpha = if (isFocused) 0.75f else 0.20f
+    val primaryColor = if (isFocused) MaterialTheme.colorScheme.primary else Color.White
+    val trackAlpha = 0.20f
     val thumbSize = 16.dp
     val height = if (isFocused) PlayerControlsTokens.TimelineFocusedTrackHeight else PlayerControlsTokens.TimelineInactiveTrackHeight
 
@@ -182,9 +176,7 @@ internal fun PlaybackTimeline(
                     modifier = Modifier
                         .offset(x = thumbOffset)
                         .size(thumbSize)
-                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
-                        .padding(2.dp)
-                        .background(primaryColor, CircleShape)
+                        .background(Color.White, CircleShape)
                 )
             }
         }
