@@ -117,30 +117,19 @@ internal fun EpisodesSectionHeader(modifier: Modifier = Modifier) {
 @Composable
 internal fun SeasonSelectorRow(
     seasons: List<TvSeason>,
+    seasonRequesters: List<FocusRequester>,
     selectedSeasonId: String?,
-    focusRequesters: List<FocusRequester>,
+    upFocusRequester: FocusRequester,
     onSeasonSelected: (TvSeason) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (seasons.isEmpty()) return
 
-    val (tabRowFocusRequester, fallbackTabFocusRequester) = remember { FocusRequester.createRefs() }
-    val internalTabFocusRequesters = rememberFocusRequesters(count = seasons.size)
-    val tabFocusRequesters = if (focusRequesters.size == seasons.size) {
-        focusRequesters
-    } else {
-        internalTabFocusRequesters
-    }
     val selectedTabIndex = seasons.indexOfFirst { season -> season.id == selectedSeasonId }
         .takeIf { it >= 0 } ?: 0
-    val selectedTabFocusRequester = tabFocusRequesters.getOrElse(selectedTabIndex) {
-        fallbackTabFocusRequester
-    }
 
     TabRow(
-        modifier = modifier
-            .focusRequester(tabRowFocusRequester)
-            .focusRestorer(selectedTabFocusRequester),
+        modifier = modifier,
         selectedTabIndex = selectedTabIndex,
         separator = { Spacer(modifier = Modifier.width(12.dp)) },
     ) {
@@ -151,9 +140,8 @@ internal fun SeasonSelectorRow(
                 onClick = { onSeasonSelected(season) },
                 modifier = Modifier
                     .testTag("details_season_tab_${season.id}")
-                    .focusRequester(
-                        tabFocusRequesters.getOrElse(index) { fallbackTabFocusRequester }
-                    ),
+                    .focusProperties{up = upFocusRequester}
+                    .focusRequester(seasonRequesters[index]),
             ) {
                 Text(
                     text = seasonChipLabel(season = season),

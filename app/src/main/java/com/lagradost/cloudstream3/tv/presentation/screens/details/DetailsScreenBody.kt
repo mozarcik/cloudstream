@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -20,6 +21,7 @@ import com.lagradost.cloudstream3.tv.data.entities.Movie
 import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
 import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
 import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetails
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.MovieDetailsBackdrop
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
@@ -37,9 +39,7 @@ internal fun DetailsScreenBody(
     seasons: List<TvSeason>,
     selectedSeasonId: String?,
     selectedEpisodes: List<TvEpisode>,
-    seasonTabFocusRequesters: List<FocusRequester>,
     heroState: DetailsHeroUiState,
-    downloadButtonState: DetailsDownloadButtonUiState,
     hasAdditionalInfo: Boolean,
     resolveEpisodeDownloadState: (TvEpisode) -> DetailsDownloadButtonUiState,
     resolveEpisodeWatchedState: (TvEpisode) -> Boolean,
@@ -56,6 +56,8 @@ internal fun DetailsScreenBody(
         mutableStateOf(true)
     }
 
+    val detailsFocusRequester = remember{ FocusRequester() }
+
     Box(modifier = modifier) {
         MovieDetailsBackdrop(
             posterUri = details.backdropUri.ifBlank { details.posterUri },
@@ -64,6 +66,7 @@ internal fun DetailsScreenBody(
             modifier = Modifier.fillMaxSize(),
             gradientColor = MaterialTheme.colorScheme.background
         )
+        val seasonRequesters = rememberFocusRequesters(count = seasons.count())
 
         LazyColumn(
             state = listState,
@@ -94,6 +97,7 @@ internal fun DetailsScreenBody(
                     onQuickActionClick = { quickAction ->
                         onAction(DetailsUiAction.HeroQuickAction(quickAction))
                     },
+                    focusRequester = detailsFocusRequester
                 )
             }
 
@@ -101,11 +105,12 @@ internal fun DetailsScreenBody(
                 detailsSeriesItems(
                     mode = mode,
                     seasons = seasons,
+                    seasonRequesters = seasonRequesters,
                     selectedSeasonId = selectedSeasonId,
                     selectedEpisodes = selectedEpisodes,
                     detailsDescription = details.description,
                     childPadding = childPadding,
-                    seasonTabFocusRequesters = seasonTabFocusRequesters,
+                    upFocusRequester = detailsFocusRequester,
                     onSeasonSelected = onSeasonSelected,
                     resolveEpisodeDownloadState = resolveEpisodeDownloadState,
                     resolveEpisodeWatchedState = resolveEpisodeWatchedState,

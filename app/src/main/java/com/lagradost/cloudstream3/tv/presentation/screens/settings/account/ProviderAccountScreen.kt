@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,7 +30,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -112,7 +110,6 @@ fun ProviderAccountScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by stateFlow.collectAsState()
-    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val onAccountChangedState by rememberUpdatedState(onAccountChanged)
@@ -162,30 +159,28 @@ fun ProviderAccountScreen(
             )
         }
 
-        item(key = "provider_account_status") {
-            AccountStatusCard(
-                accountName = selectedAccount?.let { account ->
-                    providerAccountDisplayName(
-                        labelAccount = context.getString(R.string.account),
-                        account = account
-                    )
-                } ?: context.getString(R.string.no_account),
-                accountSubtitle = selectedAccount?.let { account ->
-                    context.getString(
-                        R.string.logged_account,
-                        providerAccountDisplayName(
-                            labelAccount = context.getString(R.string.account),
-                            account = account
+        if (selectedAccount != null) {
+            item(key = "provider_account_status") {
+                AccountStatusCard(
+                    accountName = providerAccountDisplayName(
+                            labelAccount = stringResource(R.string.account),
+                            account = selectedAccount
+                        ),
+                    accountSubtitle = stringResource(
+                            R.string.logged_account,
+                            providerAccountDisplayName(
+                                labelAccount = stringResource(R.string.account),
+                                account = selectedAccount
+                            )
                         )
-                    )
-                } ?: context.getString(R.string.no_account)
-            )
+                )
+            }
         }
 
         if (uiState.accounts.isNotEmpty()) {
             item(key = "provider_account_list_header") {
                 Text(
-                    text = context.getString(R.string.pref_category_accounts),
+                    text = stringResource(R.string.pref_category_accounts),
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -193,7 +188,7 @@ fun ProviderAccountScreen(
 
             item(key = ProviderAccountNoneTag) {
                 AccountActionButton(
-                    title = context.getString(R.string.no_account),
+                    title = stringResource(R.string.no_account),
                     selected = uiState.selectedAccountId < 0,
                     enabled = isInteractive,
                     onClick = {
@@ -211,7 +206,7 @@ fun ProviderAccountScreen(
             ) { account ->
                 AccountActionButton(
                     title = providerAccountDisplayName(
-                        labelAccount = context.getString(R.string.account),
+                        labelAccount = stringResource(R.string.account),
                         account = account
                     ),
                     selected = account.id == uiState.selectedAccountId,
@@ -230,7 +225,7 @@ fun ProviderAccountScreen(
         if (uiState.authMode == ProviderAccountAuthMode.Idle) {
             item(key = ProviderAccountPrimaryActionTag) {
                 AccountActionButton(
-                    title = context.getString(
+                    title = stringResource(
                         if (uiState.accounts.isEmpty()) {
                             R.string.login
                         } else {
@@ -250,7 +245,7 @@ fun ProviderAccountScreen(
         if (selectedAccount != null) {
             item(key = ProviderAccountLogoutActionTag) {
                 AccountActionButton(
-                    title = context.getString(R.string.logout),
+                    title = stringResource(R.string.logout),
                     selected = false,
                     enabled = isInteractive,
                     onClick = {
@@ -266,7 +261,7 @@ fun ProviderAccountScreen(
         if (!createAccountUrl.isNullOrBlank()) {
             item(key = ProviderAccountCreateActionTag) {
                 AccountActionButton(
-                    title = context.getString(R.string.create_account),
+                    title = stringResource(R.string.create_account),
                     selected = false,
                     enabled = isInteractive,
                     onClick = {

@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.movies
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.FocusRequester
@@ -146,17 +146,17 @@ fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.curre
 fun MovieDetails(
     movieDetails: MovieDetails,
     goToMoviePlayer: () -> Unit,
-    playButtonLabel: String? = null,
-    downloadActionState: MovieDetailsDownloadActionState = MovieDetailsDownloadActionState.Idle,
-    requestInitialPlayButtonFocus: Boolean = true,
-    onPrimaryActionsFocused: () -> Unit = {},
-    onInitialPlayButtonFocused: () -> Unit = {},
-    onQuickActionClick: (MovieDetailsQuickAction) -> Unit = {},
+    playButtonLabel: String?,
+    downloadActionState: MovieDetailsDownloadActionState,
+    requestInitialPlayButtonFocus: Boolean,
+    onPrimaryActionsFocused: () -> Unit,
+    onInitialPlayButtonFocused: () -> Unit,
+    onQuickActionClick: (MovieDetailsQuickAction) -> Unit,
+    focusRequester: FocusRequester,
     modifier: Modifier = Modifier,
 ) {
     val childPadding = rememberChildPadding()
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
-    val playButtonFocusRequester = remember { FocusRequester() }
     val heroSectionHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
     val ratingLabel = detailsRatingLabel(movieDetails.score)
     val statusLabel = detailsStatusLabel(movieDetails.showStatus)
@@ -233,7 +233,7 @@ fun MovieDetails(
     }
 
     FocusRequestEffect(
-        requester = playButtonFocusRequester,
+        requester = focusRequester,
         requestKey = movieDetails.id,
         enabled = requestInitialPlayButtonFocus,
         onFocused = onInitialPlayButtonFocused,
@@ -321,7 +321,7 @@ fun MovieDetails(
                 modifier = Modifier
                     .padding(start = childPadding.start)
                     .padding(bottom = 24.dp),
-                playButtonModifier = Modifier.focusRequester(playButtonFocusRequester),
+                playButtonModifier = Modifier.focusRequester(focusRequester),
                 onPlayClick = goToMoviePlayer,
                 playButtonLabel = playButtonLabel,
                 isFavorite = movieDetails.isFavorite,
@@ -350,6 +350,7 @@ private fun DetailsActionsRow(
 ) {
     Row(
         modifier = modifier
+            .focusGroup()
             .bringIntoViewIfChildrenAreFocused()
             .onFocusChanged { focusState ->
                 if (focusState.hasFocus) {

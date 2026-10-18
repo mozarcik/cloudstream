@@ -41,7 +41,6 @@ internal fun DetailsScreenContent(
     val downloadButtonViewModel: DetailsDownloadButtonViewModel = viewModel()
     val downloadButtonState by downloadButtonViewModel.uiState.collectAsStateWithLifecycle()
     val seasons = details.seasons
-    val seasonTabFocusRequesters = rememberFocusRequesters(count = seasons.size)
     val downloadMirrorStateHolder = remember(details.id, coroutineScope) {
         DownloadMirrorSelectionStateHolder(scope = coroutineScope)
     }
@@ -111,7 +110,6 @@ internal fun DetailsScreenContent(
         selectedSeasonId = selectedSeasonId,
         selectedSeason = selectedSeason,
         selectedEpisodes = selectedEpisodes,
-        seasonTabFocusRequesters = seasonTabFocusRequesters,
         heroState = heroState,
         downloadButtonState = downloadButtonState,
         episodesStateHolder = episodesStateHolder,
