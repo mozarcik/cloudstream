@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.util.Log
@@ -35,6 +36,8 @@ import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.services.VideoDownloadService
 import com.lagradost.cloudstream3.sortUrls
+import com.lagradost.cloudstream3.utils.unshortenLinkSafe
+import java.util.Locale
 import com.lagradost.cloudstream3.ui.download.DOWNLOAD_NAVIGATE_TO
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP_DOWNLOAD
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
@@ -991,6 +994,27 @@ object VideoDownloadManager {
     }
 
 
+    private suspend fun resolveDownloadUrl(rawUrl: String): String? {
+        val trimmedUrl = rawUrl.trim()
+        if (trimmedUrl.isBlank()) {
+            return null
+        }
+
+        val unshortenedUrl = unshortenLinkSafe(trimmedUrl).trim()
+        return sequenceOf(trimmedUrl, unshortenedUrl)
+            .distinct()
+            .firstNotNullOfOrNull { candidate ->
+                candidate
+                    .takeIf(::hasSupportedDownloadScheme)
+                    ?.replace(" ", "%20")
+            }
+    }
+
+    private fun hasSupportedDownloadScheme(url: String): Boolean {
+        val scheme = runCatching { Uri.parse(url).scheme?.lowercase(Locale.ROOT) }.getOrNull()
+        return scheme == "http" || scheme == "https"
+    }
+
     /** download a file that consist of a single stream of data*/
     suspend fun downloadThing(
         context: Context,
@@ -1007,6 +1031,12 @@ object VideoDownloadManager {
         minimumSize: Long = 100
     ): DownloadStatus = withContext(Dispatchers.IO) {
         if (parallelConnections < 1) {
+            return@withContext DOWNLOAD_INVALID_INPUT
+        }
+
+        val downloadUrl = resolveDownloadUrl(link.url)
+        if (downloadUrl == null) {
+            Log.e(TAG, "Invalid direct download url: ${link.url.take(160)}")
             return@withContext DOWNLOAD_INVALID_INPUT
         }
 
@@ -1035,7 +1065,7 @@ object VideoDownloadManager {
             metadata.type = DownloadType.IsPending
 
             val items = streamLazy(
-                url = link.url.replace(" ", "%20"),
+                url = downloadUrl,
                 referer = link.referer,
                 startByte = stream.startAt,
                 headers = link.headers.appendAndDontOverride(
@@ -1271,6 +1301,15 @@ object VideoDownloadManager {
     ): DownloadStatus = withContext(Dispatchers.IO) {
         if (parallelConnections < 1) return@withContext DOWNLOAD_INVALID_INPUT
 
+        val downloadUrl = resolveDownloadUrl(link.url)
+        if (downloadUrl == null) {
+            Log.e(
+                TAG,
+                "Invalid HLS download url source=${link.source} name=${link.name} raw=${link.url.take(160)}"
+            )
+            return@withContext DOWNLOAD_INVALID_INPUT
+        }
+
         val metadata = DownloadMetaData(
             createNotificationCallback = createNotificationCallback,
             id = parentId,
@@ -1311,7 +1350,7 @@ object VideoDownloadManager {
 
             // do the initial get request to fetch the segments
             val m3u8 = M3u8Helper.M3u8Stream(
-                link.url, link.quality, link.headers.appendAndDontOverride(
+                downloadUrl, link.quality, link.headers.appendAndDontOverride(
                     mapOf(
                         "user-agent" to USER_AGENT,
                     ) + if (link.referer.isNotBlank()) mapOf("referer" to link.referer) else emptyMap()
@@ -1906,6 +1945,9 @@ object VideoDownloadManager {
                         type = downloadItem.resultType,
                         name = downloadItem.resultName,
                         poster = downloadItem.resultPoster,
+                        backdrop = downloadItem.resultBackdrop
+                            ?.takeIf { it.isNotBlank() }
+                            ?: downloadItem.resultPoster?.takeIf { it.isNotBlank() },
                         id = downloadItem.resultId,
                         cacheTime = System.currentTimeMillis(),
                     )

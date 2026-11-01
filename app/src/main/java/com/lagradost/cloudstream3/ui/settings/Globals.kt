@@ -3,32 +3,19 @@ package com.lagradost.cloudstream3.ui.settings
 import android.content.Context
 import android.content.res.Configuration
 import android.content.res.Resources
-import androidx.preference.PreferenceManager
-import com.lagradost.cloudstream3.R
-import com.lagradost.cloudstream4.compose.DeviceLayout.Companion.isAutoTv
 
 object Globals {
     var beneneCount = 0
 
-    const val PHONE: Int = 0b00001
-    const val TV: Int = 0b00010
-    const val EMULATOR: Int = 0b00100
+    const val PHONE : Int = 0b001
+    const val TV : Int = 0b010
+    const val EMULATOR : Int = 0b100
+    const val TV_MATERIAL : Int = 0b1000
     private const val INVALID = -1
     private var layoutId = INVALID
 
-    private fun Context.getLayoutInt(): Int {
-        val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
-        return settingsManager.getInt(this.getString(R.string.app_layout_key), -1)
-    }
-
     fun Context.updateTv() {
-        layoutId = when (getLayoutInt()) {
-            -1 -> if (isAutoTv(this)) TV else PHONE
-            0 -> PHONE
-            1 -> TV
-            2 -> EMULATOR
-            else -> PHONE
-        }
+        layoutId = resolvedAppLayoutMode().resolvedLayoutFlag
     }
 
     /** Returns true if the current orientation is landscape. */
@@ -40,9 +27,11 @@ object Globals {
      * so isLayout(TV or EMULATOR) is a valid statement for checking if the layout is in the emulator
      * or tv. Auto will become the "TV" or the "PHONE" layout.
      *
-     * Valid flags are: PHONE, TV, EMULATOR
+     * Valid flags are: PHONE, TV, EMULATOR, TV_MATERIAL
      * */
-    fun isLayout(flags: Int): Boolean {
-        return (layoutId and flags) != 0
+    fun isLayout(flags: Int) : Boolean {
+        if (layoutId == INVALID) return false
+        val currentLayout = if (layoutId == TV_MATERIAL) layoutId or TV else layoutId
+        return (currentLayout and flags) != 0
     }
 }

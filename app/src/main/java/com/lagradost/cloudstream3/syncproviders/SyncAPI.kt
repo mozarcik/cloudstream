@@ -189,6 +189,7 @@ abstract class SyncAPI : AuthAPI() {
         override var id: Int? = null,
         val plot: String? = null,
         override var score: Score? = null,
-        val tags: List<String>? = null
+        val tags: List<String>? = null,
+        val backgroundPosterUrl: String? = null,
     ) : SearchResponse
 }

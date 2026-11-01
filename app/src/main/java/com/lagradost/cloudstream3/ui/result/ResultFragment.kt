@@ -137,6 +137,8 @@ fun ResultEpisode.getWatchProgress(): Float {
 object ResultFragment {
     private const val URL_BUNDLE = "url"
     private const val NAME_BUNDLE = "name"
+    private const val POSTER_BUNDLE = "poster"
+    private const val BACKDROP_BUNDLE = "backdrop"
     private const val API_NAME_BUNDLE = "apiName"
     private const val SEASON_BUNDLE = "season"
     private const val EPISODE_BUNDLE = "episode"
@@ -151,7 +153,9 @@ object ResultFragment {
             putString(URL_BUNDLE, card.url)
             putString(API_NAME_BUNDLE, card.apiName)
             putString(NAME_BUNDLE, card.name)
+            putString(POSTER_BUNDLE, card.posterUrl)
             if (card is DataStoreHelper.ResumeWatchingResult) {
+                putString(BACKDROP_BUNDLE, card.backdropUrl)
                 if (card.season != null)
                     putInt(SEASON_BUNDLE, card.season)
                 if (card.episode != null)
@@ -246,36 +250,11 @@ object ResultFragment {
         logoView: ImageView,
         titleView: TextView
     ) {
-        // Cancel it, as we want to remove the listener onSuccess race condition
+        // Core only gets a single logo URL without language metadata, so always prefer
+        // the textual title instead of risking a mixed-language logo in the UI.
         logoView.dispose()
-
-        if (url.isNullOrBlank()) {
-            logoView.isVisible = false
-            titleView.isVisible = true
-            return
-        }
-
-        logoView.isVisible = true
-        titleView.isVisible = false
-
-        logoView.loadImage(
-            imageData = UiImage.Image(url, headers = headers),
-            builder = {
-                listener(
-                    onSuccess = { _, _ ->
-                        logoView.isVisible = true
-                        titleView.isVisible = false
-                    },
-                    onError = { _, _ ->
-                        logoView.isVisible = false
-                        titleView.isVisible = true
-                    },
-                    onCancel = {
-                        // If we manually cancel, then it should not do anything
-                    }
-                )
-            }
-        )
+        logoView.isVisible = false
+        titleView.isVisible = true
     }
 
     fun Fragment.getStoredData(): StoredData? {

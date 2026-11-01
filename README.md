@@ -43,7 +43,7 @@ Our documentation is unmaintained and open to contributions; therefore, apps and
 
 #### Features:
 + **AdFree**, No ads whatsoever
-+ No tracking/analytics
++ Crash reports via Sentry for diagnostics
 + Bookmarks
 + Phone and TV support
 + Chromecast

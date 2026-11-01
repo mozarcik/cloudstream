@@ -47,13 +47,15 @@ class SubtitleRepo(override val api: SubtitleAPI) : AuthRepo(api) {
         if (cached != null) return@runCatching cached
 
         val returnValue = api.resource(freshAuth(), data)
-        resourceCache.withLock {
-            val add = SavedResourceResponse(unixTime, returnValue, data)
-            if (resourceCache.size > CACHE_SIZE) {
-                resourceCache[resourceCacheIndex] = add // rolling cache
-                resourceCacheIndex = (resourceCacheIndex + 1) % CACHE_SIZE
-            } else {
-                resourceCache.add(add)
+        if (returnValue.getSubtitles().isNotEmpty()) {
+            resourceCache.withLock {
+                val add = SavedResourceResponse(unixTime, returnValue, data)
+                if (resourceCache.size > CACHE_SIZE) {
+                    resourceCache[resourceCacheIndex] = add // rolling cache
+                    resourceCacheIndex = (resourceCacheIndex + 1) % CACHE_SIZE
+                } else {
+                    resourceCache.add(add)
+                }
             }
         }
         returnValue

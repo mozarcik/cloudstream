@@ -3,9 +3,11 @@ package com.lagradost.cloudstream3
 import android.app.Activity
 import android.os.Bundle
 import android.os.PersistableBundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.viewbinding.ViewBinding
 import com.lagradost.cloudstream3.databinding.BottomResultviewPreviewBinding
 import com.lagradost.cloudstream3.databinding.FragmentHomeBinding
@@ -29,10 +31,12 @@ import com.lagradost.cloudstream3.databinding.RepositoryItemTvBinding
 import com.lagradost.cloudstream3.databinding.SearchResultGridBinding
 import com.lagradost.cloudstream3.databinding.SearchResultGridExpandedBinding
 import com.lagradost.cloudstream3.databinding.TrailerCustomLayoutBinding
+import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.utils.SubtitleHelper
 import com.lagradost.cloudstream3.utils.TestingUtils
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert
+import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -50,9 +54,65 @@ class TestApplication : Activity() {
 
 @RunWith(AndroidJUnit4::class)
 class ExampleInstrumentedTest {
+    private fun requireMainActivityClass(): Class<out Activity> {
+        val activityClass = runCatching {
+            Class.forName("com.lagradost.cloudstream3.MainActivity")
+                .asSubclass(Activity::class.java)
+        }.getOrNull()
+
+        Assume.assumeTrue(
+            "MainActivity is unavailable in this flavor/device configuration; skipping legacy activity-backed instrumented tests.",
+            activityClass != null
+        )
+
+        return requireNotNull(activityClass)
+    }
+
     private fun getAllProviders(): Array<MainAPI> {
-        println("Providers: ${APIHolder.allProviders.size}")
-        return APIHolder.allProviders.toTypedArray() //.filter { !it.usesWebView }
+        val providers = synchronized(APIHolder.allProviders) {
+            APIHolder.allProviders.toTypedArray()
+        }
+        println("Providers: ${providers.size}")
+        return providers //.filter { !it.usesWebView }
+    }
+
+    private fun getInstalledPluginCount(): Int {
+        return PluginManager.getPluginsOnline().size + PluginManager.getPluginsLocal().size
+    }
+
+    private fun waitForProviders(timeoutMs: Long = 5_000L) {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val startedAt = SystemClock.elapsedRealtime()
+
+        while (SystemClock.elapsedRealtime() - startedAt < timeoutMs) {
+            instrumentation.waitForIdleSync()
+            if (getAllProviders().isNotEmpty()) return
+            SystemClock.sleep(100L)
+        }
+    }
+
+    private fun requireAvailableProviders(): Array<MainAPI> {
+        getAllProviders().takeIf { it.isNotEmpty() }?.let { return it }
+
+        val installedPluginCount = getInstalledPluginCount()
+        Assume.assumeTrue(
+            "No installed plugins on this device; skipping provider integration tests.",
+            installedPluginCount > 0
+        )
+
+        val scenario = ActivityScenario.launch(requireMainActivityClass())
+        try {
+            waitForProviders()
+        } finally {
+            scenario.close()
+        }
+
+        return getAllProviders().also { providers ->
+            Assert.assertTrue(
+                "Found $installedPluginCount installed plugins, but no providers were loaded.",
+                providers.isNotEmpty()
+            )
+        }
     }
 
     @Throws
@@ -72,8 +132,9 @@ class ExampleInstrumentedTest {
     @Test
     @Throws
     fun layoutTest() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity: MainActivity ->
+        val scenario = ActivityScenario.launch(requireMainActivityClass())
+        try {
+            scenario.onActivity { activity ->
                 // FragmentHomeHeadBinding and FragmentHomeHeadTvBinding CANT be the same
                 //testAllLayouts<FragmentHomeHeadBinding>(activity, R.layout.fragment_home_head, R.layout.fragment_home_head_tv)
                 //testAllLayouts<FragmentHomeHeadTvBinding>(activity, R.layout.fragment_home_head, R.layout.fragment_home_head_tv)
@@ -124,6 +185,8 @@ class ExampleInstrumentedTest {
                 testAllLayouts<FragmentLibraryTvBinding>(activity, R.layout.fragment_library_tv, R.layout.fragment_library)
                 testAllLayouts<FragmentLibraryBinding>(activity, R.layout.fragment_library_tv, R.layout.fragment_library)
             }
+        } finally {
+            scenario.close()
         }
     }
 
@@ -132,7 +195,7 @@ class ExampleInstrumentedTest {
     fun providerCorrectData() {
         val langTagsIETF = SubtitleHelper.languages.map { it.IETF_tag }
         Assert.assertFalse("IETFTagNames does not contain any languages", langTagsIETF.isNullOrEmpty())
-        for (api in getAllProviders()) {
+        for (api in requireAvailableProviders()) {
             Assert.assertTrue("Api does not contain a mainUrl", api.mainUrl != "NONE")
             Assert.assertTrue("Api does not contain a name", api.name != "NONE")
             Assert.assertTrue(
@@ -150,7 +213,7 @@ class ExampleInstrumentedTest {
     @Test
     fun providerCorrectHomepage() {
         runBlocking {
-            getAllProviders().toList().amap { api ->
+            requireAvailableProviders().toList().amap { api ->
                 TestingUtils.testHomepage(api, TestingUtils.Logger())
             }
         }

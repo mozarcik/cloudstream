@@ -59,6 +59,40 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class HomeViewModel : ViewModel() {
     companion object {
+        private suspend fun enrichResumeHeaderIfNeeded(
+            resume: DownloadObjects.ResumeWatching,
+            header: DownloadObjects.DownloadHeaderCached,
+        ): DownloadObjects.DownloadHeaderCached {
+            if (!header.backdrop.isNullOrBlank()) {
+                return header
+            }
+
+            val api = getApiFromNameNull(header.apiName) ?: return header
+            val loadResponse = (runCatching { APIRepository(api).load(header.url) }.getOrNull() as? Resource.Success)
+                ?.value
+                ?: return header
+
+            val resolvedBackdrop = loadResponse.backgroundPosterUrl
+                ?.takeIf { it.isNotBlank() }
+                ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() }
+                ?: return header
+
+            val updatedHeader = header.copy(
+                poster = header.poster?.takeIf { it.isNotBlank() }
+                    ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() },
+                backdrop = resolvedBackdrop,
+                cacheTime = System.currentTimeMillis()
+            )
+
+            setKey(
+                DOWNLOAD_HEADER_CACHE,
+                resume.parentId.toString(),
+                updatedHeader
+            )
+
+            return updatedHeader
+        }
+
         suspend fun getResumeWatching(): List<DataStoreHelper.ResumeWatchingResult>? {
             val resumeWatching = withContext(Dispatchers.IO) {
                 getAllResumeStateIds()?.mapNotNull { id ->
@@ -72,7 +106,7 @@ class HomeViewModel : ViewModel() {
                         resume.parentId.toString()
                     )
 
-                    val data = if (headerCache == null) {
+                    val cachedHeader = if (headerCache == null) {
                         // We store resume watching data in download header cache
                         // Because downloads automatically pruned outdated download headers we
                         // removed resume watching data. We should restore the data for affected users.
@@ -88,22 +122,24 @@ class HomeViewModel : ViewModel() {
                         headerCache
                     }
 
+                    val data = enrichResumeHeaderIfNeeded(resume, cachedHeader)
                     val watchPos = getViewPos(resume.episodeId)
 
                     DataStoreHelper.ResumeWatchingResult(
-                        data.name,
-                        data.url,
-                        data.apiName,
-                        data.type,
-                        data.poster,
-                        watchPos,
-                        resume.episodeId,
-                        resume.parentId,
-                        resume.episode,
-                        resume.season,
-                        resume.isFromDownload
+                        name = data.name,
+                        url = data.url,
+                        apiName = data.apiName,
+                        type = data.type,
+                        posterUrl = data.poster,
+                        backdropUrl = data.backdrop,
+                        watchPos = watchPos,
+                        id = resume.episodeId,
+                        parentId = resume.parentId,
+                        episode = resume.episode,
+                        season = resume.season,
+                        isFromDownload = resume.isFromDownload
                     )
-                }
+                }?.filterNotNull()
             }
             return resumeWatchingResult
         }

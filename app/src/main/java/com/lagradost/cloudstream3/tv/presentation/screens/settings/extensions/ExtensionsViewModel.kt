@@ -1,0 +1,274 @@
+package com.lagradost.cloudstream3.tv.presentation.screens.settings.extensions
+
+import android.app.Activity
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.lagradost.cloudstream3.tv.compat.ExtensionsCompat
+import com.lagradost.cloudstream3.tv.compat.PluginItem
+import com.lagradost.cloudstream3.tv.compat.PluginStatsCompat
+import com.lagradost.cloudstream3.tv.compat.RepositoryItem
+import com.lagradost.cloudstream3.ui.settings.extensions.REPOSITORIES_KEY
+import com.lagradost.cloudstream3.utils.DataStore.getSharedPrefs
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+
+/**
+ * ViewModel for Extensions management
+ */
+class ExtensionsViewModel : ViewModel() {
+    
+    private val _uiState = MutableStateFlow<ExtensionsUiState>(ExtensionsUiState.Loading)
+    val uiState: StateFlow<ExtensionsUiState> = _uiState.asStateFlow()
+    
+    private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var context: Context? = null
+    private var reloadJob: kotlinx.coroutines.Job? = null
+    
+    init {
+        viewModelScope.launch {
+            loadData()
+        }
+    }
+    
+    /**
+     * Setup SharedPreferences listener to auto-reload when plugins add repositories
+     */
+    fun setupPrefsListener(context: Context) {
+        this.context = context
+        
+        prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == REPOSITORIES_KEY) {
+                // Cancel previous reload job and schedule a new one (debounce)
+                reloadJob?.cancel()
+                reloadJob = viewModelScope.launch {
+                    // Wait 500ms - if another change comes, this will be cancelled
+                    kotlinx.coroutines.delay(500)
+                    loadData()
+                }
+            }
+        }
+        
+        context.getSharedPrefs().registerOnSharedPreferenceChangeListener(prefsListener)
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        reloadJob?.cancel()
+        prefsListener?.let { listener ->
+            context?.getSharedPrefs()?.unregisterOnSharedPreferenceChangeListener(listener)
+        }
+    }
+    
+    /**
+     * Load repositories and plugin stats
+     */
+    private suspend fun loadData() {
+        if (_uiState.value !is ExtensionsUiState.Ready) {
+            _uiState.value = ExtensionsUiState.Loading
+        }
+        
+        // Load repositories
+        val reposResult = ExtensionsCompat.getRepositories()
+        if (reposResult.isFailure) {
+            _uiState.value = ExtensionsUiState.Error(
+                reposResult.exceptionOrNull()?.message ?: "Failed to load repositories"
+            )
+            return
+        }
+        
+        val repositories = reposResult.getOrNull() ?: emptyList()
+        
+        // Load stats
+        val statsResult = PluginStatsCompat.loadPluginStats()
+        val stats = statsResult.getOrNull()
+        
+        // Keep existing plugins cache during refresh (don't show "loading" for repos that were already loaded)
+        val currentPlugins = if (_uiState.value is ExtensionsUiState.Ready) {
+            (_uiState.value as ExtensionsUiState.Ready).pluginsByRepo
+        } else {
+            emptyMap()
+        }
+        
+        _uiState.value = ExtensionsUiState.Ready(
+            repositories = repositories,
+            pluginStats = stats,
+            pluginsByRepo = currentPlugins
+        )
+    }
+    
+    /**
+     * Load plugins for a specific repository
+     */
+    fun loadPluginsForRepo(repoUrl: String, forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            loadPluginsForRepoInternal(
+                repoUrl = repoUrl,
+                forceRefresh = forceRefresh
+            )
+        }
+    }
+    
+    /**
+     * Await plugins load completion for repository.
+     */
+    suspend fun awaitPluginsForRepo(
+        repoUrl: String
+    ): List<PluginItem> {
+        val currentState = _uiState.value as? ExtensionsUiState.Ready
+        val currentPlugins = currentState?.pluginsByRepo?.get(repoUrl)
+        if (currentPlugins != null) {
+            return currentPlugins
+        }
+
+        return uiState
+            .filterIsInstance<ExtensionsUiState.Ready>()
+            .map { state -> state.pluginsByRepo[repoUrl] }
+            .first { plugins -> plugins != null }
+            ?: emptyList()
+    }
+
+    private suspend fun loadPluginsForRepoInternal(
+        repoUrl: String,
+        forceRefresh: Boolean
+    ): List<PluginItem>? {
+        val currentState = _uiState.value as? ExtensionsUiState.Ready ?: return null
+
+        val existingPlugins = currentState.pluginsByRepo[repoUrl]
+        val hasCachedPlugins = existingPlugins != null
+        if (!forceRefresh && existingPlugins != null) {
+            return existingPlugins
+        }
+
+        if (!forceRefresh && currentState.pluginsByRepo.containsKey(repoUrl)) {
+            return null
+        }
+
+        if (!forceRefresh || !hasCachedPlugins) {
+            _uiState.value = currentState.copy(
+                pluginsByRepo = currentState.pluginsByRepo + (repoUrl to null)
+            )
+        }
+
+        val plugins = ExtensionsCompat.getPluginsFromRepository(repoUrl).getOrElse { emptyList() }
+        val freshState = _uiState.value as? ExtensionsUiState.Ready ?: return plugins
+        _uiState.value = freshState.copy(
+            pluginsByRepo = freshState.pluginsByRepo + (repoUrl to plugins)
+        )
+        return plugins
+    }
+    
+    /**
+     * Add a new repository with URL parsing and automatic name detection
+     * Name is optional - if not provided, will be fetched from repository metadata
+     */
+    fun addRepository(name: String?, url: String, onResult: (Result<RepositoryItem>) -> Unit) {
+        viewModelScope.launch {
+            val result = ExtensionsCompat.addRepository(name, url)
+            
+            if (result.isSuccess) {
+                // Reload all data (stats, repositories, plugins) BEFORE calling onResult
+                loadData()
+                
+                // Also load plugins for the new repository
+                result.getOrNull()?.let { repo ->
+                    loadPluginsForRepo(repo.url)
+                }
+            }
+            
+            // Call onResult AFTER data is reloaded so UI shows updated list
+            onResult(result)
+        }
+    }
+    
+    /**
+     * Remove a repository
+     */
+    fun removeRepository(url: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = ExtensionsCompat.removeRepository(url)
+            
+            if (result.isSuccess) {
+                loadData() // Reload to remove from list BEFORE onResult
+            }
+            
+            onResult(result)
+        }
+    }
+    
+    /**
+     * Download a plugin
+     */
+    fun downloadPlugin(activity: Activity, plugin: PluginItem, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = ExtensionsCompat.downloadPlugin(activity, plugin)
+            
+            if (result.isSuccess) {
+                // Refresh stats/repositories and force refresh plugins list for repo.
+                loadData()
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
+            }
+            
+            onResult(result)
+        }
+    }
+    
+    /**
+     * Delete a plugin
+     */
+    fun deletePlugin(plugin: PluginItem, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = ExtensionsCompat.deletePlugin(plugin)
+            
+            if (result.isSuccess) {
+                loadData()
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
+            }
+            
+            onResult(result)
+        }
+    }
+
+    fun refreshData(repositoryUrl: String? = null) {
+        viewModelScope.launch {
+            loadData()
+            repositoryUrl?.let { repoUrl ->
+                loadPluginsForRepoInternal(
+                    repoUrl = repoUrl,
+                    forceRefresh = true
+                )
+            }
+        }
+    }
+    
+    /**
+     * Update a plugin
+     */
+    fun updatePlugin(activity: Activity, plugin: PluginItem, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = ExtensionsCompat.updatePlugin(activity, plugin)
+            
+            if (result.isSuccess) {
+                loadData()
+                loadPluginsForRepoInternal(
+                    repoUrl = plugin.repositoryUrl,
+                    forceRefresh = true
+                )
+            }
+            
+            onResult(result)
+        }
+    }
+}

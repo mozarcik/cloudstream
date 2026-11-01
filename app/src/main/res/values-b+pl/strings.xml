@@ -92,7 +92,7 @@
     <string name="subs_subtitle_languages">Język napisów</string>
     <string name="subs_hold_to_reset_to_default">Przytrzymaj, aby zresetować</string>
     <string name="subs_import_text" formatted="true">Importuj czcionki, umieszczając je w %s</string>
-    <string name="continue_watching">Kontyntynuj oglądanie</string>
+    <string name="continue_watching">Kontynuuj oglądanie</string>
     <string name="action_remove_watching">Usuń</string>
     <string name="action_open_watching">Więcej informacji</string>
     <string name="vpn_might_be_needed">Połączenie przez VPN może być wymagane</string>
@@ -214,7 +214,15 @@
     <string name="live_singular">Transmisja na żywo</string>
     <string name="nsfw_singular">NSFW</string>
     <string name="other_singular">Inne</string>
-    <string name="source_error">Błąd żródła</string>
+    <string name="source_error">Błąd źródła</string>
+    <string name="tv_player_source_failed_to_load_with_code" formatted="true">Nie udało się załadować (%1$d)</string>
+    <string name="tv_player_source_unavailable">Niedostępne</string>
+    <string name="tv_player_source_error_dialog_http_code" formatted="true">Nie udało się załadować tego źródła (HTTP %1$d).</string>
+    <string name="tv_player_source_error_dialog_unavailable">To źródło jest obecnie niedostępne.</string>
+    <string name="tv_crash_reporting_title">Raportowanie błędów</string>
+    <string name="tv_crash_reporting_summary">Raporty błędów są wysyłane do Sentry, aby ułatwić diagnozowanie crashy oraz awarii odtwarzania i szczegółów.</string>
+    <string name="tv_crash_reporting_builds_summary">Raportowanie błędów jest włączone w buildach debug, stable i prerelease.</string>
+    <string name="tv_crash_reporting_privacy_summary">Raporty celowo nie dołączają pełnych adresów URL, tokenów ani ciasteczek.</string>
     <string name="remote_error">Zdalny błąd</string>
     <string name="render_error">Błąd renderowania</string>
     <string name="unexpected_error">Nieoczekiwany błąd odtwarzacza</string>
@@ -249,7 +257,7 @@
     <string name="video_buffer_disk_settings">Pamięć podręczna wideo na dysku</string>
     <string name="video_buffer_clear_settings">Wyczyść pamięć podręczną wideo i obrazów</string>
     <string name="video_ram_description">Ustawienie zbyt wysokiej wartości może powodować problemy na urządzeniach z małą ilością pamięci RAM, takich jak urządzenia Android TV lub stare telefony.</string>
-    <string name="video_disk_description">Zbyt wysokie ustawienie może powodować problemy na urządzeniach z małą ilością dostęponej pamięci, takich jak urządzenia Android TV.</string>
+    <string name="video_disk_description">Zbyt wysokie ustawienie może powodować problemy na urządzeniach z małą ilością dostępnej pamięci, takich jak urządzenia Android TV.</string>
     <string name="dns_pref">DNS over HTTPS</string>
     <string name="dns_pref_summary">Przydatne w pomijaniu blokad dostawców Internetu</string>
     <string name="add_site_pref">Sklonuj stronę</string>
@@ -274,12 +282,15 @@
     <string name="category_ui">Układ interfejsu</string>
     <string name="automatic">Automatyczny</string>
     <string name="tv_layout">Układ dla telewizorów</string>
+    <string name="tv_material_layout">TV Material</string>
     <string name="phone_layout">Układ dla telefonów</string>
     <string name="emulator_layout">Układ dla emulatorów</string>
     <string name="primary_color_settings">Kolor podstawowy</string>
     <string name="app_theme_settings">Motyw aplikacji</string>
     <string name="bottom_title_settings">Pozycja tytułu względem obrazka</string>
     <string name="bottom_title_settings_des">Ustaw tytuł pod obrazkiem</string>
+    <string name="username">Nazwa użytkownika</string>
+    <string name="password">Hasło</string>
     <string name="example_lang_name">Kod języka (pl)</string>
     <string name="login_format" formatted="true">%1$s %2$s</string>
     <string name="account">konto</string>
@@ -348,6 +359,8 @@
     <string name="error_invalid_data">Niepoprawne dane</string>
     <string name="error_invalid_url">Niepoprawny URL</string>
     <string name="error">Błąd</string>
+    <string name="builds">Buildy</string>
+    <string name="privacy">Prywatność</string>
     <string name="subtitles_remove_captions">Usuń CC z napisów</string>
     <string name="subtitles_remove_bloat">Usuń reklamy z napisów</string>
     <string name="subtitles_filter_lang">Filtrowanie wg preferowanego języka</string>
@@ -381,11 +394,14 @@
     <string name="plugins_downloaded" formatted="true">Pobrano: %d</string>
     <string name="plugins_disabled" formatted="true">Wyłączono: %d</string>
     <string name="plugins_not_downloaded" formatted="true">Nie pobrano: %d</string>
-    <string name="plugins_updated">Zaaktualizowano %d rozszerzeń</string>
+    <string name="plugins_updated">Zaktualizowano %d rozszerzeń</string>
     <string name="blank_repo_message">CloudStream nie ma domyślnie zainstalowanych żadnych witryn. Musisz zainstalować witryny z repozytoriów. \n \nDołącz do naszego Discorda lub poszukaj online.</string>
     <string name="view_public_repositories_button">Zobacz repozytoria społeczności</string>
     <string name="view_public_repositories_button_short">Publiczna lista</string>
     <string name="uppercase_all_subtitles">Wszystkie napisy wielką literą</string>
+    <string name="tv_player_subtitle_sync_controls_hint">Użyj, jeśli napisy pokazują się:</string>
+    <string name="tv_player_subtitle_sync_controls_too_late">za późno</string>
+    <string name="tv_player_subtitle_sync_controls_too_early">za wcześnie</string>
     <string name="download_all_plugins_from_repo">Uwaga: CloudStream nie ponosi żadnej odpowiedzialności za korzystanie z rozszerzeń innych dostawców i nie zapewnia dla nich żadnego wsparcia!</string>
     <string name="single_plugin_disabled" formatted="true">%s (Wyłączone)</string>
     <string name="tracks">Ścieżki</string>
@@ -424,6 +440,7 @@
     <string name="next_episode_time_min_format" formatted="true">%dm</string>
     <string name="action_mark_as_watched">Oznacz jako obejrzane</string>
     <string name="confirm_exit_dialog">Czy na pewno chcesz wyjść?</string>
+    <string name="tv_press_back_again_to_exit">Naciśnij Wstecz ponownie, aby wyjść</string>
     <string name="update_notification_downloading">Pobieranie aktualizacji aplikacji…</string>
     <string name="sync_total_episodes_some" formatted="true">/%d</string>
     <string name="cast_format" formatted="true">Obsada: %s</string>
@@ -494,7 +511,7 @@
     <string name="restart">Uruchom ponownie</string>
     <string name="start">Rozpocznij</string>
     <string name="test_failed">Nie powiodło się</string>
-    <string name="test_passed">Ukończone powodzeniem</string>
+    <string name="test_passed">Ukończono z powodzeniem</string>
     <string name="jsdelivr_proxy">Serwer proxy GitHuba</string>
     <string name="pref_category_bypass">Obejścia ISP</string>
     <string name="category_provider_test">Test dostawcy</string>
@@ -545,7 +562,7 @@
     <string name="action_subscribe">Zasubskrybuj</string>
     <string name="action_remove_from_favorites">Usuń z ulubionych</string>
     <string name="select_an_account">Wybierz konto</string>
-    <string name="duplicate_message_single" formatted="true">Wygląda się, że potencjalny duplikat już znajduje się w bibliotece: \'%s\'. \' \n \nCzy chciałbyś dodać ten element, zastąpić istniejący, czy anulować akcję?</string>
+    <string name="duplicate_message_single" formatted="true">Wygląda na to, że potencjalny duplikat już znajduje się w bibliotece: \'%s\'. \' \n \nCzy chciałbyś dodać ten element, zastąpić istniejący, czy anulować akcję?</string>
     <string name="enter_pin">Wprowadź PIN</string>
     <string name="pin">PIN</string>
     <string name="links_reloaded_toast">Linki załadowane ponownie</string>
@@ -614,7 +631,7 @@
     <string name="downloads_delete_select">Zaznacz elementy do usunięcia</string>
     <string name="deselect_all">Odznacz wszystkie</string>
     <string name="delete_message_multiple" formatted="true">Czy na pewno chcesz na stałe usunąć następujące elementy? \n \n%s</string>
-    <string name="delete_message_series_section" formatted="true">Usuniesz na stale wszystkie odcinki następującego serialu: \n \n%s</string>
+    <string name="delete_message_series_section" formatted="true">Usuniesz na stałe wszystkie odcinki następującego serialu: \n \n%s</string>
     <string name="delete_message_series_only" formatted="true">Czy na pewno chcesz na stałe usunąć wszystkie odcinki następującego serialu? \n \n%s</string>
     <string name="delete_files">Usuń pliki</string>
     <string name="delete_message_series_episodes" formatted="true">Czy na pewno chcesz na stałe usunąć następujące odcinki %1$s? \n \n%2$s</string>
@@ -774,4 +791,202 @@
     <string name="edit_profile_image_default">Domyślne obrazy</string>
     <string name="edit_profile_image_url">Adres URL</string>
     <string name="edit_profile_image_picker">Wybór obrazu</string>
+    <string name="tv_player_sync_apply">Zastosuj</string>
+    <string name="tv_player_sync_custom_hint">Wartość ujemna: napisy wcześniej, dodatnia: później. OK otwiera klawiaturę numeryczną.</string>
+    <string name="tv_player_control_next">Dalej</string>
+    <string name="tv_player_control_restart">Od początku</string>
+    <string name="tv_player_control_aspect">Proporcje</string>
+    <string name="tv_player_value_off">Wył.</string>
+    <string name="tv_player_sync_custom_value">Własna wartość…</string>
+    <string name="tv_player_loading_links">Ładowanie linków…</string>
+    <string name="tv_player_notice_source_failed_title">Źródło nie działa</string>
+    <string name="tv_player_notice_source_failed_text">%1$s %2$s. Próbuję następnego źródła…</string>
+    <string name="tv_player_notice_subtitle_failed_title">Nie udało się wczytać napisów</string>
+    <string name="tv_player_notice_subtitle_failed_text">%1$s. Odtwarzanie bez napisów.</string>
+    <string name="tv_player_seek_min_sec" formatted="true">%1$d min %2$d s</string>
+    <string name="tv_player_video_auto_quality">Automatyczna jakość</string>
+    <string name="tv_player_video_adaptive">Strumień adaptacyjny</string>
+    <string name="tv_player_video_adaptive_source">Strumień adaptacyjny • %1$s</string>
+    <string name="tv_player_aspect_stretch">Rozciągnij</string>
+    <string name="tv_player_aspect_zoom">Powiększ</string>
+    <string name="tv_player_aspect_fit">Dopasuj</string>
+    <string name="tv_player_loading_sources">Ładowanie źródeł…</string>
+    <string name="tv_player_loading_sources_progress">Znaleziono źródeł: %1$d</string>
+    <string name="tv_player_retry">Spróbuj ponownie</string>
+    <string name="tv_player_subtitle_sync_enable_subtitles">Włącz napisy, aby je zsynchronizować.</string>
+    <string name="tv_player_source_trying_next">Źródło „%1$s” nie działa. Próbuję następnego…</string>
+    <string name="tv_player_source_trying_next_generic">To źródło nie działa. Próbuję następnego…</string>
+    <string name="tv_player_online_subtitles_login_required">Zaloguj się, aby pobrać napisy z tego źródła</string>
+    <string name="tv_player_control_video">Wideo</string>
+    <string name="tv_player_sources_found">Znaleziono: %1$d</string>
+    <string name="tv_player_now_playing">Teraz odtwarzane</string>
+    <string name="tv_player_subtitles_available">Dostępne</string>
+    <string name="tv_player_online_subtitles_results">Wyniki</string>
+    <string name="tv_player_online_subtitles_login_path">Ustawienia › Konta i zabezpieczenia</string>
+    <string name="tv_player_sync_now">TERAZ</string>
+    <string name="tv_player_sync_align_hint">OK: dopasuj tę linię do teraz → opóźnienie %1$s</string>
+    <string name="top_10_movies_title">Top 10</string>
+    <string name="sources">Źródła</string>
+    <string name="tv_search_input_placeholder">Szukaj filmów i seriali...</string>
+    <string name="tv_details_tab_cast">Obsada i ekipa</string>
+    <string name="tv_details_tab_more_like_this">Podobne tytuły</string>
+    <string name="details_original_title_format">Tytuł oryginalny: %1$s</string>
+    <string name="need_storage">Zezwól na pobieranie odcinków</string>
+    <string name="tv_downloads_empty_title">Brak pobranych plików</string>
+    <string name="tv_downloads_empty_subtitle">Pobrane filmy i odcinki pojawią się tutaj.</string>
+    <string name="tv_seasons">Sezony</string>
+    <string name="details">Szczegóły</string>
+    <string name="continue_watching_remaining_suffix">pozostało</string>
+    <string name="tv_cast">Obsada</string>
+    <string name="tv_original_language">Język oryginalny</string>
+    <string name="tv_budget">Budżet</string>
+    <string name="tv_revenue">Przychody</string>
+    <string name="tv_additional_information">Dodatkowe informacje</string>
+    <string name="tv_episode_untitled">Odcinek bez tytułu</string>
+    <string name="tv_duration_hours_format" formatted="true">%1$dh</string>
+    <string name="tv_episode_duration_hour_min_format">%1$dh %2$dmin</string>
+    <string name="tv_no_episode_description">Brak opisu</string>
+    <string name="tv_browse">Przeglądaj</string>
+    <string name="tv_home_categories">Kategorie</string>
+    <string name="tv_selected">Wybrano</string>
+    <string name="tv_home_source_row_label">Źródło: %1$s</string>
+    <string name="tv_home_search_sources_placeholder">Szukaj (wkrótce)</string>
+    <string name="tv_home_search_sources_hint">Szukaj źródeł</string>
+    <string name="tv_home_more_sources">Więcej…</string>
+    <string name="tv_home_sort_most_used">Najczęściej używane</string>
+    <string name="tv_home_no_sources_found">Nie znaleziono źródeł</string>
+    <string name="tv_home_show_more">Pokaż więcej</string>
+    <string name="tv_home_source_subtitle">Źródło strony głównej</string>
+    <string name="tv_home_show_more_all_of">Wszystko z %1$s</string>
+    <string name="tv_home_failed_to_load">Nie udało się załadować</string>
+    <string name="tv_search_start_message">Naciśnij OK, aby pisać. Wyniki są pogrupowane według źródeł.</string>
+    <string name="tv_search_no_results_message">Żadne z %1$d źródeł nie zwróciło wyników dla „%2$s”.</string>
+    <string name="tv_search_failed_to_load">Nie udało się załadować wyników z tego źródła</string>
+    <string name="tv_home_back">Wstecz</string>
+    <string name="tv_home_empty_continue_watching">Nie ma jeszcze nic do kontynuowania</string>
+    <string name="tv_home_no_feeds">Brak list dla tego źródła</string>
+    <string name="tv_home_no_feeds_message">%1$s nie udostępnia strony głównej. Wybierz powyżej inne źródło.</string>
+    <string name="tv_home_no_sources_message">Dodaj repozytorium i pobierz wtyczki w Ustawienia › Rozszerzenia.</string>
+    <string name="tv_feed_empty">Brak elementów na tej liście</string>
+    <string name="tv_home_old">Stara strona główna</string>
+    <string name="tv_grid_badge_movie">FILM</string>
+    <string name="tv_grid_badge_series">SERIAL</string>
+    <string name="plugin_updated">Wtyczka zaktualizowana</string>
+    <string name="plugin_downloading">Pobieranie…</string>
+    <string name="plugin_updating">Aktualizowanie…</string>
+    <string name="plugin_removing">Usuwanie…</string>
+    <string name="plugin_download_failed">Nie udało się pobrać wtyczki</string>
+    <string name="plugin_update_failed">Nie udało się zaktualizować wtyczki</string>
+    <string name="plugin_delete_failed">Nie udało się usunąć wtyczki</string>
+    <string name="plugin_settings_unavailable">Ta wtyczka nie udostępnia ustawień.</string>
+    <string name="plugin_settings_open_failed">Nie udało się otworzyć ustawień wtyczki.</string>
+    <string name="plugin_settings_legacy_summary">Ta wtyczka otwiera własny, starszy interfejs ustawień.</string>
+    <string name="tv_unavailable_details_title">Ten tytuł jest obecnie niedostępny</string>
+    <string name="tv_unavailable_details_message">Źródło zostało usunięte lub element już nie istnieje.</string>
+    <string name="tv_unavailable_details_message_with_provider">Źródło „%1$s” zostało usunięte lub element już nie istnieje.</string>
+    <string name="tv_unavailable_details_remove_button">Usuń z biblioteki</string>
+    <string name="tv_unavailable_details_search_button">Wyszukaj ręcznie</string>
+    <string name="watchlist_list_name">Do obejrzenia</string>
+    <string name="favorite_movies_list_name">Ulubione filmy</string>
+    <string name="favorite_tv_series_list_name">Ulubione seriale</string>
+    <string name="movie_watchlist_list_name">Filmy do obejrzenia</string>
+    <string name="tv_series_watchlist_list_name">Seriale do obejrzenia</string>
+    <string name="device_pin_qr_message">Zeskanuj kod QR na smartfonie lub komputerze. W razie potrzeby otwórz poniższy adres URL i wpisz wyświetlony tutaj kod.</string>
+    <string name="device_pin_manual_url_title">Otwórz ten adres ręcznie</string>
+    <string name="tv_details_more">Więcej</string>
+    <string name="tv_details_story">Fabuła</string>
+    <string name="tv_details_director">Reżyseria</string>
+    <string name="tv_details_screenplay">Scenariusz</string>
+    <string name="tv_details_music">Muzyka</string>
+    <string name="tv_details_release_date">Data premiery</string>
+    <string name="tv_details_runtime">Czas trwania</string>
+    <string name="tv_details_age_rating">Kategoria wiekowa</string>
+    <string name="tv_details_score">Ocena</string>
+    <string name="tv_details_source">Źródło</string>
+    <string name="tv_details_watched">Obejrzane</string>
+    <string name="tv_details_no_episodes_hint">Spróbuj innego źródła przez wyszukiwanie.</string>
+    <string name="tv_details_menu_play">Odtwarzanie</string>
+    <string name="tv_details_menu_progress">Postęp</string>
+    <string name="tv_details_menu_other">Inne</string>
+    <string name="tv_details_links_count">Linki: %1$d</string>
+    <string name="tv_library_more_count">jeszcze %1$d</string>
+    <string name="tv_library_lists_from">Listy z</string>
+    <string name="tv_library_load_error_title">Nie udało się załadować list</string>
+    <string name="tv_downloads_time_left_format">pozostało %1$s</string>
+    <string name="tv_settings_on">Włączone</string>
+    <string name="tv_settings_off">Wyłączone</string>
+    <string name="tv_settings_player_info_description">Wybierz, co jest wyświetlane obok tytułu w odtwarzaczu.</string>
+    <string name="tv_settings_login_to_format">Zaloguj się do %1$s</string>
+    <string name="tv_settings_logged_in">Zalogowano</string>
+    <string name="tv_settings_active_account">Aktywne konto</string>
+    <string name="tv_settings_manage">Zarządzaj</string>
+    <string name="tv_settings_required">Wymagane</string>
+    <string name="tv_settings_required_keyboard">Wymagane • OK otwiera klawiaturę</string>
+    <string name="tv_settings_optional_not_set">Opcjonalne • nie ustawiono</string>
+    <string name="tv_settings_optional_keyboard">Opcjonalne • OK otwiera klawiaturę</string>
+    <string name="tv_settings_logging_in">Logowanie…</string>
+    <string name="tv_settings_enter_credentials">Wpisz nazwę użytkownika i hasło</string>
+    <string name="tv_settings_playback">Odtwarzanie</string>
+    <string name="tv_settings_code">Kod</string>
+    <string name="tv_settings_email">E-mail</string>
+    <string name="tv_settings_server">Serwer</string>
+    <string name="tv_settings_load_error_format">Błąd ładowania %1$s</string>
+    <string name="tv_settings_add_repository_summary">Dodaj nowe źródło wtyczek</string>
+    <string name="tv_settings_no_repositories">Brak repozytoriów</string>
+    <string name="tv_settings_no_repositories_hint">Dodaj repozytorium, aby przeglądać wtyczki</string>
+    <string name="tv_settings_no_plugins">Brak wtyczek</string>
+    <string name="tv_settings_no_plugins_hint">To repozytorium nie ma wtyczek</string>
+    <string name="tv_settings_plugin_stats_format">Pobrane: %1$d • niepobrane: %2$d • razem: %3$d</string>
+    <string name="tv_settings_not_downloaded">Nie pobrano</string>
+    <string name="tv_settings_update_available">Dostępna aktualizacja</string>
+    <string name="tv_settings_plugin_status_format">%1$s • Wersja %2$d</string>
+    <string name="tv_settings_authors">Autorzy</string>
+    <string name="tv_settings_plugin_delete_message">%1$s zostanie usunięta z tego urządzenia. Możesz pobrać ją ponownie z %2$s.</string>
+    <string name="tv_settings_repository_name">Nazwa repozytorium</string>
+    <string name="tv_settings_repository_url">Adres URL repozytorium</string>
+    <string name="tv_settings_enter_url_first">Najpierw wpisz adres URL</string>
+    <string name="tv_settings_adding_repository">Dodawanie…</string>
+    <string name="tv_settings_repository_exists">To repozytorium już istnieje</string>
+    <string name="tv_player_control_sync">Synchronizacja</string>
+    <string name="tv_player_control_audio">Dźwięk</string>
+    <string name="tv_player_up_next">Następny</string>
+    <string name="tv_player_up_next_play_now">Odtwórz teraz • %1$d s</string>
+    <string name="tv_player_up_next_play_next">Odtwórz następny odcinek</string>
+    <string name="tv_player_up_next_watch_credits">Obejrzyj napisy końcowe</string>
+    <plurals name="tv_search_results_count">
+        <item quantity="one">%d wynik</item>
+        <item quantity="few">%d wyniki</item>
+        <item quantity="many">%d wyników</item>
+        <item quantity="other">%d wyniku</item>
+    </plurals>
+    <plurals name="tv_search_sources_count">
+        <item quantity="one">%d źródło</item>
+        <item quantity="few">%d źródła</item>
+        <item quantity="many">%d źródeł</item>
+        <item quantity="other">%d źródła</item>
+    </plurals>
+    <plurals name="tv_search_searching_sources">
+        <item quantity="one">Przeszukiwanie %d źródła…</item>
+        <item quantity="few">Przeszukiwanie %d źródeł…</item>
+        <item quantity="many">Przeszukiwanie %d źródeł…</item>
+        <item quantity="other">Przeszukiwanie %d źródła…</item>
+    </plurals>
+    <plurals name="tv_details_seasons_count">
+        <item quantity="one">%d sezon</item>
+        <item quantity="few">%d sezony</item>
+        <item quantity="many">%d sezonów</item>
+        <item quantity="other">%d sezonu</item>
+    </plurals>
+    <plurals name="tv_details_episodes_count">
+        <item quantity="one">%d odcinek</item>
+        <item quantity="few">%d odcinki</item>
+        <item quantity="many">%d odcinków</item>
+        <item quantity="other">%d odcinka</item>
+    </plurals>
+    <plurals name="tv_library_titles_count">
+        <item quantity="one">%d tytuł</item>
+        <item quantity="few">%d tytuły</item>
+        <item quantity="many">%d tytułów</item>
+        <item quantity="other">%d tytułu</item>
+    </plurals>
 </resources>

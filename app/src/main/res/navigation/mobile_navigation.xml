@@ -534,6 +534,7 @@
             app:popExitAnim="@anim/exit_anim" />
     </fragment>
 
+
     <!--<fragment
         android:id="@+id/navigation_results"
         android:name="com.lagradost.cloudstream3.ui.result.ResultFragment"

@@ -31,12 +31,15 @@ import org.mozilla.universalchardet.UniversalDetector
 import java.lang.ref.WeakReference
 import java.nio.charset.Charset
 
+private const val SubtitleSyncDebugTag = "TvSubtitleSync"
+
 /**
  * @param fallbackFormat used to create a decoder based on mimetype if the subtitle string is not
  * enough to identify the subtitle format.
  */
 @OptIn(UnstableApi::class)
 class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
+    private var parseInvocationCount = 0L
     companion object {
         fun updateForcedEncoding(context: Context) {
             val settingsManager = PreferenceManager.getDefaultSharedPreferences(context)
@@ -281,7 +284,13 @@ class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
         return subtitleParser
     }
 
-    val currentSubtitleCues = mutableListOf<SubtitleCue>()
+    private val currentSubtitleCues = mutableListOf<SubtitleCue>()
+
+    fun snapshotSubtitleCues(): List<SubtitleCue> {
+        return synchronized(currentSubtitleCues) {
+            currentSubtitleCues.toList()
+        }
+    }
 
 
     override fun parse(
@@ -291,18 +300,21 @@ class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
         outputOptions: SubtitleParser.OutputOptions,
         output: Consumer<CuesWithTiming>
     ) {
+        parseInvocationCount += 1
         val currentStyle = style
         val customOutput = Consumer<CuesWithTiming> { cue ->
             val newCue =
                 CuesWithTiming(cue.cues, cue.startTimeUs, cue.durationUs)
 
             // Do not apply the offset to the currentSubtitleCues as those are then used for sync subs
-            currentSubtitleCues.add(
-                SubtitleCue(
-                    newCue.startTimeUs / 1000,
-                    newCue.durationUs / 1000,
-                    newCue.cues.map { it.text.toString() })
-            )
+            synchronized(currentSubtitleCues) {
+                currentSubtitleCues.add(
+                    SubtitleCue(
+                        newCue.startTimeUs / 1000,
+                        newCue.durationUs / 1000,
+                        newCue.cues.map { it.text.toString() })
+                )
+            }
 
             // offset timing for the final
             val updatedCues =
@@ -344,6 +356,20 @@ class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
                     outputOptions,
                     customOutput
                 )
+                val snapshotSize = synchronized(currentSubtitleCues) {
+                    currentSubtitleCues.size
+                }
+                Log.i(
+                    SubtitleSyncDebugTag,
+                    "customDecoder.parse#$parseInvocationCount parser=${realDecoder?.javaClass?.simpleName}" +
+                        " fallbackMime=${fallbackFormat?.sampleMimeType}" +
+                        " cuesSnapshotSize=$snapshotSize bytes=${array.size}"
+                )
+            } else {
+                Log.i(
+                    SubtitleSyncDebugTag,
+                    "customDecoder.parse#$parseInvocationCount blank input, fallbackMime=${fallbackFormat?.sampleMimeType}"
+                )
             }
         } catch (e: Exception) {
             logError(e)
@@ -356,7 +382,16 @@ class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
     }
 
     override fun reset() {
-        currentSubtitleCues.clear()
+        val beforeClear = synchronized(currentSubtitleCues) {
+            currentSubtitleCues.size
+        }
+        Log.i(
+            SubtitleSyncDebugTag,
+            "customDecoder.reset: clearing cues size=$beforeClear fallbackMime=${fallbackFormat?.sampleMimeType}",
+        )
+        synchronized(currentSubtitleCues) {
+            currentSubtitleCues.clear()
+        }
         super.reset()
     }
 }
@@ -364,6 +399,7 @@ class CustomDecoder(private val fallbackFormat: Format?) : SubtitleParser {
 /** See https://github.com/google/ExoPlayer/blob/release-v2/library/core/src/main/java/com/google/android/exoplayer2/text/SubtitleDecoderFactory.java */
 @OptIn(UnstableApi::class)
 class CustomSubtitleDecoderFactory : SubtitleDecoderFactory {
+    private var lastNullDecoderLogMs = 0L
 
     override fun supportsFormat(format: Format): Boolean {
         return listOf(
@@ -385,7 +421,16 @@ class CustomSubtitleDecoderFactory : SubtitleDecoderFactory {
     private var latestDecoder: WeakReference<CustomDecoder>? = null
 
     fun getSubtitleCues(): List<SubtitleCue>? {
-        return latestDecoder?.get()?.currentSubtitleCues
+        val decoder = latestDecoder?.get()
+        if (decoder == null) {
+            val now = System.currentTimeMillis()
+            if (now - lastNullDecoderLogMs >= 3_000L) {
+                lastNullDecoderLogMs = now
+                Log.i(SubtitleSyncDebugTag, "decoderFactory.getSubtitleCues: latestDecoder is null")
+            }
+            return null
+        }
+        return decoder.snapshotSubtitleCues()
     }
 
     /**
@@ -393,6 +438,10 @@ class CustomSubtitleDecoderFactory : SubtitleDecoderFactory {
      * Do not save state in the decoder which you want to reset (e.g subtitle offset)
      */
     override fun createDecoder(format: Format): SubtitleDecoder {
+        Log.i(
+            SubtitleSyncDebugTag,
+            "decoderFactory.createDecoder: mime=${format.sampleMimeType} id=${format.id} lang=${format.language} label=${format.label}",
+        )
         val parser = CustomDecoder(format)
         // Allow garbage collection if player releases the decoder
         latestDecoder = WeakReference(parser)

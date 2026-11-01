@@ -12,8 +12,11 @@ import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.CommonActivity.loadThemes
 import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.ui.settings.AppLayoutMode
 import com.lagradost.cloudstream3.ui.settings.Globals.PHONE
 import com.lagradost.cloudstream3.ui.settings.Globals.isLayout
+import com.lagradost.cloudstream3.ui.settings.createSelectedHostIntent
+import com.lagradost.cloudstream3.ui.settings.selectedAppLayoutMode
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.BiometricCallback
 import com.lagradost.cloudstream3.utils.BiometricAuthenticator.biometricPrompt
@@ -40,6 +43,12 @@ class AccountSelectActivity2 : FragmentActivity(), BiometricCallback {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (selectedAppLayoutMode().let { it == AppLayoutMode.TvMaterial || it == AppLayoutMode.PhoneMaterial }) {
+            startActivity(createSelectedHostIntent(clearTask = true))
+            finish()
+            return
+        }
 
         // Are we editing and coming from MainActivity?
         val isEditingFromMainActivity = intent.getBooleanExtra(IS_EDITING_FROM_MAIN_ACTIVITY, false)

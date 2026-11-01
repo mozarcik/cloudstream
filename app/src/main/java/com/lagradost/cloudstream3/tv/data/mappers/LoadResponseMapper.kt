@@ -1,0 +1,418 @@
+package com.lagradost.cloudstream3.tv.data.mappers
+
+import android.util.Log
+import com.lagradost.cloudstream3.AnimeLoadResponse
+import com.lagradost.cloudstream3.Episode
+import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.MovieLoadResponse
+import com.lagradost.cloudstream3.SeasonData
+import com.lagradost.cloudstream3.TvSeriesLoadResponse
+import com.lagradost.cloudstream3.tv.compat.resume.ResumePlaybackResolver
+import com.lagradost.cloudstream3.tv.data.entities.Movie
+import com.lagradost.cloudstream3.tv.data.entities.MovieCast
+import com.lagradost.cloudstream3.tv.data.entities.MovieDetails
+import com.lagradost.cloudstream3.tv.data.entities.TvEpisode
+import com.lagradost.cloudstream3.tv.data.entities.TvSeason
+import com.lagradost.cloudstream3.tv.data.repositories.DetailsSecondaryLoadResult
+import com.lagradost.cloudstream3.tv.data.repositories.mergeSecondary
+
+private const val DebugTag = "TvDetailsMapper"
+
+/**
+ * Mapper converting CloudStream LoadResponse to Compose MovieDetails.
+ * Supports Movie, TvSeries, Anime, and other media types
+ */
+fun LoadResponse.toMovieDetails(): MovieDetails {
+    Log.d(DebugTag, "map:start input=${this::class.java.simpleName} type=${this.type}")
+
+    return toPrimaryMovieDetails().mergeSecondary(toSecondaryMovieDetails())
+}
+
+fun LoadResponse.toPrimaryMovieDetails(): MovieDetails {
+    return when (this) {
+        is MovieLoadResponse -> this.toPrimaryMovieDetails()
+        is TvSeriesLoadResponse -> this.toPrimaryMovieDetails()
+        is AnimeLoadResponse -> this.toPrimaryMovieDetails()
+        else -> this.toPrimaryGenericMovieDetails()
+    }
+}
+
+fun LoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    return when (this) {
+        is MovieLoadResponse -> this.toSecondaryMovieDetails()
+        is TvSeriesLoadResponse -> this.toSecondaryMovieDetails()
+        is AnimeLoadResponse -> this.toSecondaryMovieDetails()
+        else -> this.toSecondaryGenericMovieDetails()
+    }
+}
+
+private fun MovieLoadResponse.toPrimaryMovieDetails(): MovieDetails {
+    Log.d(
+        DebugTag,
+        "map:movie:primary name=${this.name} type=${this.type} year=${this.year}"
+    )
+
+    return createBaseMovieDetails()
+}
+
+private fun MovieLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+    )
+}
+
+private fun TvSeriesLoadResponse.toPrimaryMovieDetails(): MovieDetails {
+    val episodes = this.episodes
+    val seasonCount = episodes.extractSeasonCount(this.seasonNames?.mapNotNull { it.displaySeason ?: it.season })
+    val episodeCount = episodes.extractEpisodeCount()
+    val currentEpisode = ResumePlaybackResolver.resolveCurrentSeriesEpisode(this)
+    val seasons = episodes.toTvSeasons(
+        seasonNames = this.seasonNames,
+        defaultPosterUri = this.backgroundPosterUrl ?: this.posterUrl ?: ""
+    )
+    val mappedSeasonSummary = seasons.joinToString(separator = ",") { season ->
+        val seasonNumber = season.displaySeasonNumber ?: season.seasonNumber ?: -1
+        "S${seasonNumber}:${season.episodes.size}"
+    }
+    val rawSeasonSummary = episodes.toRawSeasonSummary()
+    Log.d(
+        DebugTag,
+        "map:tvSeries:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
+    )
+
+    return createBaseMovieDetails(
+        seasons = seasons,
+        seasonCount = seasonCount,
+        episodeCount = episodeCount,
+        currentSeason = currentEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = currentEpisode?.episode,
+        showStatus = this.showStatus,
+        nextAiring = this.nextAiring,
+    )
+}
+
+private fun TvSeriesLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    val resumeEpisode = ResumePlaybackResolver.resolveCurrentSeriesEpisode(this)
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+        currentSeason = resumeEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = resumeEpisode?.episode,
+    )
+}
+
+private fun AnimeLoadResponse.toPrimaryMovieDetails(): MovieDetails {
+    val episodes = this.episodes.values.flatten()
+    val seasonCount = episodes.extractSeasonCount()
+    val episodeCount = episodes.extractEpisodeCount()
+    val currentEpisode = ResumePlaybackResolver.resolveCurrentAnimeEpisode(this)?.episode
+    val seasons = episodes.toTvSeasons(
+        seasonNames = this.seasonNames,
+        defaultPosterUri = this.backgroundPosterUrl ?: this.posterUrl ?: "",
+        deduplicateBySeasonAndEpisode = true
+    )
+    val mappedSeasonSummary = seasons.joinToString(separator = ",") { season ->
+        val seasonNumber = season.displaySeasonNumber ?: season.seasonNumber ?: -1
+        "S${seasonNumber}:${season.episodes.size}"
+    }
+    val rawSeasonSummary = episodes.toRawSeasonSummary()
+    Log.d(
+        DebugTag,
+        "map:anime:primary name=${this.name} rawEpisodes=${episodes.size} rawSeasons=$rawSeasonSummary seasonNames=${this.seasonNames?.size ?: 0} seasonCount=$seasonCount episodeCount=$episodeCount mappedSeasons=${seasons.size} mapped=${mappedSeasonSummary}"
+    )
+
+    return createBaseMovieDetails(
+        seasons = seasons,
+        seasonCount = seasonCount,
+        episodeCount = episodeCount,
+        currentSeason = currentEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = currentEpisode?.episode,
+        showStatus = this.showStatus,
+        nextAiring = this.nextAiring,
+        originalTitle = resolveOriginalTitle(),
+    )
+}
+
+private fun AnimeLoadResponse.toSecondaryMovieDetails(): DetailsSecondaryLoadResult {
+    val resumeEpisode = ResumePlaybackResolver.resolveCurrentAnimeEpisode(this)?.episode
+    return DetailsSecondaryLoadResult(
+        cast = this.actors.toMovieCastList(),
+        similarMovies = this.recommendations.toMovieList(),
+        currentSeason = resumeEpisode?.season?.takeIf { it > 0 },
+        currentEpisode = resumeEpisode?.episode,
+    )
+}
+
+private fun LoadResponse.toPrimaryGenericMovieDetails(): MovieDetails {
+    Log.d(DebugTag, "map:generic:primary name=${this.name} type=${this.type}")
+
+    return createBaseMovieDetails()
+}
+
+private fun LoadResponse.toSecondaryGenericMovieDetails(): DetailsSecondaryLoadResult {
+    return DetailsSecondaryLoadResult(
+        similarMovies = this.recommendations.toMovieList(),
+    )
+}
+
+private fun List<Episode>.extractSeasonCount(extraSeasons: List<Int>? = null): Int? {
+    val fromEpisodes = this.mapNotNull { episode ->
+        episode.season?.takeIf { it > 0 }
+    }.distinct()
+    val merged = (extraSeasons.orEmpty().filter { it > 0 } + fromEpisodes).distinct()
+
+    return when {
+        merged.isNotEmpty() -> merged.size
+        this.isNotEmpty() -> 1
+        else -> null
+    }
+}
+
+private fun LoadResponse.createBaseMovieDetails(
+    seasons: List<TvSeason> = emptyList(),
+    seasonCount: Int? = null,
+    episodeCount: Int? = null,
+    currentSeason: Int? = null,
+    currentEpisode: Int? = null,
+    showStatus: com.lagradost.cloudstream3.ShowStatus? = null,
+    nextAiring: com.lagradost.cloudstream3.NextAiring? = null,
+    originalTitle: String? = null,
+): MovieDetails {
+    return MovieDetails(
+        id = url,
+        videoUri = "",
+        subtitleUri = null,
+        providerName = apiName,
+        type = type,
+        score = score,
+        showStatus = showStatus,
+        nextAiring = nextAiring,
+        comingSoon = comingSoon,
+        logoUri = logoUrl?.takeIf { logo -> logo.isNotBlank() },
+        originalTitle = originalTitle,
+        posterHeaders = posterHeaders.orEmpty(),
+        posterUri = preferredPosterUri(),
+        backdropUri = preferredBackdropUri(),
+        name = name,
+        description = plot.orEmpty(),
+        seasons = seasons,
+        seasonCount = seasonCount,
+        episodeCount = episodeCount,
+        currentSeason = currentSeason,
+        currentEpisode = currentEpisode,
+        pgRating = contentRating.orEmpty(),
+        releaseDate = year?.toString().orEmpty(),
+        categories = tags.orEmpty(),
+        duration = duration?.let { "${it}min" }.orEmpty(),
+        director = "",
+        screenplay = "",
+        music = "",
+    )
+}
+
+private fun LoadResponse.preferredPosterUri(): String {
+    return posterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: backgroundPosterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: ""
+}
+
+private fun LoadResponse.preferredBackdropUri(): String {
+    return backgroundPosterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: posterUrl?.takeIf { url -> url.isNotBlank() }
+        ?: ""
+}
+
+private fun AnimeLoadResponse.resolveOriginalTitle(): String? {
+    val normalizedName = name.trim()
+
+    val candidates = buildList {
+        add(japName)
+        add(engName)
+        addAll(synonyms.orEmpty())
+    }
+
+    return candidates
+        .asSequence()
+        .mapNotNull { candidate ->
+            candidate
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+        }
+        .firstOrNull { candidate ->
+            !candidate.equals(normalizedName, ignoreCase = true)
+        }
+}
+
+private fun List<Episode>.extractEpisodeCount(): Int? {
+    if (this.isEmpty()) return null
+
+    val distinctIndexedEpisodes = this.mapNotNull { episode ->
+        episode.episode?.let { episodeNumber ->
+            (episode.season ?: 0) to episodeNumber
+        }
+    }.distinct()
+
+    return if (distinctIndexedEpisodes.isNotEmpty()) {
+        distinctIndexedEpisodes.size
+    } else {
+        this.size
+    }
+}
+
+private fun List<Episode>.toTvSeasons(
+    seasonNames: List<SeasonData>?,
+    defaultPosterUri: String,
+    deduplicateBySeasonAndEpisode: Boolean = false
+): List<TvSeason> {
+    if (this.isEmpty()) return emptyList()
+
+    val sourceEpisodes = if (deduplicateBySeasonAndEpisode) {
+        val missingSeasonBucket = resolveMissingSeasonBucket()
+        this.distinctBy { episode ->
+            Triple(
+                episode.normalizedSeasonBucket(missingSeasonBucket),
+                episode.episode ?: Int.MAX_VALUE,
+                episode.name.orEmpty()
+            )
+        }
+    } else {
+        this
+    }
+
+    val missingSeasonBucket = sourceEpisodes.resolveMissingSeasonBucket()
+    val seasonDataBySeason = seasonNames.orEmpty().associateBy { it.season }
+    val episodesBySeason = sourceEpisodes.groupBy { episode ->
+        episode.normalizedSeasonBucket(missingSeasonBucket)
+    }
+
+    val mappedSeasons = episodesBySeason
+        .entries
+        .sortedBy { (seasonNumber, _) ->
+            val seasonOrder = seasonDataBySeason[seasonNumber]
+                ?.displaySeason
+                ?.takeIf { it > 0 }
+                ?: seasonNumber
+            seasonOrder.toSeasonSortOrder()
+        }
+        .map { (seasonNumber, episodesForSeason) ->
+            val seasonData = seasonDataBySeason[seasonNumber]
+            val displaySeasonNumber = seasonData?.displaySeason?.takeIf { it > 0 } ?: seasonNumber
+            val seasonTitle = seasonData?.name?.takeIf { it.isNotBlank() }
+
+            val sortedEpisodes = episodesForSeason
+                .sortedWith(compareBy<Episode>({ it.episode ?: Int.MAX_VALUE }, { it.name.orEmpty() }))
+                .mapIndexed { index, episode ->
+                    val episodeNumber = episode.episode?.takeIf { it > 0 }
+                    TvEpisode(
+                        id = listOf(
+                            "s$seasonNumber",
+                            "e${episodeNumber ?: "x"}",
+                            episode.data.hashCode().toString(),
+                            index.toString()
+                        ).joinToString("-"),
+                        data = episode.data,
+                        seasonNumber = episode.season?.takeIf { it > 0 } ?: seasonNumber.takeIf { it > 0 },
+                        episodeNumber = episodeNumber,
+                        title = episode.name.orEmpty(),
+                        description = episode.description.orEmpty(),
+                        durationMinutes = episode.extractDurationMinutes(),
+                        ratingText = episode.extractRatingText(),
+                        releaseDateMillis = episode.date,
+                        posterUri = episode.posterUrl?.takeIf { it.isNotBlank() } ?: defaultPosterUri
+                    )
+                }
+
+            TvSeason(
+                id = "season-$seasonNumber",
+                seasonNumber = seasonNumber,
+                displaySeasonNumber = displaySeasonNumber,
+                title = seasonTitle,
+                episodes = sortedEpisodes
+            )
+        }
+
+    Log.d(
+        DebugTag,
+        "map:toTvSeasons sourceEpisodes=${sourceEpisodes.size} dedupe=$deduplicateBySeasonAndEpisode missingSeasonBucket=$missingSeasonBucket rawSeasons=${sourceEpisodes.toRawSeasonSummary()} outputSeasons=${mappedSeasons.size} mapped=${mappedSeasons.toSeasonDebugSummary()}"
+    )
+
+    return mappedSeasons
+}
+
+private fun List<Episode>.resolveMissingSeasonBucket(): Int {
+    return if (any { episode -> (episode.season ?: 0) > 0 }) 0 else 1
+}
+
+private fun Episode.normalizedSeasonBucket(missingSeasonBucket: Int): Int {
+    return season?.takeIf { it > 0 } ?: missingSeasonBucket
+}
+
+private fun Episode.seasonSortOrder(missingSeasonBucket: Int): Int {
+    return normalizedSeasonBucket(missingSeasonBucket).toSeasonSortOrder()
+}
+
+private fun Int.toSeasonSortOrder(): Int {
+    return takeIf { it > 0 } ?: Int.MAX_VALUE
+}
+
+private fun List<Episode>.toRawSeasonSummary(): String {
+    return groupBy { episode -> episode.season }
+        .entries
+        .sortedBy { (season, _) -> season ?: Int.MAX_VALUE }
+        .joinToString(separator = ",") { (season, episodes) ->
+            val label = season?.toString() ?: "null"
+            "$label:${episodes.size}"
+        }
+}
+
+private fun List<TvSeason>.toSeasonDebugSummary(): String {
+    return joinToString(separator = ",") { season ->
+        val seasonLabel = season.displaySeasonNumber ?: season.seasonNumber
+        val episodePreview = season.episodes
+            .take(4)
+            .joinToString(separator = "|") { episode ->
+                "${episode.seasonNumber ?: "null"}:${episode.episodeNumber ?: "null"}:${episode.title.take(18)}"
+            }
+        "bucket=${season.seasonNumber ?: "null"} display=${seasonLabel ?: "null"} count=${season.episodes.size} preview=[$episodePreview]"
+    }
+}
+
+private fun Episode.extractDurationMinutes(): Int? {
+    val runtime = this.runTime ?: return null
+    if (runtime <= 0) return null
+
+    return if (runtime in 5..240) {
+        runtime
+    } else {
+        (runtime + 59) / 60
+    }
+}
+
+private fun Episode.extractRatingText(): String? {
+    return this.score
+        ?.toString(maxScore = 10, decimals = 1, removeTrailingZeros = true)
+        ?.takeIf { rating -> rating.isNotBlank() }
+}
+
+private fun List<com.lagradost.cloudstream3.ActorData>?.toMovieCastList(): List<MovieCast> {
+    return this?.mapIndexed { index, actorData ->
+        MovieCast(
+            id = index.toString(),
+            characterName = actorData.roleString ?: "",
+            realName = actorData.actor.name,
+            avatarUrl = actorData.actor.image ?: ""
+        )
+    } ?: emptyList()
+}
+
+private fun List<com.lagradost.cloudstream3.SearchResponse>?.toMovieList(): List<Movie> {
+    return this?.mapIndexed { index, response ->
+        Movie(
+            id = index.toString(),
+            posterUri = response.posterUrl ?: "",
+            name = response.name,
+            description = "",
+        )
+    } ?: emptyList()
+}

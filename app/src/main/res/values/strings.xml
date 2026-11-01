@@ -28,25 +28,35 @@
     <string name="filler" formatted="true">Filler</string>
     <string name="duration_format" formatted="true">%d min</string>
     <string name="app_name">CloudStream</string>
+    <string name="brand_logo_text">CloudStream</string>
+    <string name="top_10_movies_title">Top 10</string>
     <string name="play_with_app_name">Play with CloudStream</string>
     <string name="title_home">Home</string>
     <string name="title_search">Search</string>
+    <string name="sources">Sources</string>
     <string name="title_downloads">Downloads</string>
     <string name="download_queue">Download queue</string>
     <string name="title_settings">Settings</string>
     <string name="search_hint">Search…</string>
+    <string name="tv_search_input_placeholder">Search for movies and shows...</string>
+    <string name="tv_details_tab_cast">Cast &amp; crew</string>
+    <string name="tv_details_tab_more_like_this">More like this</string>
     <string name="search_hint_site" formatted="true">Search %s…</string>
     <string name="speech_recognition_unavailable">Speech recognition is not available</string>
     <string name="begin_speaking">Begin Speaking…</string>
     <string name="no_data">No Data</string>
     <string name="episode_more_options_des">More Options</string>
     <string name="next_episode">Next episode</string>
+    <string name="details_original_title_format">Original title: %1$s</string>
     <string name="result_tags">Genres</string>
     <string name="result_share">Share</string>
     <string name="result_open_in_browser">Open In Browser</string>
     <string name="browser">Browser</string>
     <string name="skip_loading">Skip Loading</string>
     <string name="loading">Loading…</string>
+    <string name="tv_player_loading_sources">Loading sources…</string>
+    <string name="tv_player_loading_sources_progress" formatted="true">Sources found: %1$d</string>
+    <string name="tv_player_retry">Try Again</string>
     <string name="type_watching">Watching</string>
     <string name="type_on_hold">On-Hold</string>
     <string name="type_completed">Completed</string>
@@ -76,6 +86,8 @@
     <string name="downloads_delete_select">Select Items to Delete</string>
     <string name="downloads_empty">There are currently no downloads.</string>
     <string name="queue_empty_message">There are currently no queued downloads.</string>
+    <string name="tv_downloads_empty_title">No downloads yet</string>
+    <string name="tv_downloads_empty_subtitle">Downloaded movies and episodes will appear here.</string>
     <string name="offline_file">Available for watching offline</string>
     <string name="select_all">Select All</string>
     <string name="deselect_all">Deselect All</string>
@@ -224,6 +236,7 @@
     <string name="play_episode_toast">Play Episode</string>
     <string name="subs_default_reset_toast">Reset to default value</string>
     <string name="season">Season</string>
+    <string name="tv_seasons">Seasons</string>
     <string name="season_format">%1$s %2$d%3$s</string>
     <string name="no_season">No Season</string>
     <string name="episode">Episode</string>
@@ -245,6 +258,8 @@
     <string name="test_passed">Passed</string>
     <string name="test_warning">Warning</string>
     <string name="resume">Resume</string>
+    <string name="details">Details</string>
+    <string name="continue_watching_remaining_suffix">left</string>
     <string name="go_back_30">-30</string>
     <string name="go_forward_30">+30</string>
     <string name="delete_message" formatted="true">This will permanently delete %s\nAre you sure?</string>
@@ -257,6 +272,16 @@
     <string name="status_ongoing">Ongoing</string>
     <string name="status_completed">Completed</string>
     <string name="status">Status</string>
+    <string name="tv_cast">Cast</string>
+    <string name="tv_original_language">Original Language</string>
+    <string name="tv_budget">Budget</string>
+    <string name="tv_revenue">Revenue</string>
+    <string name="tv_additional_information">Additional Information</string>
+    <string name="tv_episode_untitled">Untitled episode</string>
+    <string name="tv_duration_hours_format" formatted="true">%1$dh</string>
+    <string name="tv_episode_duration_hour_min_format" formatted="true">%1$dh %2$dmin</string>
+    <string name="tv_episode_rating_format">%1$s/10</string>
+    <string name="tv_no_episode_description">No description available</string>
     <string name="year">Year</string>
     <string name="rating">Rating</string>
     <string name="duration">Duration</string>
@@ -394,6 +419,7 @@
     <string name="category_ui">Layout</string>
     <string name="automatic">Auto</string>
     <string name="tv_layout">TV layout</string>
+    <string name="tv_material_layout">TV Material</string>
     <string name="phone_layout">Phone layout</string>
     <string name="emulator_layout">Emulator layout</string>
     <string name="primary_color_settings">Primary color</string>
@@ -401,6 +427,8 @@
     <string name="bottom_title_settings">Poster title location</string>
     <string name="bottom_title_settings_des">Put the title under the poster</string>
     <!-- account stuff -->
+    <string name="username">Username</string>
+    <string name="password">Password</string>
     <string name="example_password">password123</string>
     <string name="example_username">Username</string>
     <string name="example_email">hello@world.com</string>
@@ -442,6 +470,10 @@
     <string name="subtitle_offset_extra_hint_later_format">Use this if the subtitles are shown %d ms too early</string>
     <string name="subtitle_offset_extra_hint_before_format">Use this if subtitles are shown %d ms too late</string>
     <string name="subtitle_offset_extra_hint_none_format">No subtitle delay</string>
+    <string name="tv_player_subtitle_sync_controls_hint">Use these if subtitles are shown:</string>
+    <string name="tv_player_subtitle_sync_controls_too_late">too late</string>
+    <string name="tv_player_subtitle_sync_controls_too_early">too early</string>
+    <string name="tv_player_subtitle_sync_enable_subtitles">Enable subtitles to synchronize them.</string>
     <!--
     Example text (pangram) can optionally be translated; if you do, include all the letters in the alphabet,
     see: 
@@ -459,6 +491,58 @@
     <string name="actor_supporting">Supporting</string>
     <string name="actor_background">Background</string>
     <string name="home_source">Source</string>
+    <string name="tv_browse">Browse</string>
+    <string name="tv_home_categories">Categories</string>
+    <string name="tv_selected">Selected</string>
+    <string name="tv_home_source_row_label">Source: %1$s</string>
+    <string name="tv_home_search_sources_placeholder">Search (coming soon)</string>
+    <string name="tv_home_search_sources_hint">Search sources</string>
+    <string name="tv_home_more_sources">More…</string>
+    <string name="tv_home_sort_most_used">Most used</string>
+    <string name="tv_home_sort_az">A-Z</string>
+    <string name="tv_home_no_sources_found">No sources found</string>
+    <string name="tv_home_show_more">Show more</string>
+    <string name="tv_home_source_subtitle">Home source</string>
+    <string name="tv_home_show_more_all_of">All of %1$s</string>
+    <string name="tv_home_failed_to_load">Failed to load</string>
+    <string name="tv_player_source_failed_to_load_with_code" formatted="true">Failed to load (%1$d)</string>
+    <string name="tv_player_source_unavailable">Unavailable</string>
+    <string name="tv_player_source_error_dialog_http_code" formatted="true">This source couldn\'t be loaded (HTTP %1$d).</string>
+    <string name="tv_player_source_error_dialog_unavailable">This source is currently unavailable.</string>
+    <string name="tv_player_source_trying_next" formatted="true">Source &quot;%1$s&quot; failed. Trying the next source…</string>
+    <string name="tv_player_source_trying_next_generic">This source failed. Trying the next one…</string>
+    <string name="tv_search_start_message">Press OK to type. Results are grouped by source.</string>
+    <string name="tv_search_no_results_message">None of the %1$d sources returned results for “%2$s”.</string>
+    <plurals name="tv_search_results_count">
+        <item quantity="one">%d result</item>
+        <item quantity="other">%d results</item>
+    </plurals>
+    <plurals name="tv_search_sources_count">
+        <item quantity="one">%d source</item>
+        <item quantity="other">%d sources</item>
+    </plurals>
+    <plurals name="tv_search_searching_sources">
+        <item quantity="one">Searching %d source…</item>
+        <item quantity="other">Searching %d sources…</item>
+    </plurals>
+    <string name="tv_search_failed_to_load">Couldn\'t load results from this source</string>
+    <string name="tv_crash_reporting_title">Crash reporting</string>
+    <string name="tv_crash_reporting_summary">Error reports are sent to Sentry to help diagnose crashes and playback or details failures.</string>
+    <string name="tv_crash_reporting_builds_summary">Crash reporting is enabled in debug, stable and prerelease builds.</string>
+    <string name="tv_crash_reporting_privacy_summary">Reports avoid intentionally attaching full URLs, tokens or cookies.</string>
+    <string name="tv_home_back">Back</string>
+    <string name="tv_press_back_again_to_exit">Press back again to exit</string>
+    <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>
+    <string name="tv_home_no_feeds">No feeds available for this source</string>
+    <string name="tv_home_no_feeds_message">%1$s doesn\'t provide a home page. Pick another source above.</string>
+    <string name="tv_home_no_sources_message">Add a repository and download plugins in Settings › Extensions.</string>
+    <string name="tv_feed_empty">No items in this list</string>
+    <string name="tv_home_old">Home old</string>
+    <string name="tv_grid_badge_movie">MOVIE</string>
+    <string name="tv_grid_badge_series">TV SERIES</string>
+    <string name="tv_grid_rating_unknown_short">—</string>
+    <string name="tv_grid_metadata_year">%2$d</string>
+    <string name="tv_grid_metadata_rating">★ %1$s</string>
     <string name="home_random">Random</string>
     <string name="coming_soon">Coming soon…</string>
     <string name="quality_cam">Cam</string>
@@ -488,6 +572,8 @@
     <string name="error_invalid_data">Invalid data</string>
     <string name="error_invalid_url">Invalid URL</string>
     <string name="error">Error</string>
+    <string name="builds">Builds</string>
+    <string name="privacy">Privacy</string>
     <string name="subtitles_remove_captions">Remove closed captions from subtitles</string>
     <string name="subtitles_remove_bloat">Remove ads from subtitles</string>
     <string name="subtitles_filter_lang">Filter by preferred media language</string>
@@ -509,6 +595,16 @@
     <string name="plugin_loaded">Plugin Loaded</string>
     <string name="plugin_downloaded">Plugin Downloaded</string>
     <string name="plugin_deleted">Plugin Deleted</string>
+    <string name="plugin_updated">Plugin Updated</string>
+    <string name="plugin_downloading">Downloading…</string>
+    <string name="plugin_updating">Updating…</string>
+    <string name="plugin_removing">Removing…</string>
+    <string name="plugin_download_failed">Could not download the plugin</string>
+    <string name="plugin_update_failed">Could not update the plugin</string>
+    <string name="plugin_delete_failed">Could not delete the plugin</string>
+    <string name="plugin_settings_unavailable">This plugin does not expose settings.</string>
+    <string name="plugin_settings_open_failed">Could not open plugin settings.</string>
+    <string name="plugin_settings_legacy_summary">This plugin opens its own legacy settings UI.</string>
     <string name="plugin_load_fail" formatted="true">Could not load %s</string>
     <string name="is_adult">18+</string>
     <string name="batch_download_start_format" formatted="true">Started downloading %1$d %2$s…</string>
@@ -631,6 +727,11 @@
     <string name="empty_library_no_accounts_message">Your library is empty :(
 \nLog in on a library account or add shows to your local library.</string>
     <string name="empty_library_logged_in_message">This list is empty. Try switching to another one.</string>
+    <string name="tv_unavailable_details_title">This title is currently unavailable</string>
+    <string name="tv_unavailable_details_message">The source was removed or the item no longer exists.</string>
+    <string name="tv_unavailable_details_message_with_provider" formatted="true">Source &quot;%1$s&quot; was removed or the item no longer exists.</string>
+    <string name="tv_unavailable_details_remove_button">Remove from library</string>
+    <string name="tv_unavailable_details_search_button">Search manually</string>
     <string name="safe_mode_file">Safe mode file found!\nNot loading any extensions on startup until file is removed.</string>
     <string name="revert">Revert</string>
     <string name="subscription_in_progress_notification">Updating subscribed shows</string>
@@ -671,6 +772,11 @@
     <string name="unable_to_inflate">UI was unable to be created correctly, this is a MAJOR BUG and should be reported immediately %s</string>
     <string name="already_voted">You have already voted</string>
     <string name="favorites_list_name">Favorites</string>
+    <string name="watchlist_list_name">Watchlist</string>
+    <string name="favorite_movies_list_name">Favorite movies</string>
+    <string name="favorite_tv_series_list_name">Favorite TV series</string>
+    <string name="movie_watchlist_list_name">Movie watchlist</string>
+    <string name="tv_series_watchlist_list_name">TV series watchlist</string>
     <string name="favorite_added">%s added to favorites</string>
     <string name="favorite_removed">%s removed from favorites</string>
     <string name="action_add_to_favorites">Add to favorites</string>
@@ -722,6 +828,8 @@
     <string name="reset_btn">Reset</string>
     <string name="cs3wiki">CloudStream Wiki</string>
     <string name="device_pin_url_message">Visit <b>%s</b> on your smartphone or computer and enter the above code</string>
+    <string name="device_pin_qr_message">Scan the QR code on your smartphone or computer. If needed, open the URL below and enter the code shown here.</string>
+    <string name="device_pin_manual_url_title">Open this URL manually</string>
     <string name="device_pin_error_message">Can\'t get the device PIN code, try local authentication</string>
     <string name="device_pin_expired_message">PIN code is now expired !</string>
     <string name="device_pin_counter_text">Code expires in %1$dm %2$ds</string>
@@ -731,6 +839,7 @@
     <string name="preview_seekbar">Seekbar preview</string>
     <string name="preview_seekbar_desc">Enable preview thumbnail on seekbar</string>
     <string name="no_subtitles_loaded">No subtitles loaded yet</string>
+    <string name="tv_player_online_subtitles_login_required">Log in to download subtitles from this source</string>
     <string name="backup_path_title">Backup folder location</string>
     <string name="custom">Custom</string>
     <!--confirm exit dialog-->
@@ -813,4 +922,106 @@
         <item quantity="other">%d downloads queued</item>
     </plurals>
     <string name="player_is_live">Live</string>
+    <string name="tv_details_more">More</string>
+    <string name="tv_details_story">Story</string>
+    <string name="tv_details_director">Director</string>
+    <string name="tv_details_screenplay">Screenplay</string>
+    <string name="tv_details_music">Music</string>
+    <string name="tv_details_release_date">Release date</string>
+    <string name="tv_details_runtime">Runtime</string>
+    <string name="tv_details_age_rating">Age rating</string>
+    <string name="tv_details_score">Score</string>
+    <string name="tv_details_score_format" formatted="true">%1$s / 10</string>
+    <string name="tv_details_source">Source</string>
+    <string name="tv_details_watched">Watched</string>
+    <string name="tv_details_no_episodes_hint">Try another source with Search.</string>
+    <string name="tv_details_menu_play">Play</string>
+    <string name="tv_details_menu_progress">Progress</string>
+    <string name="tv_details_menu_other">Other</string>
+    <string name="tv_details_links_count" formatted="true">%1$d links</string>
+    <plurals name="tv_details_seasons_count">
+        <item quantity="one">%d season</item>
+        <item quantity="other">%d seasons</item>
+    </plurals>
+    <plurals name="tv_details_episodes_count">
+        <item quantity="one">%d episode</item>
+        <item quantity="other">%d episodes</item>
+    </plurals>
+    <plurals name="tv_library_titles_count">
+        <item quantity="one">%d title</item>
+        <item quantity="other">%d titles</item>
+    </plurals>
+    <string name="tv_library_more_count" formatted="true">%1$d more</string>
+    <string name="tv_library_lists_from">Lists from</string>
+    <string name="tv_library_load_error_title">Couldn\'t load lists</string>
+    <string name="tv_downloads_speed_format" formatted="true">%1$s/s</string>
+    <string name="tv_downloads_time_left_format" formatted="true">%1$s left</string>
+    <string name="tv_settings_on">On</string>
+    <string name="tv_settings_off">Off</string>
+    <string name="tv_settings_player_info_description">Choose what is shown next to the title in the player.</string>
+    <string name="tv_settings_login_to_format" formatted="true">Log in to %1$s</string>
+    <string name="tv_settings_logged_in">Logged in</string>
+    <string name="tv_settings_active_account">Active account</string>
+    <string name="tv_settings_manage">Manage</string>
+    <string name="tv_settings_required">Required</string>
+    <string name="tv_settings_required_keyboard">Required • OK opens the keyboard</string>
+    <string name="tv_settings_optional_not_set">Optional • not set</string>
+    <string name="tv_settings_optional_keyboard">Optional • OK opens the keyboard</string>
+    <string name="tv_settings_logging_in">Logging in…</string>
+    <string name="tv_settings_enter_credentials">Enter username and password</string>
+    <string name="tv_settings_playback">Playback</string>
+    <string name="tv_settings_code">Code</string>
+    <string name="tv_settings_email">Email</string>
+    <string name="tv_settings_server">Server</string>
+    <string name="tv_settings_load_error_format" formatted="true">Error loading %1$s</string>
+    <string name="tv_settings_add_repository_summary">Add a new plugin source</string>
+    <string name="tv_settings_no_repositories">No repositories</string>
+    <string name="tv_settings_no_repositories_hint">Add a repository to browse plugins</string>
+    <string name="tv_settings_no_plugins">No plugins</string>
+    <string name="tv_settings_no_plugins_hint">This repository has no plugins</string>
+    <string name="tv_settings_plugin_stats_format" formatted="true">%1$d downloaded • %2$d not downloaded • %3$d total</string>
+    <string name="tv_settings_not_downloaded">Not downloaded</string>
+    <string name="tv_settings_update_available">Update available</string>
+    <string name="tv_settings_plugin_row_format" formatted="true">%1$s • v%2$d</string>
+    <string name="tv_settings_plugin_status_format" formatted="true">%1$s • Version %2$d</string>
+    <string name="tv_settings_authors">Authors</string>
+    <string name="tv_settings_plugin_delete_message" formatted="true">%1$s will be removed from this device. You can download it again from %2$s.</string>
+    <string name="tv_settings_repository_name">Repository name</string>
+    <string name="tv_settings_repository_url">Repository URL</string>
+    <string name="tv_settings_enter_url_first">Enter a URL first</string>
+    <string name="tv_settings_adding_repository">Adding…</string>
+    <string name="tv_settings_repository_exists">This repository already exists</string>
+    <string name="tv_player_control_video">Video</string>
+    <string name="tv_player_control_next">Next</string>
+    <string name="tv_player_control_sync">Sync</string>
+    <string name="tv_player_control_audio">Audio</string>
+    <string name="tv_player_control_restart">Restart</string>
+    <string name="tv_player_control_aspect">Aspect</string>
+    <string name="tv_player_value_off">Off</string>
+    <string name="tv_player_aspect_fit">Fit</string>
+    <string name="tv_player_sources_found">%1$d found</string>
+    <string name="tv_player_now_playing">Now playing</string>
+    <string name="tv_player_subtitles_available">Available</string>
+    <string name="tv_player_online_subtitles_results">Results</string>
+    <string name="tv_player_online_subtitles_login_path">Settings › Accounts and Security</string>
+    <string name="tv_player_sync_now">NOW</string>
+    <string name="tv_player_sync_align_hint">OK: align this line with now → delay %1$s</string>
+    <string name="tv_player_sync_custom_value">Custom value…</string>
+    <string name="tv_player_sync_apply">Apply</string>
+    <string name="tv_player_sync_custom_hint">Negative = subtitles earlier, positive = later. OK opens the number keyboard.</string>
+    <string name="tv_player_up_next">Up next</string>
+    <string name="tv_player_up_next_play_now">Play now • %1$d s</string>
+    <string name="tv_player_up_next_play_next">Play next episode</string>
+    <string name="tv_player_up_next_watch_credits">Watch credits</string>
+    <string name="tv_player_loading_links">Loading links…</string>
+    <string name="tv_player_notice_source_failed_title">Source failed</string>
+    <string name="tv_player_notice_source_failed_text">%1$s %2$s. Trying the next source…</string>
+    <string name="tv_player_notice_subtitle_failed_title">Subtitles failed to load</string>
+    <string name="tv_player_notice_subtitle_failed_text">%1$s. Playing without subtitles.</string>
+    <string name="tv_player_seek_min_sec" formatted="true">%1$d min %2$d s</string>
+    <string name="tv_player_video_auto_quality">Automatic quality</string>
+    <string name="tv_player_video_adaptive">Adaptive stream</string>
+    <string name="tv_player_video_adaptive_source">Adaptive stream • %1$s</string>
+    <string name="tv_player_aspect_stretch">Stretch</string>
+    <string name="tv_player_aspect_zoom">Zoom</string>
 </resources>

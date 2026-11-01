@@ -7,5 +7,6 @@ enum class SyncIdName {
     Trakt,
     Imdb,
     Simkl,
+    Tmdb,
     LocalList,
 }

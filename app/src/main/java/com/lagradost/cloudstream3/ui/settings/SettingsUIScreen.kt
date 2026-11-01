@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.integerArrayResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringArrayResource
@@ -135,14 +136,22 @@ object SettingsUIScreen : SearchableSettings {
                         preference = settings.ui.layout,
                         icon = painterResource(R.drawable.responsive_layout_24px),
                         title = stringResource(R.string.app_layout),
-                        entries = integerArrayResource(R.array.app_layout_values).zip(
-                            stringArrayResource(R.array.app_layout)
-                        ).toMap().toPersistentMap(),
+                        // Includes the Compose TV Material layout, which has no entry in the xml arrays
+                        entries = LocalContext.current.appLayoutOptions()
+                            .associate { it.value to it.label }
+                            .toPersistentMap(),
                         onValueChanged = { newValue ->
+                            val previousHost = activity?.selectedHostActivityClass()
                             settings.ui.layout.set(newValue) // We need to set before we recreate
                             safe {
-                                activity?.updateTv()
-                                activity?.recreate()
+                                val currentActivity = activity ?: return@safe
+                                currentActivity.updateTv()
+                                if (currentActivity.selectedHostActivityClass() != previousHost) {
+                                    // Switching to/from the Compose TV UI needs another host activity
+                                    currentActivity.restartIntoSelectedAppLayout()
+                                } else {
+                                    currentActivity.recreate()
+                                }
                             }
                             return@ListPreference false
                         }),

@@ -508,6 +508,7 @@ object DataStoreHelper {
         @JsonProperty("apiName") @SerialName("apiName") override val apiName: String,
         @JsonProperty("type") @SerialName("type") override var type: TvType? = null,
         @JsonProperty("posterUrl") @SerialName("posterUrl") override var posterUrl: String?,
+        @JsonProperty("backdropUrl") @SerialName("backdropUrl") val backdropUrl: String? = null,
         @JsonProperty("watchPos") @SerialName("watchPos") val watchPos: PosDur?,
         @JsonProperty("id") @SerialName("id") override var id: Int?,
         @JsonProperty("parentId") @SerialName("parentId") val parentId: Int?,

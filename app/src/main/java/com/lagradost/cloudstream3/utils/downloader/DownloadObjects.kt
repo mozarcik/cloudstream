@@ -60,6 +60,7 @@ object DownloadObjects {
         @JsonProperty("resultUrl") @SerialName("resultUrl") val resultUrl: String,
         @JsonProperty("links") @SerialName("links") val links: List<ExtractorLink>? = null,
         @JsonProperty("subs") @SerialName("subs") val subs: List<SubtitleData>? = null,
+        @JsonProperty("resultBackdrop") @SerialName("resultBackdrop") val resultBackdrop: String? = null,
     ) {
         fun toWrapper(): DownloadQueueWrapper {
             return DownloadQueueWrapper(null, this)
@@ -113,6 +114,7 @@ object DownloadObjects {
         @JsonProperty("type") @SerialName("type") val type: TvType,
         @JsonProperty("name") @SerialName("name") val name: String,
         @JsonProperty("poster") @SerialName("poster") val poster: String?,
+        @JsonProperty("backdrop") @SerialName("backdrop") val backdrop: String? = null,
         @JsonProperty("cacheTime") @SerialName("cacheTime") val cacheTime: Long,
         @JsonProperty("id") @SerialName("id") override val id: Int,
     ) : DownloadCached

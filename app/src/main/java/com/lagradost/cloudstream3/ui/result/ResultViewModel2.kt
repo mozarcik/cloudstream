@@ -1481,6 +1481,7 @@ class ResultViewModel2 : ViewModel() {
                         response.apiName,
                         response.getId(),
                         response.url,
+                        resultBackdrop = response.backgroundPosterUrl ?: response.posterUrl,
                     ).toWrapper()
                 )
             }
@@ -1504,6 +1505,7 @@ class ResultViewModel2 : ViewModel() {
                             response.url,
                             listOf(result.links[index]),
                             result.subs,
+                            resultBackdrop = response.backgroundPosterUrl ?: response.posterUrl,
                         ).toWrapper()
                     )
                     showToast(
@@ -2684,6 +2686,9 @@ class ResultViewModel2 : ViewModel() {
                             type = loadResponse.type,
                             name = loadResponse.name,
                             poster = loadResponse.posterUrl,
+                            backdrop = loadResponse.backgroundPosterUrl
+                                ?.takeIf { it.isNotBlank() }
+                                ?: loadResponse.posterUrl?.takeIf { it.isNotBlank() },
                             id = mainId,
                             cacheTime = System.currentTimeMillis(),
                         )

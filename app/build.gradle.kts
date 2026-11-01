@@ -139,6 +139,23 @@ android {
             "ANILIST_KEY",
             "\"" + (System.getenv("ANILIST_KEY") ?: localProperties["anilist.key"]) + "\""
         )
+        buildConfigField(
+            "String",
+            "TMDB_READ_ACCESS_TOKEN",
+            "\"" + ((System.getenv("TMDB_READ_ACCESS_TOKEN")
+                ?: localProperties["TMDB_READ_ACCESS_TOKEN"]) ?: "") + "\""
+        )
+        buildConfigField(
+            "String",
+            "TMDB_API_KEY",
+            "\"" + ((System.getenv("TMDB_API_KEY")
+                ?: localProperties["TMDB_API_KEY"]) ?: "") + "\""
+        )
+        buildConfigField(
+            "String",
+            "SENTRY_DSN",
+            "\"https://633834cb42b4bb13a7a87a7b4adb4438@o4511109550047232.ingest.de.sentry.io/4511109561843792\""
+        )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -199,6 +216,7 @@ android {
     }
 
     buildFeatures {
+        compose = true
         buildConfig = true
         viewBinding = true
     }
@@ -224,9 +242,14 @@ dependencies {
     androidTestImplementation(libs.instancio.core)
     androidTestImplementation(libs.junit.ktx)
     androidTestImplementation(libs.kotlin.test)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     // Android Core & Lifecycle
+    implementation("androidx.multidex:multidex:2.0.1")
     implementation(libs.core.ktx)
+    implementation(libs.androidx.datastore.preferences)
     implementation(libs.activity.ktx)
     implementation(libs.annotation)
     implementation(libs.appcompat)
@@ -239,6 +262,7 @@ dependencies {
     // Design & UI
     implementation(libs.preference.ktx)
     implementation(libs.material)
+    implementation(libs.material.color.utilities.android)
     implementation(libs.constraintlayout)
 
     // Coil Image Loading
@@ -272,11 +296,13 @@ dependencies {
     implementation(libs.jsoup) // HTML Parser
     implementation(libs.ksoup) // HTML Parser
     implementation(libs.rhino) // Run JavaScript
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.safefile) // To Prevent the URI File Fu*kery
     coreLibraryDesugaring(libs.desugar.jdk.libs.nio) // NIO Flavor Needed for NewPipeExtractor
     implementation(libs.conscrypt.android) // To Fix SSL Fu*kery on Android 9
     implementation(libs.jackson.module.kotlin) // JSON Parser
     implementation(libs.zipline)
+    implementation(libs.sentry.android.core)
 
     // Temp/deprecated; will be removed once extensions have time to migrate from using it
     implementation("com.google.code.gson:gson:2.11.0")
@@ -296,6 +322,19 @@ dependencies {
 
     implementation(project(":library"))
     implementation(project(":shared"))
+
+    // Compose (TV UI)
+    implementation(libs.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.tv.material)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.navigation.compose)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.coil.compose)
+
+    // Paging3 for Home Screen Grid
+    implementation(libs.paging.runtime)
+    implementation(libs.paging.compose)
 }
 
 tasks.register<Jar>("androidSourcesJar") {

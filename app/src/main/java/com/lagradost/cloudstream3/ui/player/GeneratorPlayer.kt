@@ -908,6 +908,21 @@ class GeneratorPlayer : FullScreenPlayer() {
         )
     }
 
+    private fun logFetchedOnlineSubtitles(
+        stage: String,
+        subtitleEntry: AbstractSubtitleEntities.SubtitleEntity,
+        subtitles: List<SubtitleData>,
+    ) {
+        subtitles.forEach { subtitle ->
+            Log.i(
+                TAG,
+                "subtitle fetched [$stage]: " +
+                    subtitle.toSubtitleFetchLogPayload() +
+                    " ${subtitleEntry.toOnlineSubtitleMetadataLog()}",
+            )
+        }
+    }
+
     // Open file picker
     private val subsPathPicker =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -994,6 +1009,11 @@ class GeneratorPlayer : FullScreenPlayer() {
                             languageCode = subtitleEntry.lang,
                         )
                     }
+                    logFetchedOnlineSubtitles(
+                        stage = "legacy-online-first-available",
+                        subtitleEntry = subtitleEntry,
+                        subtitles = subtitles,
+                    )
 
                     // checks for both a race condition and if any of the subs generated is new
                     if (this.isActive && !viewModel.state.subtitles.containsAll(subtitles) && !hasSelectASubtitle) {
