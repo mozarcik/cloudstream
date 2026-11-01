@@ -251,6 +251,7 @@ fun LibraryScreen(
                             downFocusRequester = firstFeedCardFocusRequester
                                 .takeIf { sections.isNotEmpty() && !uiState.isLoading },
                             onSourceSelected = viewModel::switchSource,
+                            onRefresh = viewModel::refresh,
                             modifier = Modifier.padding(
                                 start = HomeContentHorizontalPadding,
                                 top = TvDimens.LibrarySourceRowTopGap,

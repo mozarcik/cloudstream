@@ -163,12 +163,14 @@ class TmdbApiTest {
                     id = 550,
                     type = TvType.Movie,
                 )
-            )
+            ),
+            fetchedAtMs = 1_000_000L,
         )
         var freshLoadCount = 0
         var storedLibrary: TmdbCachedLibrary? = null
 
         val resolvedLibrary = resolveTmdbLibraryCache(
+            nowMs = 1_000_000L + TMDB_LIBRARY_CACHE_TTL_MS - 1,
             requireLibraryRefresh = false,
             readCachedLibrary = { cachedLibrary },
             loadFreshLibrary = {
@@ -181,6 +183,24 @@ class TmdbApiTest {
         assertSame(cachedLibrary, resolvedLibrary)
         assertEquals(0, freshLoadCount)
         assertNull(storedLibrary)
+    }
+
+    @Test
+    fun `reloads tmdb library when cache is older than ttl`() = runBlocking {
+        val staleLibrary = TmdbCachedLibrary(fetchedAtMs = 1_000_000L)
+        val freshLibrary = TmdbCachedLibrary(fetchedAtMs = 5_000_000L)
+        var storedLibrary: TmdbCachedLibrary? = null
+
+        val resolvedLibrary = resolveTmdbLibraryCache(
+            nowMs = 1_000_000L + TMDB_LIBRARY_CACHE_TTL_MS,
+            requireLibraryRefresh = false,
+            readCachedLibrary = { staleLibrary },
+            loadFreshLibrary = { freshLibrary },
+            storeLibrary = { storedLibrary = it }
+        )
+
+        assertSame(freshLibrary, resolvedLibrary)
+        assertSame(freshLibrary, storedLibrary)
     }
 
     @Test

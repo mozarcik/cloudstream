@@ -35,6 +35,7 @@ private const val TMDB_REQUEST_TOKEN_EXPIRATION_SECONDS = 15 * 60
 private const val TMDB_POLL_INTERVAL_SECONDS = 5
 private const val TMDB_LOG_TAG = "TMDB"
 private const val TMDB_CACHED_LIBRARY = "tmdb_cached_library"
+internal const val TMDB_LIBRARY_CACHE_TTL_MS = 15 * 60 * 1000L
 
 internal val TMDB_SUPPORTED_LIST_SORTING = setOf(
     ListSorting.AlphabeticalA,
@@ -354,6 +355,7 @@ class TmdbApi : SyncAPI() {
             movieWatchlist = movieWatchlist,
             tvSeriesWatchlist = tvSeriesWatchlist,
             customLists = customLists,
+            fetchedAtMs = System.currentTimeMillis(),
         )
     }
 
@@ -480,16 +482,19 @@ internal suspend fun resolveTmdbLibraryCache(
     readCachedLibrary: () -> TmdbCachedLibrary?,
     loadFreshLibrary: suspend () -> TmdbCachedLibrary?,
     storeLibrary: (TmdbCachedLibrary) -> Unit,
+    nowMs: Long = System.currentTimeMillis(),
 ): TmdbCachedLibrary? {
-    return if (requireLibraryRefresh) {
-        val freshLibrary = loadFreshLibrary()
-        if (freshLibrary != null) {
-            storeLibrary(freshLibrary)
-        }
-        freshLibrary
-    } else {
-        readCachedLibrary()
+    val cachedLibrary = if (requireLibraryRefresh) null else readCachedLibrary()
+    val isCacheFresh = cachedLibrary != null &&
+        nowMs - cachedLibrary.fetchedAtMs in 0 until TMDB_LIBRARY_CACHE_TTL_MS
+    if (isCacheFresh) return cachedLibrary
+
+    val freshLibrary = loadFreshLibrary()
+    if (freshLibrary != null) {
+        storeLibrary(freshLibrary)
     }
+    // A failed refresh of a merely stale cache still beats showing nothing.
+    return freshLibrary ?: cachedLibrary
 }
 
 internal fun buildTmdbLibraryMetadata(cachedLibrary: TmdbCachedLibrary): SyncAPI.LibraryMetadata {
@@ -629,6 +634,7 @@ internal data class TmdbCachedLibrary(
     @JsonProperty("movieWatchlist") val movieWatchlist: List<SyncAPI.LibraryItem> = emptyList(),
     @JsonProperty("tvSeriesWatchlist") val tvSeriesWatchlist: List<SyncAPI.LibraryItem> = emptyList(),
     @JsonProperty("customLists") val customLists: List<TmdbCachedLibraryList> = emptyList(),
+    @JsonProperty("fetchedAtMs") val fetchedAtMs: Long = 0L,
 )
 
 internal data class TmdbCachedLibraryList(

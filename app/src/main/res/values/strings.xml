@@ -953,6 +953,7 @@
     </plurals>
     <string name="tv_library_more_count" formatted="true">%1$d more</string>
     <string name="tv_library_lists_from">Lists from</string>
+    <string name="tv_library_refresh">Refresh</string>
     <string name="tv_library_load_error_title">Couldn\'t load lists</string>
     <string name="tv_downloads_speed_format" formatted="true">%1$s/s</string>
     <string name="tv_downloads_time_left_format" formatted="true">%1$s left</string>

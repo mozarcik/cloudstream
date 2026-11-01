@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +54,10 @@ fun HomeScreenV2(
     val lifecycleOwner = LocalLifecycleOwner.current
     var shouldRefreshContinueWatchingOnResume by remember {
         mutableStateOf(false)
+    }
+
+    LaunchedEffect(continueWatchingViewModel) {
+        continueWatchingViewModel.refreshIfAlreadyLoaded()
     }
 
     DisposableEffect(lifecycleOwner, continueWatchingViewModel) {

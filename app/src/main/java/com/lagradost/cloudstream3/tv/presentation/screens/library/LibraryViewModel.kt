@@ -98,6 +98,12 @@ class LibraryViewModel : ViewModel() {
         reloadPages(forceReload = true)
     }
 
+    fun refresh() {
+        if (_uiState.value.isLoading) return
+        resolveCurrentSyncApi()?.requireLibraryRefresh = true
+        reloadPages(forceReload = true)
+    }
+
     fun reloadPages(forceReload: Boolean = true) {
         val syncApi = resolveCurrentSyncApi().also { resolvedApi ->
             currentSyncApi = resolvedApi

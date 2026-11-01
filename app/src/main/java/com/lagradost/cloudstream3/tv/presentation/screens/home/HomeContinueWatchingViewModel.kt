@@ -31,6 +31,17 @@ class HomeContinueWatchingViewModel(
         loadContinueWatching(forceReload = true)
     }
 
+    /**
+     * Called whenever Home enters composition. Details/Player are outer routes, so Home leaves
+     * composition while they are open and its lifecycle observer (and flag) is lost; the ViewModel
+     * survives, so a re-entry finds already loaded items that may be stale.
+     */
+    fun refreshIfAlreadyLoaded() {
+        if (_uiState.value.state is HomeFeedLoadState.Loading) return
+        // Silent: a Loading state would drop the hero and the focus on it.
+        loadContinueWatching(forceReload = true, showLoading = false)
+    }
+
     fun removeItem(parentId: Int?) {
         if (parentId == null) return
         val removeActionToken = nextRemoveActionToken()

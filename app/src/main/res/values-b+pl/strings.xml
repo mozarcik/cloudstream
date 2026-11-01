@@ -911,6 +911,7 @@
     <string name="tv_details_links_count">Linki: %1$d</string>
     <string name="tv_library_more_count">jeszcze %1$d</string>
     <string name="tv_library_lists_from">Listy z</string>
+    <string name="tv_library_refresh">Odśwież</string>
     <string name="tv_library_load_error_title">Nie udało się załadować list</string>
     <string name="tv_downloads_time_left_format">pozostało %1$s</string>
     <string name="tv_settings_on">Włączone</string>
