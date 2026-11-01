@@ -35,6 +35,7 @@ internal suspend fun resolvePlayerPlaybackTarget(
     apiName: String,
     startTarget: PlayerStartTarget,
 ): PlayerPlaybackTarget? {
+    var effectiveStartTarget = startTarget
     var loadResponse: LoadResponse? = null
     var resolvedData = (startTarget as? PlayerStartTarget.DirectEpisodeData)?.data
     var resolvedSeason: Int? = null
@@ -44,6 +45,7 @@ internal suspend fun resolvePlayerPlaybackTarget(
 
     if (resolvedData.isNullOrBlank()) {
         loadResponse = (repository.load(url) as? Resource.Success)?.value ?: return null
+        effectiveStartTarget = remapResumeTarget(startTarget, newParentId = loadResponse.getId())
 
         when (loadResponse) {
             is MovieLoadResponse -> {
@@ -51,7 +53,7 @@ internal suspend fun resolvePlayerPlaybackTarget(
             }
 
             is TvSeriesLoadResponse -> {
-                val resolvedStartEpisode = when (val target = startTarget) {
+                val resolvedStartEpisode = when (val target = effectiveStartTarget) {
                     is PlayerStartTarget.ResumeEpisode -> ResumePlaybackResolver.findSeriesEpisodeById(
                         episodes = loadResponse.episodes,
                         parentId = loadResponse.getId(),
@@ -70,7 +72,7 @@ internal suspend fun resolvePlayerPlaybackTarget(
 
             is AnimeLoadResponse -> {
                 val mainId = loadResponse.getId()
-                val resolvedStartEpisode = when (val target = startTarget) {
+                val resolvedStartEpisode = when (val target = effectiveStartTarget) {
                     is PlayerStartTarget.ResumeEpisode -> ResumePlaybackResolver.findAnimeEpisodeById(
                         episodesByDub = loadResponse.episodes,
                         parentId = mainId,
@@ -176,7 +178,7 @@ internal suspend fun resolvePlayerPlaybackTarget(
         resolvedAnimeDubStatus = resolvedAnimeDubStatus,
     ).ifEmpty { listOf(fallbackEpisode) }
     val selectedEpisodeIndex = PlayerStartEpisodeSelector.resolveSelectedEpisodeIndex(
-        startTarget = startTarget,
+        startTarget = effectiveStartTarget,
         episodes = resolvedEpisodes,
         fallbackEpisodeData = resolvedData,
     )
@@ -482,4 +484,13 @@ private fun resolvePlayerMetadata(
         episodeTitle = null,
         isEpisodeBased = isEpisodeBased,
     )
+}
+
+/**
+ * Episode ids are derived from the parent id (see `resolveSeriesPlaybackEpisodeId`), so the id saved
+ * under a removed provider maps onto the same season/episode of the replacement title by shifting it.
+ */
+private fun remapResumeTarget(target: PlayerStartTarget, newParentId: Int): PlayerStartTarget {
+    if (target !is PlayerStartTarget.RemappedResume) return target
+    return PlayerStartTarget.ResumeEpisode(target.episodeId - target.previousParentId + newParentId)
 }

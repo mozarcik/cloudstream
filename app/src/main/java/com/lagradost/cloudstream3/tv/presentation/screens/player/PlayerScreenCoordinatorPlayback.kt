@@ -139,7 +139,7 @@ internal fun onPlaybackError(
         )
     }
 
-    val nextIndex = context.catalog.store.currentLinkIndex + 1
+    val nextIndex = context.catalog.store.nextIndexAfterFailure(currentLink?.url)
     val nextLink = context.catalog.store.linkAt(nextIndex)
     if (nextLink != null) {
         notifySourceAutoFallback(

@@ -74,7 +74,9 @@ internal fun PlaybackTimelineSection(
     )
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = TvDimens.PlayerSidePadding),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(TvDimens.PlayerTimelineGap),
         verticalAlignment = Alignment.CenterVertically,
     ) {

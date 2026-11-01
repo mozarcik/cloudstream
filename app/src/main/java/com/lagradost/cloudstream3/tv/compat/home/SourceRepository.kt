@@ -41,6 +41,8 @@ object SourceRepository {
      * Zwraca obecnie wybrany API lub pierwszy dostępny.
      * Auto-inicjalizuje jeśli jeszcze nie było inicjalizacji.
      */
+    fun currentApiOrNull(): MainAPI? = _selectedApi.value
+
     fun getCurrentApiOrDefault(): MainAPI {
         // Lazy initialization - initialize on first access
         if (_selectedApi.value == null) {

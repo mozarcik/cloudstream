@@ -107,11 +107,8 @@ internal fun PlayerOverlay(
             .fillMaxWidth()
             .height(TvDimens.PlayerGradientHeight)
             .background(gradient)
-            .padding(
-                start = TvDimens.PlayerSidePadding,
-                end = TvDimens.PlayerSidePadding,
-                bottom = TvDimens.PlayerControlsBottomPadding,
-            ),
+            // No side padding here: the controls row scrolls edge to edge and pads its own content.
+            .padding(bottom = TvDimens.PlayerControlsBottomPadding),
     ) {
         PlaybackTimelineSection(
             exoPlayer = exoPlayer,

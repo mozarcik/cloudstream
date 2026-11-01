@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player
 
+import com.lagradost.cloudstream3.tv.presentation.screens.player.catalog.toPreferredLink
 import com.lagradost.cloudstream3.tv.presentation.screens.player.state.TvPlaybackGenerator
 import androidx.preference.PreferenceManager
 import com.lagradost.cloudstream3.CloudStreamApp
@@ -39,6 +40,9 @@ internal fun playNextEpisode(
     val nextEpisode = context.core.episodeQueue.getOrNull(nextEpisodeIndex) ?: return
     val generator = context.catalog.generator ?: return
 
+    context.catalog.store.currentLink()?.let { playingLink ->
+        context.catalog.store.preferredLink = playingLink.toPreferredLink()
+    }
     context.core.playbackProgressState.onPlaybackStopped(
         positionMs = positionMs,
         durationMs = durationMs,

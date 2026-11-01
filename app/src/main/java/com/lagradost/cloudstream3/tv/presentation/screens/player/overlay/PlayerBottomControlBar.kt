@@ -3,10 +3,13 @@ package com.lagradost.cloudstream3.tv.presentation.screens.player.overlay
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -69,6 +72,9 @@ internal fun PlayerBottomControlBar(
         panelCloseCount = panelCloseCount,
     )
 
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
+
     fun Modifier.control(target: PlayerControlFocusTarget): Modifier =
         focusRequester(state.requesterFor(target))
 
@@ -78,7 +84,13 @@ internal fun PlayerBottomControlBar(
         // Up from any control goes to the timeline (mockup: the timeline sits above the row).
         // Explicit, because the default geometric search does not always reach it.
         // Buttons keep their natural width; when they do not fit the row scrolls (focus scrolls it).
-        modifier = modifier.horizontalScroll(rememberScrollState()).onPreviewKeyEvent { event ->
+        // The side padding comes after horizontalScroll: it is part of the scrolled content, so the
+        // buttons run to the screen edge instead of being clipped at the padded edge.
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(scrollState)
+            .padding(horizontal = TvDimens.PlayerSidePadding)
+            .onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionUp && controlsEnabled) {
                 timelineFocusRequester.requestFocus()
                 true
@@ -93,7 +105,11 @@ internal fun PlayerBottomControlBar(
             enabled = controlsEnabled,
             minWidth = TvDimens.PlayerPlayPauseWidth,
             onClick = { onControlsEvent(TvPlayerControlsEvent.PlayPause) },
-            onFocused = { state.lastFocusedControl = PlayerControlFocusTarget.PlayPause },
+            onFocused = {
+                state.lastFocusedControl = PlayerControlFocusTarget.PlayPause
+                // Bring the leading padding back into view as well, not just the button.
+                coroutineScope.launch { scrollState.animateScrollTo(0) }
+            },
             // Fixed width: "Odtwórz" and "Wstrzymaj" must not shift the rest of the row.
             modifier = Modifier
                 .padding(end = TvDimens.PlayerOptionSpacing)

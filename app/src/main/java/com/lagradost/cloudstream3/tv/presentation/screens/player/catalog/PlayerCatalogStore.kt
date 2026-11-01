@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.catalog
 
+import android.os.SystemClock
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceState
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerSourceStatus
 import com.lagradost.cloudstream3.ui.player.SubtitleData
@@ -20,6 +21,19 @@ internal class PlayerCatalogStore {
     var currentLinkIndex: Int = -1
         private set
 
+    /** Survives [reset]: it is captured on the old episode and used for the next one. */
+    var preferredLink: PreferredLink? = null
+
+    private var firstLinkAtElapsedMs: Long = 0L
+
+    /** Set while the link that started playback was picked by [preferredLink] instead of the top. */
+    var preferredAttemptUrl: String? = null
+        private set
+
+    /** A preferred link that already failed; the sequential fallback must not retry it. */
+    var failedPreferredUrl: String? = null
+        private set
+
     fun reset() {
         synchronized(loadedLinksByUrl) {
             loadedLinksByUrl.clear()
@@ -33,6 +47,19 @@ internal class PlayerCatalogStore {
         orderedLinks = emptyList()
         orderedSubtitles = emptyList()
         currentLinkIndex = -1
+        preferredAttemptUrl = null
+        failedPreferredUrl = null
+        firstLinkAtElapsedMs = 0L
+    }
+
+    /** True while a preferred link is set, none of the loaded links matches it and [maxWaitMs] has not passed. */
+    fun isWaitingForPreferredLink(maxWaitMs: Long): Boolean {
+        val preferred = preferredLink ?: return false
+        val hasMatch = synchronized(loadedLinksByUrl) {
+            loadedLinksByUrl.values.any { link -> preferred.matchRank(link) != null }
+        }
+        if (hasMatch || firstLinkAtElapsedMs == 0L) return false
+        return SystemClock.elapsedRealtime() - firstLinkAtElapsedMs < maxWaitMs
     }
 
     fun hasLoadedSources(): Boolean {
@@ -52,6 +79,7 @@ internal class PlayerCatalogStore {
             loadedLinksByUrl.putIfAbsent(link.url, link) == null
         }
         if (inserted) {
+            if (firstLinkAtElapsedMs == 0L) firstLinkAtElapsedMs = SystemClock.elapsedRealtime()
             synchronized(sourceStatesByUrl) {
                 sourceStatesByUrl.putIfAbsent(
                     link.url,
@@ -161,14 +189,42 @@ internal class PlayerCatalogStore {
         }
     }
 
-    fun markFirstLinkLoading(): ExtractorLink? {
-        val firstLink = orderedLinks.firstOrNull() ?: return null
+    /**
+     * The list order never changes (best quality on top). Playback starts from the link matching
+     * [preferredLink] when the list has one, otherwise from the top.
+     */
+    fun markInitialLinkLoading(): ExtractorLink? {
+        val preferred = preferredLink
+        // Best rank wins; ties keep list order. Index 0 means "already on top": nothing special.
+        val preferredIndex = preferred
+            ?.let { wanted ->
+                orderedLinks.withIndex()
+                    .mapNotNull { (index, link) -> wanted.matchRank(link)?.let { rank -> rank to index } }
+                    .minWithOrNull(compareBy({ it.first }, { it.second }))
+                    ?.second
+            }
+            ?.takeIf { index -> index > 0 }
+        val index = preferredIndex ?: 0
+        val link = orderedLinks.getOrNull(index) ?: return null
         updateSourceState(
-            url = firstLink.url,
+            url = link.url,
             state = TvPlayerSourceState(status = TvPlayerSourceStatus.Loading),
         )
-        currentLinkIndex = 0
-        return firstLink
+        currentLinkIndex = index
+        preferredAttemptUrl = link.url.takeIf { preferredIndex != null }
+        return link
+    }
+
+    /** Index to try after [failedUrl] failed: the top of the list if a preferred link was tried. */
+    fun nextIndexAfterFailure(failedUrl: String?): Int {
+        if (failedUrl != null && failedUrl == preferredAttemptUrl) {
+            failedPreferredUrl = failedUrl
+            preferredAttemptUrl = null
+            return 0
+        }
+        var next = currentLinkIndex + 1
+        if (linkAt(next)?.url == failedPreferredUrl) next += 1
+        return next
     }
 
     private fun ensureSourceStateEntries(links: List<ExtractorLink>) {

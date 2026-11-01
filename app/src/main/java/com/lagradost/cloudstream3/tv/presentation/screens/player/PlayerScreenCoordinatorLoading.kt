@@ -9,6 +9,7 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
 import com.lagradost.cloudstream3.mvvm.logError
+import com.lagradost.cloudstream3.tv.compat.resume.findReplacementForMissingProvider
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.resolvePlayerPlaybackTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.ui.APIRepository
@@ -41,6 +42,10 @@ import kotlinx.coroutines.withContext
 
 private const val DebugTag = "TvPlayerVM"
 private const val InitialFinalizeQuietWindowMs = 1_500L
+
+/** Extra time (counted from the first link) to wait for the mirror that played the previous episode. */
+private const val PreferredLinkMaxWaitMs = 8_000L
+private const val PreferredLinkPollMs = 250L
 private const val ReadyRefreshBatchSize = 20
 private const val ReadyRefreshDebounceMs = 900L
 
@@ -154,7 +159,30 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
             return@launch
         }
 
-        val api = APIHolder.getApiFromNameNull(apiName)
+        var resolvedApi = APIHolder.getApiFromNameNull(apiName)
+        var resolvedUrl = url
+        var resolvedPlaybackTarget = playbackTarget
+        if (resolvedApi == null) {
+            val replacement = withContext(Dispatchers.IO) {
+                findReplacementForMissingProvider(apiName = apiName, url = url)
+            }
+            if (replacement != null) {
+                Log.i(
+                    DebugTag,
+                    "provider $apiName missing, replaced by ${replacement.api.name} url=${replacement.url}",
+                )
+                resolvedApi = replacement.api
+                resolvedUrl = replacement.url
+                resolvedPlaybackTarget = (playbackTarget as? PlayerStartTarget.ResumeEpisode)
+                    ?.let { resume ->
+                        PlayerStartTarget.RemappedResume(
+                            episodeId = resume.episodeId,
+                            previousParentId = replacement.previousParentId,
+                        )
+                    } ?: playbackTarget
+            }
+        }
+        val api = resolvedApi
         if (api == null) {
             Log.e(DebugTag, "provider not found api=$apiName")
             val metadata = TvPlayerMetadata(
@@ -175,6 +203,9 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
             )
             return@launch
         }
+        val url = resolvedUrl
+        val apiName = api.name
+        val playbackTarget = resolvedPlaybackTarget
 
         val repository = APIRepository(api)
         val target = withContext(Dispatchers.IO) {
@@ -612,6 +643,9 @@ internal fun schedulePendingInitialFinalize(context: PlayerScreenCoordinatorCont
     context.catalog.pendingInitialFinalizeJob?.cancel()
     context.catalog.pendingInitialFinalizeJob = context.coroutineScope.launch {
         delay(InitialFinalizeQuietWindowMs)
+        while (context.catalog.store.isWaitingForPreferredLink(PreferredLinkMaxWaitMs)) {
+            delay(PreferredLinkPollMs)
+        }
         context.catalog.pendingInitialFinalizeJob = null
         if (context.catalog.hasFinalized || !context.catalog.store.hasLoadedSources()) {
             return@launch
@@ -715,14 +749,14 @@ internal fun finalizeLoading(
 
     val rebuilt = context.catalog.store.rebuildOrderedData(currentUrl = null)
     if (rebuilt) {
-        val firstLink = context.catalog.store.markFirstLinkLoading() ?: return
+        val firstLink = context.catalog.store.markInitialLinkLoading() ?: return
         context.panels.stateHolder.onSourceChanged(firstLink)
         context.catalog.hasFinalized = true
         context.core.loadingUseBlackBackground = false
         postReadyState(
             context = context,
             link = firstLink,
-            currentIndex = 0,
+            currentIndex = context.catalog.store.currentLinkIndex,
         )
         return
     }

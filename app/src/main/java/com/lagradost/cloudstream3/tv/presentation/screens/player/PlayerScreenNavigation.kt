@@ -7,6 +7,9 @@ sealed interface PlayerStartTarget {
     data class DirectEpisodeData(val data: String) : PlayerStartTarget
     data class ResumeEpisode(val episodeId: Int) : PlayerStartTarget
     data class DownloadedEpisode(val episodeId: Int) : PlayerStartTarget
+
+    /** Resume entry of a removed provider replayed through another one; never put into navigation. */
+    data class RemappedResume(val episodeId: Int, val previousParentId: Int) : PlayerStartTarget
 }
 
 internal object PlayerScreenNavigation {
@@ -22,6 +25,7 @@ internal object PlayerScreenNavigation {
             is PlayerStartTarget.DirectEpisodeData -> target.data
             is PlayerStartTarget.ResumeEpisode -> "$ResumeEpisodePrefix${target.episodeId}"
             is PlayerStartTarget.DownloadedEpisode -> "$DownloadEpisodePrefix${target.episodeId}"
+            is PlayerStartTarget.RemappedResume -> ""
         }
     }
 
