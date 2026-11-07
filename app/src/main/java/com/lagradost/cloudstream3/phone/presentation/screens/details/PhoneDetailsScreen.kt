@@ -95,6 +95,7 @@ fun PhoneDetailsScreen(
     onBack: () -> Unit,
     onPlay: (PlayerStartTarget) -> Unit,
     onSimilarClick: (Movie) -> Unit,
+    onSearch: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -112,7 +113,15 @@ fun PhoneDetailsScreen(
             )
             is DetailsScreenUiState.Loading -> LoadingContent(s.preview.title.orEmpty(), s.preview.posterUri, s.preview.backdropUri, onBack)
             is DetailsScreenUiState.Error -> CenteredMessage(s.error.message, viewModel::retry, onBack)
-            DetailsScreenUiState.Unavailable -> CenteredMessage(viewModel.unavailableDetails.title, null, onBack)
+            DetailsScreenUiState.Unavailable -> UnavailableContent(
+                title = viewModel.unavailableDetails.title,
+                provider = viewModel.unavailableDetails.providerName?.trim().orEmpty(),
+                onSearch = onSearch,
+                onRemove = if (viewModel.canRemoveFromLibrary) {
+                    { viewModel.removeUnavailableItemFromLibrary(); onBack() }
+                } else null,
+                onBack = onBack,
+            )
         }
     }
 }
@@ -138,6 +147,25 @@ private fun LoadingContent(title: String, posterUri: String?, backdropUri: Strin
             Box(Modifier.fillMaxWidth().height(52.dp).clip(PhoneShapes.Pill).background(PhoneColors.Card))
             Box(Modifier.fillMaxWidth(0.9f).height(12.dp).clip(PhoneShapes.Pill).background(PhoneColors.Card))
             Box(Modifier.fillMaxWidth(0.7f).height(12.dp).clip(PhoneShapes.Pill).background(PhoneColors.Card))
+        }
+    }
+}
+
+/** The item was not found in the preferred source: offer a search across all sources (same as TV). */
+@Composable
+private fun UnavailableContent(title: String, provider: String, onSearch: (String) -> Unit, onRemove: (() -> Unit)?, onBack: () -> Unit) {
+    Box(Modifier.fillMaxSize().statusBarsPadding()) {
+        CsIconButton(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.phone_back), onBack, Modifier.padding(12.dp))
+        Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title.ifBlank { stringResource(R.string.details) }, style = PhoneText.Row, color = PhoneColors.Text, textAlign = TextAlign.Center)
+            Text(stringResource(R.string.tv_unavailable_details_title), style = PhoneText.Row, color = PhoneColors.Text, textAlign = TextAlign.Center)
+            Text(
+                if (provider.isNotBlank()) stringResource(R.string.tv_unavailable_details_message_with_provider, provider)
+                else stringResource(R.string.tv_unavailable_details_message),
+                style = PhoneText.Row, color = PhoneColors.Text2, textAlign = TextAlign.Center,
+            )
+            CsButton(stringResource(R.string.tv_unavailable_details_search_button), { title.trim().takeIf { it.isNotEmpty() }?.let(onSearch) }, primary = true)
+            if (onRemove != null) CsButton(stringResource(R.string.tv_unavailable_details_remove_button), onRemove)
         }
     }
 }

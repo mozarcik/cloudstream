@@ -63,6 +63,7 @@ import com.lagradost.cloudstream3.phone.presentation.theme.PhoneText
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchSectionUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchViewModel
 
@@ -79,7 +80,14 @@ fun PhoneSearchScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { if (!state.hasSearched) focus.requestFocus() }
+    val prefill by SearchPrefillStore.pendingQuery.collectAsStateWithLifecycle()
+    LaunchedEffect(prefill) {
+        val query = prefill ?: return@LaunchedEffect
+        SearchPrefillStore.clearPendingQuery()
+        viewModel.onQueryChanged(query)
+        viewModel.onSearchSubmitted()
+    }
+    LaunchedEffect(Unit) { if (!state.hasSearched && prefill == null) focus.requestFocus() }
 
     Column(modifier.fillMaxSize().background(PhoneColors.Ground).statusBarsPadding().imePadding()) {
         Row(Modifier.padding(start = 8.dp, end = 16.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

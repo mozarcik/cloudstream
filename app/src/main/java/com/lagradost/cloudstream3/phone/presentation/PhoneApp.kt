@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,6 +82,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lagradost.cloudstream3.phone.presentation.common.CsKicker
+import androidx.activity.compose.BackHandler
 import com.lagradost.cloudstream3.phone.presentation.screens.grid.PhoneLibraryGridScreen
 import com.lagradost.cloudstream3.tv.compat.home.SourceRepository
 import com.lagradost.cloudstream3.tv.presentation.restoreResolveDetailsStateFrom
@@ -138,7 +140,11 @@ fun PhoneApp() {
 
     fun go(target: String) {
         scope.launch { drawerState.close() }
-        if (route != target) {
+        if (route == target) return
+        // Home is the graph root: restoring saved state here would bring back the library grid.
+        if (target == PhoneRoutes.Home) {
+            navController.popBackStack(PhoneRoutes.Home, inclusive = false)
+        } else {
             navController.navigate(target) {
                 popUpTo(PhoneRoutes.Home) { saveState = true }
                 launchSingleTop = true
@@ -165,6 +171,10 @@ fun PhoneApp() {
             viewModel = vm,
             onBack = { navController.popBackStack() },
             onPlay = { target -> vm.currentSource?.let { openPlayer(it.url, it.apiName, target) } },
+            onSearch = { query ->
+                SearchPrefillStore.setPendingQuery(query)
+                navController.navigate(PhoneRoutes.Search) { popUpTo(PhoneRoutes.Home); launchSingleTop = true }
+            },
             onSimilarClick = { movie ->
                 vm.currentSource?.let { navController.navigate(route.withArgs(enc(movie.id), enc(it.apiName))) }
             },
@@ -314,6 +324,8 @@ fun PhoneApp() {
             }
         }
     }
+
+    BackHandler(enabled = !wide && drawerState.isOpen) { scope.launch { drawerState.close() } }
 
     CompositionLocalProvider(LocalPermanentMenu provides wide) {
         if (wide) {
