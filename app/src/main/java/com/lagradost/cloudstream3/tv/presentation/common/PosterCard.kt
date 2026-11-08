@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -75,7 +76,11 @@ data class PosterFocusInfo(
 )
 
 private class PosterCardLayoutState {
-    var imageBoundsInRoot: Rect = Rect.Zero
+    /** Bounds are read lazily (only while focused): reading them on every placement is costly while scrolling. */
+    var coordinates: LayoutCoordinates? = null
+    val imageBoundsInRoot: Rect
+        get() = coordinates?.takeIf { it.isAttached }?.boundsInRoot() ?: Rect.Zero
+    var lastDispatchedBounds: Rect = Rect.Zero
     var lastLoadedDrawable: Drawable? = null
     var isFocused: Boolean = false
     var lastFocusDispatchUptimeMs: Long = 0L
@@ -126,6 +131,7 @@ fun PosterCard(
         if (imageBounds.width <= 0f || imageBounds.height <= 0f) {
             return
         }
+        layoutState.lastDispatchedBounds = imageBounds
         onFocusUpdated(
             PosterFocusInfo(
                 boundsInRoot = imageBounds,
@@ -157,15 +163,14 @@ fun PosterCard(
     // Always attached so the modifier chain never changes on focus. Bounds are tracked
     // on every placement (cheap, keeps imageBoundsInRoot current); dispatch is focused-only.
     val focusedBoundsReporterModifier = Modifier.onGloballyPositioned { coordinates ->
-        val previousBounds = layoutState.imageBoundsInRoot
-        val bounds = coordinates.boundsInRoot()
-        layoutState.imageBoundsInRoot = bounds
+        layoutState.coordinates = coordinates
 
         if (!layoutState.isFocused) {
             return@onGloballyPositioned
         }
 
-        if (bounds.isApproximatelyEqualTo(previousBounds)) {
+        val bounds = coordinates.boundsInRoot()
+        if (bounds.isApproximatelyEqualTo(layoutState.lastDispatchedBounds)) {
             return@onGloballyPositioned
         }
 

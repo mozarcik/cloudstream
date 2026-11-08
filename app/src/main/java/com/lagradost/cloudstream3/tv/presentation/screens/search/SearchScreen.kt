@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -41,7 +42,6 @@ import com.lagradost.cloudstream3.tv.presentation.theme.TvTextStyles
 fun SearchScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (SearchSectionUiState) -> Unit,
-    onScroll: (isTopBarVisible: Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = viewModel(),
 ) {
@@ -61,12 +61,6 @@ fun SearchScreen(
     val firstFocusableIndex = remember(sections) {
         sections.indexOfFirst { it.isInteractive || it.state is HomeFeedLoadState.Error }
     }
-    val shouldShowTopBar by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 100
-        }
-    }
-    LaunchedEffect(shouldShowTopBar) { onScroll(shouldShowTopBar) }
 
     // Back from a title / "Show more" grid: focus goes back to the poster that was opened.
     var restoreTarget by remember {
@@ -157,7 +151,7 @@ fun SearchScreen(
                     downFocusRequester = if (firstFocusableIndex >= 0) firstResultFocusRequester else null,
                     onPillFocusChanged = { pillHasFocus = it },
                     summary = summary,
-                    modifier = Modifier.padding(start = TvDimens.ScreenHorizontalPadding),
+                    modifier = Modifier.padding(start = TvDimens.ContentStartWithRail),
                 )
             }
             items(items = sections, key = { it.id }) { section ->
@@ -183,6 +177,7 @@ fun SearchScreen(
 
         if (!uiState.hasSearched || showEmpty) {
             SearchStateMessage(
+                illustration = if (showEmpty) R.drawable.tv_empty_no_results else R.drawable.tv_empty_search_start,
                 title = stringResource(
                     if (showEmpty) R.string.tv_feed_empty else R.string.title_search
                 ),
@@ -204,6 +199,7 @@ fun SearchScreen(
 /** Start and "no results" text: not focusable, the field above stays the only focus target. */
 @Composable
 private fun SearchStateMessage(
+    @androidx.annotation.DrawableRes illustration: Int,
     title: String,
     message: String,
     modifier: Modifier = Modifier,
@@ -212,6 +208,11 @@ private fun SearchStateMessage(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.padding(top = TvDimens.SearchStateTop),
     ) {
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(illustration),
+            contentDescription = null,
+            modifier = Modifier.size(TvDimens.StateIllustrationSize),
+        )
         Text(
             text = title,
             style = TvTextStyles.StateTitle,

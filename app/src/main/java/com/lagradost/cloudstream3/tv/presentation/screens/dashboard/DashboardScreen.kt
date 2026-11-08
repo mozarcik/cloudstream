@@ -28,7 +28,6 @@ import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedGridSelec
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreenV2
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
-import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.profile.ProfileScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
@@ -38,10 +37,8 @@ import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.
 import com.lagradost.cloudstream3.tv.presentation.utils.Padding
 
 val ParentPadding = PaddingValues(vertical = 16.dp, horizontal = 58.dp)
-internal val DashboardTopBarHorizontalPadding = 48.dp
-internal val DashboardTopBarVerticalPadding = 12.dp
-/** Tab height (32 dp) plus vertical padding; the Home hero bleeds under this area. */
-internal val DashboardTopBarHeight = 32.dp + DashboardTopBarVerticalPadding * 2
+/** Space above screens that do not draw their own backdrop (what the old top bar used to take). */
+internal val DashboardContentTopInset = 56.dp
 
 @Composable
 fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.current): Padding {
@@ -85,17 +82,11 @@ fun DashboardScreen(
             openMediaDetailsScreen = openMediaDetailsScreen,
             openTmdbLibraryDetailsScreen = openTmdbLibraryDetailsScreen,
             openVideoPlayer = openVideoPlayer,
-            updateTopBarVisibility = bodyContext.updateTopBarVisibility,
-            updateTopBarFocusable = bodyContext.updateTopBarFocusable,
-            updateTopBarDownNavigationEnabled = bodyContext.updateTopBarDownNavigationEnabled,
-            topBarSelectedFocusRequester = bodyContext.topBarSelectedFocusRequester,
-            isTopBarFocused = bodyContext.isTopBarFocused,
             homeRestoreFocusToken = bodyContext.homeRestoreFocusToken,
-            libraryRestoreFocusToken = bodyContext.libraryRestoreFocusToken,
             homeFeedGridRestoreFocusToken = bodyContext.homeFeedGridRestoreFocusToken,
             libraryFeedGridRestoreFocusToken = bodyContext.libraryFeedGridRestoreFocusToken,
             homeContentRefreshToken = bodyContext.homeContentRefreshToken,
-            requestHomeTopBarFocus = bodyContext.requestHomeTopBarFocus,
+            goHomeAndEnterContent = bodyContext.goHomeAndEnterContent,
             navController = controller,
             modifier = bodyModifier,
         )
@@ -109,17 +100,11 @@ private fun Body(
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
     openTmdbLibraryDetailsScreen: (item: MediaItemCompat) -> Boolean,
     openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
-    updateTopBarVisibility: (Boolean) -> Unit,
-    updateTopBarFocusable: (Boolean) -> Unit,
-    updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
-    topBarSelectedFocusRequester: FocusRequester,
-    isTopBarFocused: Boolean,
     homeRestoreFocusToken: Int,
-    libraryRestoreFocusToken: Int,
     homeFeedGridRestoreFocusToken: Int,
     libraryFeedGridRestoreFocusToken: Int,
     homeContentRefreshToken: Int,
-    requestHomeTopBarFocus: () -> Unit,
+    goHomeAndEnterContent: () -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
@@ -127,25 +112,20 @@ private fun Body(
         modifier = modifier,
         navController = navController,
         startDestination = Screens.Home(),
-        enterTransition = { dashboardEnterTransition(initialState.destination.route, targetState.destination.route) },
-        exitTransition = { dashboardExitTransition(initialState.destination.route, targetState.destination.route) },
-        popEnterTransition = { dashboardEnterTransition(initialState.destination.route, targetState.destination.route) },
-        popExitTransition = { dashboardExitTransition(initialState.destination.route, targetState.destination.route) },
+        enterTransition = { dashboardEnterTransition() },
+        exitTransition = { dashboardExitTransition() },
+        popEnterTransition = { dashboardEnterTransition() },
+        popExitTransition = { dashboardExitTransition() },
     ) {
         dashboardComposable(Screens.Profile()) {
             ProfileScreen(
-                topBarFocusRequester = topBarSelectedFocusRequester,
-                isTopBarFocused = isTopBarFocused,
-                onTopBarVisibilityChanged = updateTopBarVisibility,
-                onTopBarFocusableChanged = updateTopBarFocusable,
-                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled,
                 modifier = Modifier.fillMaxSize(),
             )
         }
         dashboardComposable(Screens.Sources()) {
              PlaceholderScreen("Sources - Coming Soon")
         }
-        dashboardComposable(Screens.Home(), applyTopInset = false) {
+        dashboardComposable(Screens.Home()) {
             key(homeContentRefreshToken) {
                 HomeScreenV2(
                     onMediaClick = { item ->
@@ -177,8 +157,6 @@ private fun Body(
                         HomeFeedGridSelectionStore.setSelectedFeed(feed)
                         navController.navigate(Screens.HomeFeedGrid())
                     },
-                    onScroll = updateTopBarVisibility,
-                    topBarFocusRequester = topBarSelectedFocusRequester,
                     restoreFocusToken = homeRestoreFocusToken
                 )
             }
@@ -203,38 +181,7 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                onScroll = updateTopBarVisibility,
                 restoreFocusToken = homeFeedGridRestoreFocusToken
-            )
-        }
-        dashboardComposable(Screens.Library()) {
-            LibraryScreen(
-                onMediaClick = { item ->
-                    if (openTmdbLibraryDetailsScreen(item)) {
-                        return@LibraryScreen
-                    }
-                    when (item) {
-                        is MediaItemCompat.Movie -> {
-                            openMovieDetailsScreen(item)
-                        }
-                        is MediaItemCompat.TvSeries -> {
-                            openTvSeriesDetailsScreen(item)
-                        }
-                        is MediaItemCompat.Other -> {
-                            openMediaDetailsScreen(item)
-                        }
-                    }
-                },
-                onOpenFeedGrid = { section ->
-                    LibraryFeedGridSelectionStore.setSelectedSection(section)
-                    navController.navigate(Screens.LibraryFeedGrid())
-                },
-                onOpenAccountsSettings = {
-                    navController.navigateToDashboardTab(Screens.Settings)
-                },
-                onScroll = updateTopBarVisibility,
-                topBarFocusRequester = topBarSelectedFocusRequester,
-                restoreFocusToken = libraryRestoreFocusToken
             )
         }
         dashboardComposable(Screens.LibraryFeedGrid()) {
@@ -258,12 +205,10 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                onScroll = updateTopBarVisibility,
-                topBarFocusRequester = topBarSelectedFocusRequester,
                 restoreFocusToken = libraryFeedGridRestoreFocusToken
             )
         }
-        dashboardComposable(Screens.Downloads(), applyTopInset = false) {
+        dashboardComposable(Screens.Downloads()) {
             DownloadsScreen(
                 onOpenDetails = { item ->
                     if (item.sourceUrl.isNotBlank() && item.apiName.isNotBlank()) {
@@ -325,9 +270,6 @@ private fun Body(
                         PlayerStartTarget.DownloadedEpisode(item.episodeId)
                     )
                 },
-                onScroll = updateTopBarVisibility,
-                topBarFocusRequester = topBarSelectedFocusRequester,
-                onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled
             )
         }
         dashboardComposable(Screens.Search()) {
@@ -349,7 +291,6 @@ private fun Body(
                     SearchFeedGridSelectionStore.setSelectedSection(section)
                     navController.navigate(Screens.SearchFeedGrid())
                 },
-                onScroll = updateTopBarVisibility
             )
         }
         dashboardComposable(Screens.SearchFeedGrid()) {
@@ -370,32 +311,16 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                onScroll = updateTopBarVisibility
             )
         }
         dashboardComposable(Screens.Settings()) {
-            DashboardSettingsRouteScreen(
-                updateTopBarVisibility = updateTopBarVisibility,
-                updateTopBarFocusable = updateTopBarFocusable,
-                updateTopBarDownNavigationEnabled = updateTopBarDownNavigationEnabled,
-                topBarFocusRequester = topBarSelectedFocusRequester,
-                isTopBarFocused = isTopBarFocused,
-                onExitSettings = {
-                    navController.navigateToDashboardTab(Screens.Home)
-                    requestHomeTopBarFocus()
-                },
-            )
+            DashboardSettingsRouteScreen(onExitSettings = goHomeAndEnterContent)
         }
     }
 }
 
 @Composable
 fun DashboardSettingsRouteScreen(
-    updateTopBarVisibility: (Boolean) -> Unit,
-    updateTopBarFocusable: (Boolean) -> Unit,
-    updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
-    topBarFocusRequester: FocusRequester,
-    isTopBarFocused: Boolean,
     onExitSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -404,17 +329,7 @@ fun DashboardSettingsRouteScreen(
             .fillMaxSize()
     ) {
         MasterDetailSettingsScreen(
-            onExitSettings = {
-                updateTopBarVisibility(true)
-                updateTopBarFocusable(true)
-                updateTopBarDownNavigationEnabled(true)
-                onExitSettings()
-            },
-            onTopBarFocusableChanged = updateTopBarFocusable,
-            onTopBarDownNavigationEnabledChanged = updateTopBarDownNavigationEnabled,
-            onTopBarVisibleChanged = updateTopBarVisibility,
-            topBarFocusRequester = topBarFocusRequester,
-            isTopBarFocused = isTopBarFocused,
+            onExitSettings = onExitSettings,
             modifier = Modifier.fillMaxSize()
         )
     }

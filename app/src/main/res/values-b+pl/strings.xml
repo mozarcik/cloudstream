@@ -440,7 +440,6 @@
     <string name="next_episode_time_min_format" formatted="true">%dm</string>
     <string name="action_mark_as_watched">Oznacz jako obejrzane</string>
     <string name="confirm_exit_dialog">Czy na pewno chcesz wyjść?</string>
-    <string name="tv_press_back_again_to_exit">Naciśnij Wstecz ponownie, aby wyjść</string>
     <string name="update_notification_downloading">Pobieranie aktualizacji aplikacji…</string>
     <string name="sync_total_episodes_some" formatted="true">/%d</string>
     <string name="cast_format" formatted="true">Obsada: %s</string>
@@ -990,4 +989,18 @@
         <item quantity="many">%d tytułów</item>
         <item quantity="other">%d tytułu</item>
     </plurals>
+    <string name="tv_menu_switch_profile">Zmień profil</string>
+    <string name="tv_menu_no_lists">Brak list</string>
+    <string name="tv_feed_show_all">Pokaż wszystko</string>
+    <string name="tv_feed_show_all_subtitle">%1$s · %2$s</string>
+    <string name="tv_feed_show_all_hint">Pokaż wszystko · cała lista %1$s</string>
+    <string name="tv_home_all_sources">Wszystkie źródła (%1$d)</string>
+    <string name="tv_sources_panel_title">Źródła</string>
+    <string name="tv_sources_panel_subtitle">%1$d zainstalowanych · przytrzymaj OK, aby przypiąć do Home</string>
+    <string name="tv_sources_group_pinned">Przypięte na Home</string>
+    <string name="tv_sources_group_movies_series">Filmy i seriale</string>
+    <string name="tv_sources_group_live">Na żywo</string>
+    <string name="tv_feed_empty_title">Brak pozycji w tym feedzie</string>
+    <string name="tv_feed_empty_hint">↓ przejdź do kolejnego feedu  •  OK — odśwież</string>
+    <string name="tv_feed_error_title">Nie udało się wczytać feedu</string>
 </resources>

@@ -1,6 +1,13 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Extension
@@ -98,49 +105,49 @@ fun rememberMasterDetailSettingsRegistry(): SettingsRegistry {
                         key = "root_general",
                         title = titleGeneral,
                         subtitle = "Language, startup, storage and network",
-                        icon = Icons.Default.Settings,
+                        icon = Icons.Outlined.LightMode,
                         nextScreenId = SettingsScreenIds.General
                     ),
                     entry(
                         key = "root_player",
                         title = titlePlayer,
                         subtitle = "Playback, subtitles and advanced options",
-                        icon = Icons.Default.PlayArrow,
+                        icon = Icons.Outlined.PlayArrow,
                         nextScreenId = SettingsScreenIds.Player
                     ),
                     entry(
                         key = "root_providers",
                         title = titleProviders,
                         subtitle = "Source priorities and provider timeout",
-                        icon = Icons.Default.Build,
+                        icon = Icons.Outlined.Build,
                         nextScreenId = SettingsScreenIds.Providers
                     ),
                     entry(
                         key = "root_ui",
                         title = titleUi,
                         subtitle = "Theme, layout and visual behavior",
-                        icon = Icons.Default.Info,
+                        icon = Icons.Outlined.Dashboard,
                         nextScreenId = SettingsScreenIds.Ui
                     ),
                     entry(
                         key = "root_updates",
                         title = titleUpdates,
                         subtitle = "Application and extension updates",
-                        icon = Icons.Default.Refresh,
+                        icon = Icons.Outlined.Refresh,
                         nextScreenId = SettingsScreenIds.Updates
                     ),
                     entry(
                         key = "root_account",
                         title = titleAccount,
                         subtitle = "Profile, synchronization and backups",
-                        icon = Icons.Default.AccountCircle,
+                        icon = Icons.Outlined.Person,
                         nextScreenId = SettingsScreenIds.Account
                     ),
                     entry(
                         key = "root_extensions",
                         title = titleExtensions,
                         subtitle = "Repositories and plugins",
-                        icon = Icons.Default.Extension,
+                        icon = Icons.Outlined.Extension,
                         nextScreenId = SettingsScreenIds.Extensions
                     )
                 )

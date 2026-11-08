@@ -11,7 +11,7 @@ internal object HomeFocusStore {
     const val ContinueWatchingResume = "home:continue_watching:resume"
     const val ContinueWatchingDetails = "home:continue_watching:details"
     const val ContinueWatchingRemove = "home:continue_watching:remove"
-    const val Featured = "home:featured"
+    const val Sources = "home:sources"
 
     var pendingRestoreTargetId by mutableStateOf<String?>(null)
         private set
@@ -50,12 +50,28 @@ internal object HomeFocusStore {
         return "home:continue_watching:card:${mediaIdentity(item)}"
     }
 
+    private val rowIndexes = HashMap<String, Int>()
+
+    /** Position last focused in a feed row (poster index, or the "Show all" tile after the last one). */
+    fun rowIndex(rowKey: String): Int = rowIndexes[rowKey] ?: 0
+
+    fun setRowIndex(rowKey: String, index: Int) {
+        rowIndexes[rowKey] = index
+    }
+
     fun feedPoster(feedId: String, item: MediaItemCompat): String {
         return "home:feed:$feedId:item:${mediaIdentity(item)}"
     }
 
     fun feedShowMore(feedId: String): String {
         return "home:feed:$feedId:show_more"
+    }
+
+    /** Resume / Details / Remove: the hero's own buttons, where Back opens the menu. */
+    fun isHeroButtonTarget(targetId: String?): Boolean {
+        return targetId == ContinueWatchingResume ||
+            targetId == ContinueWatchingDetails ||
+            targetId == ContinueWatchingRemove
     }
 
     fun isContinueWatchingTarget(targetId: String?): Boolean {

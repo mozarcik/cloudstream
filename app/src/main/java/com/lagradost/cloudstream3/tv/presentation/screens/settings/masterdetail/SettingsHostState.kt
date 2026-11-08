@@ -11,11 +11,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val BackPollMs = 50L
 
 @Stable
 class SettingsHostState(
@@ -32,6 +36,9 @@ class SettingsHostState(
         .toMutableStateList()
     val screenData = mutableStateMapOf<String, SettingsScreenDataState>()
     val lastLoadSourceByScreenId = mutableStateMapOf<String, SettingsLoadSource>()
+
+    /** Content of the right-hand info panel (QR code, ...) set by the active level; null = empty panel. */
+    var infoPanel: (@Composable () -> Unit)? by mutableStateOf(null)
 
     var navigationDirection by mutableStateOf(SettingsNavigationDirection.Forward)
         private set
@@ -157,13 +164,6 @@ class SettingsHostState(
         )
     }
 
-    /** "Levels above" text for the crumb: titles of the stack entries before [instance]. */
-    fun breadcrumbFor(instance: ScreenInstance): String {
-        val index = stack.indexOf(instance)
-        val above = if (index < 0) stack.toList() else stack.take(index)
-        return above.joinToString(" › ") { screenTitle(it.id) }
-    }
-
     fun invalidateScreens(predicate: (String) -> Boolean) {
         val knownIds = buildSet {
             addAll(screenData.keys)
@@ -195,12 +195,38 @@ class SettingsHostState(
         cleanupPreparedPreviewFor(parentInstanceId)
     }
 
+    /** The prepared next-level panel of [parentInstanceId] for [screenId], or null while it is not created yet. */
+    fun previewInstanceOrNull(parentInstanceId: Long, screenId: String): ScreenInstance? =
+        preparedPreviewInstances[PreviewCacheKey(parentInstanceId = parentInstanceId, screenId = screenId)]
+
     fun navigateBack(): Boolean {
         if (stack.size <= 1) return false
 
         navigationDirection = SettingsNavigationDirection.Backward
         val removed = stack.removeAt(stack.lastIndex)
         cleanupPreparedPreviewFor(removed.instanceId)
+        // The level we left becomes the preview of the one we returned to (same panel, only its role changes).
+        removed.focusKey = null
+        preparedPreviewInstances[PreviewCacheKey(parentInstanceId = stack.last().instanceId, screenId = removed.id)] = removed
+        return true
+    }
+
+    private var backInProgress = false
+
+    /**
+     * Back / Left while the strip is still sliding is queued: it runs once the previous one has
+     * settled ([TvDimens.SettingsBackQueueMs]). Returns false when there is no level to leave.
+     */
+    suspend fun navigateBackQueued(): Boolean {
+        while (backInProgress) delay(BackPollMs)
+        if (stack.size <= 1) return false
+        backInProgress = true
+        try {
+            navigateBack()
+            delay(TvDimens.SettingsBackQueueMs)
+        } finally {
+            backInProgress = false
+        }
         return true
     }
 

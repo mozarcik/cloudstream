@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
@@ -59,19 +61,18 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.syncproviders.AuthLoginRequirement
-import com.lagradost.cloudstream3.tv.presentation.common.TvListRow
-import com.lagradost.cloudstream3.tv.presentation.common.TvRowLeading
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsActionRow
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsDivider
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsFieldRow
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsLevelHeader
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsPreviewHeader
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsPreviewRow
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsPreviewSection
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsSectionLabel
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsStateBox
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.LocalSettingsBreadcrumb
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsInfoParagraph
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.LocalSettingsInfoPanel
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsGlyph
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsListRow
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsRowWidget
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.settingsInitials
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.theme.TvTextStyles
@@ -170,28 +171,10 @@ fun ProviderAccountScreen(
         }
     }
 
-    if (isPreview) {
-        ProviderAccountPreview(
-            uiState = uiState,
-            selectedAccount = selectedAccount,
-            providerName = providerName,
-            labelAccount = labelAccount,
-            hasCreateAccount = !createAccountUrl.isNullOrBlank(),
-            modifier = modifier,
-        )
-        return
-    }
-
     val authMode = uiState.authMode
     // Back from a login flow returns to the action that opened it (Add account / Log in).
     var cameFromAuth by remember { mutableStateOf(false) }
     if (authMode != ProviderAccountAuthMode.Idle) cameFromAuth = true
-    val baseCrumb = LocalSettingsBreadcrumb.current
-    val crumb = if (authMode == ProviderAccountAuthMode.Idle) {
-        baseCrumb
-    } else {
-        listOf(baseCrumb, providerName).filter { it.isNotEmpty() }.joinToString(" › ")
-    }
     val title = when (authMode) {
         ProviderAccountAuthMode.Idle -> providerName
         ProviderAccountAuthMode.InApp -> stringResource(R.string.login)
@@ -199,7 +182,14 @@ fun ProviderAccountScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        SettingsLevelHeader(title = title, crumb = crumb)
+        SettingsLevelHeader(
+            title = title,
+            description = if (authMode == ProviderAccountAuthMode.DeviceCode && uiState.deviceCode != null) {
+                stringResource(R.string.device_pin_qr_message)
+            } else {
+                null
+            },
+        )
         when (authMode) {
             ProviderAccountAuthMode.Idle -> AccountListContent(
                 uiState = uiState,
@@ -210,6 +200,7 @@ fun ProviderAccountScreen(
                 viewModel = viewModel,
                 onAccountChanged = onAccountChanged,
                 onOpenCreateAccount = onOpenCreateAccount,
+                isPreview = isPreview,
                 focusPrimary = cameFromAuth,
                 onInitialFocused = { cameFromAuth = false },
             )
@@ -256,6 +247,7 @@ private fun AccountListContent(
     viewModel: ProviderAccountViewModel,
     onAccountChanged: () -> Unit,
     onOpenCreateAccount: (String) -> Unit,
+    isPreview: Boolean,
     focusPrimary: Boolean,
     onInitialFocused: () -> Unit,
 ) {
@@ -273,6 +265,7 @@ private fun AccountListContent(
     FocusRequestEffect(
         requester = initialRequester,
         requestKey = uiState.accounts.isEmpty(),
+        enabled = !isPreview,
         onFocused = onInitialFocused,
     )
 
@@ -280,14 +273,18 @@ private fun AccountListContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = TvDimens.SettingsCardPaddingVertical),
+        contentPadding = PaddingValues(
+            start = TvDimens.SettingsPaneStartInset,
+            top = TvDimens.SettingsListTopPadding,
+            bottom = TvDimens.SettingsListTopPadding,
+        ),
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
     ) {
         if (selectedAccount != null) {
             item(key = "provider_account_status") {
                 AccountSummaryCard(
                     name = providerAccountDisplayName(labelAccount, selectedAccount),
                     status = stringResource(R.string.tv_settings_logged_in),
-                    dimmed = false,
                 )
             }
         }
@@ -299,6 +296,7 @@ private fun AccountListContent(
             items(items = uiState.accounts, key = { account -> account.id }) { account ->
                 AccountRadioRow(
                     title = providerAccountDisplayName(labelAccount, account),
+                    initials = settingsInitials(providerAccountDisplayName(labelAccount, account)),
                     selected = account.id == uiState.selectedAccountId,
                     enabled = isInteractive,
                     onClick = {
@@ -357,7 +355,7 @@ private fun AccountListContent(
         }
         if (!idleErrorMessage.isNullOrBlank()) {
             item(key = "provider_account_error") {
-                SettingsStateBox(message = idleErrorMessage, modifier = Modifier.padding(top = TvDimens.SettingsDp6))
+                SettingsInfoParagraph(text = idleErrorMessage, color = TvColors.ErrorText)
             }
         }
     }
@@ -370,118 +368,35 @@ private fun AccountRadioRow(
     enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    initials: String? = null,
 ) {
-    TvListRow(
+    SettingsListRow(
         title = title,
         onClick = onClick,
         enabled = enabled,
-        height = TvDimens.SettingsRadioRowHeight,
-        horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-        gap = TvDimens.SettingsRowGap,
-        leadingIndicator = TvRowLeading.Radio(selected = selected),
+        leading = initials?.let { text ->
+            { _ -> Text(text = text, style = TvTextStyles.SettingsTile, color = TvColors.Text, maxLines = 1) }
+        },
+        widget = SettingsRowWidget.Radio(selected = selected),
         modifier = modifier,
     )
 }
 
-/** Avatar + name + status in an inset card (active level and preview, the preview is dimmed). */
+/** Avatar (initial) + name + status of the active account; informational, never focused. */
 @Composable
 private fun AccountSummaryCard(
     name: String,
     status: String,
-    dimmed: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val nameColor = if (dimmed) TvColors.SettingsPreviewText else TvColors.Text
-    val statusColor = if (dimmed) TvColors.SettingsPreviewSubtext else TvColors.RowSubtitle
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsDp9),
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(top = TvDimens.SettingsDp6, start = if (dimmed) TvDimens.SettingsDp12 else TvDimens.SettingsDp0, end = if (dimmed) TvDimens.SettingsDp12 else TvDimens.SettingsDp0)
-            .background(TvColors.SettingsInset, RoundedCornerShape(TvDimens.SettingsDp9))
-            .padding(horizontal = TvDimens.SettingsDp11, vertical = TvDimens.SettingsDp10),
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(TvDimens.SettingsAvatarSize)
-                .background(TvColors.SettingsAvatar, CircleShape),
-        ) {
-            Text(
-                text = name.take(1).uppercase(),
-                style = TvTextStyles.RowPanel,
-                color = if (dimmed) TvColors.SettingsPreviewText else TvColors.Meta,
-            )
-        }
-        Column {
-            Text(text = name, style = TvTextStyles.SettingsPreviewRow, color = nameColor, maxLines = 1)
-            Text(
-                text = status,
-                style = TvTextStyles.SettingsPreviewSubtitle,
-                color = statusColor,
-                modifier = Modifier.padding(top = TvDimens.SettingsDp1),
-            )
-        }
-    }
-}
-
-/** Non-interactive card for the right-hand side while the focus is on the provider row. */
-@Composable
-private fun ProviderAccountPreview(
-    uiState: ProviderAccountUiState,
-    selectedAccount: ProviderAccountItemUi?,
-    providerName: String,
-    labelAccount: String,
-    hasCreateAccount: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxSize()) {
-        SettingsPreviewHeader(title = providerName)
-        if (selectedAccount != null) {
-            AccountSummaryCard(
-                name = providerAccountDisplayName(labelAccount, selectedAccount),
-                status = stringResource(R.string.tv_settings_logged_in),
-                dimmed = true,
-            )
-        }
-        if (uiState.accounts.isNotEmpty()) {
-            SettingsPreviewSection(text = stringResource(R.string.tv_settings_active_account))
-            uiState.accounts.forEach { account ->
-                PreviewAccountRow(
-                    title = providerAccountDisplayName(labelAccount, account),
-                    selected = account.id == uiState.selectedAccountId,
-                )
-            }
-            PreviewAccountRow(title = stringResource(R.string.no_account), selected = uiState.selectedAccountId < 0)
-        }
-        SettingsPreviewSection(text = stringResource(R.string.tv_settings_manage))
-        SettingsPreviewRow(
-            title = stringResource(if (uiState.accounts.isEmpty()) R.string.login else R.string.add_account),
-            height = TvDimens.SettingsDp38,
-        )
-        if (hasCreateAccount) {
-            SettingsPreviewRow(title = stringResource(R.string.create_account), height = TvDimens.SettingsDp38)
-        }
-        if (selectedAccount != null) {
-            SettingsPreviewRow(title = stringResource(R.string.logout), height = TvDimens.SettingsDp38)
-        }
-    }
-}
-
-@Composable
-private fun PreviewAccountRow(title: String, selected: Boolean) {
-    SettingsPreviewRow(
-        title = title,
-        height = TvDimens.SettingsDp38,
-        leading = {
-            Canvas(modifier = Modifier.size(TvDimens.SettingsDp14)) {
-                val border = TvDimens.SettingsDp1_5.toPx()
-                val color = if (selected) TvColors.SettingsPreviewRadioSelected else TvColors.SettingsPreviewRadio
-                drawCircle(color = color, radius = (size.minDimension - border) / 2f, style = Stroke(width = border))
-                if (selected) drawCircle(color = color, radius = TvDimens.SettingsDp3.toPx(), center = Offset(size.width / 2f, size.height / 2f))
-            }
+    SettingsListRow(
+        title = name,
+        summary = status,
+        onClick = {},
+        leading = { _ ->
+            Text(text = settingsInitials(name), style = TvTextStyles.SettingsTile, color = TvColors.Text, maxLines = 1)
         },
+        modifier = modifier.focusProperties { canFocus = false },
     )
 }
 
@@ -520,7 +435,10 @@ private fun InAppLoginPanel(
     val canLogin = filled && !isWorking
     val requiredHint = stringResource(R.string.tv_settings_required)
     val requiredFocusedHint = stringResource(R.string.tv_settings_required_keyboard)
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
+        modifier = Modifier.fillMaxWidth().padding(start = TvDimens.SettingsPaneStartInset, top = TvDimens.SettingsListTopPadding),
+    ) {
         if (requirement.username) {
             SettingsFieldRow(
                 label = stringResource(R.string.username),
@@ -587,16 +505,14 @@ private fun InAppLoginPanel(
         }
 
         if (!errorMessage.isNullOrBlank()) {
-            SettingsStateBox(message = errorMessage, modifier = Modifier.padding(top = TvDimens.SettingsDp8))
+            SettingsInfoParagraph(text = errorMessage, color = TvColors.ErrorText)
         }
-        SettingsDivider(top = TvDimens.SettingsDp10, bottom = TvDimens.SettingsDp10)
 
         if (isWorking) {
             SettingsActionRow(
                 title = stringResource(R.string.tv_settings_logging_in),
                 loading = true,
                 onClick = {},
-                height = TvDimens.SettingsFormRowHeight,
                 modifier = Modifier.testTag(ProviderAccountLoginButtonTag),
             )
         } else {
@@ -606,7 +522,6 @@ private fun InAppLoginPanel(
                 icon = Icons.Default.Check,
                 enabled = canLogin,
                 onClick = onLogin,
-                height = TvDimens.SettingsFormRowHeight,
                 modifier = Modifier.testTag(ProviderAccountLoginButtonTag),
             )
         }
@@ -649,89 +564,22 @@ private fun DeviceCodePanel(
         enabled = isInteractive || !canOpenLocal,
     )
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        if (deviceCode != null) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsQrGap),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = TvDimens.SettingsHeaderHorizontalPadding),
-            ) {
-                qrBitmap?.let { bitmap ->
-                    Image(
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .size(TvDimens.SettingsQrSize)
-                            .background(TvColors.Focus, RoundedCornerShape(TvDimens.SettingsQrRadius))
-                            .padding(TvDimens.SettingsQrPadding),
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.device_pin_qr_message),
-                        style = TvTextStyles.FeaturedBody,
-                        color = TvColors.Meta,
-                    )
-                    Text(
-                        text = stringResource(R.string.device_pin_manual_url_title).uppercase(),
-                        style = TvTextStyles.SettingsLabelSmall,
-                        color = TvColors.LabelPanel,
-                        modifier = Modifier.padding(top = TvDimens.SettingsDp13),
-                    )
-                    Text(
-                        text = deviceCode.verificationUrl,
-                        // Mockup: 26 px / 600 (13 sp), a bit larger than the generic meta text.
-                        style = TvTextStyles.Meta.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
-                        color = TvColors.Text,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = TvDimens.SettingsDp3),
-                    )
-                    if (shouldShowDevicePinCode(deviceCode.userCode)) {
-                        Text(
-                            text = stringResource(R.string.tv_settings_code),
-                            style = TvTextStyles.SettingsLabelSmall,
-                            color = TvColors.LabelPanel,
-                            modifier = Modifier.padding(top = TvDimens.SettingsDp11),
-                        )
-                        Text(
-                            text = deviceCode.userCode,
-                            style = TvTextStyles.SettingsCode,
-                            color = TvColors.Text,
-                            modifier = Modifier.padding(top = TvDimens.SettingsDp3),
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsDp5),
-                        modifier = Modifier.padding(top = TvDimens.SettingsDp7),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Schedule,
-                            contentDescription = null,
-                            tint = TvColors.Accent,
-                            modifier = Modifier.size(TvDimens.SettingsDp11),
-                        )
-                        Text(
-                            text = stringResource(
-                                R.string.device_pin_counter_text,
-                                deviceCode.remainingSeconds / 60,
-                                deviceCode.remainingSeconds % 60
-                            ),
-                            style = TvTextStyles.Chip,
-                            color = TvColors.Accent,
-                        )
-                    }
-                }
-            }
+    // The QR code, URL and countdown live in the info panel on the right (alpha 1, not focusable).
+    val setInfoPanel = LocalSettingsInfoPanel.current
+    DisposableEffect(Unit) { onDispose { setInfoPanel(null) } }
+    if (deviceCode != null) {
+        SideEffect {
+            setInfoPanel { DeviceCodeInfoPanel(deviceCode = deviceCode, qrBitmap = qrBitmap) }
         }
+    }
 
+    Column(
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
+        modifier = Modifier.fillMaxWidth().padding(start = TvDimens.SettingsPaneStartInset, top = TvDimens.SettingsListTopPadding),
+    ) {
         if (!errorMessage.isNullOrBlank()) {
-            SettingsStateBox(message = errorMessage, modifier = Modifier.padding(top = TvDimens.SettingsDp8))
+            SettingsInfoParagraph(text = errorMessage, color = TvColors.ErrorText)
         }
-        SettingsDivider(top = TvDimens.SettingsDp18, bottom = TvDimens.SettingsDp10)
 
         if (canOpenLocal) {
             SettingsActionRow(
@@ -739,7 +587,6 @@ private fun DeviceCodePanel(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
                 enabled = isInteractive,
                 onClick = onOpenBrowser,
-                height = TvDimens.SettingsQrActionRowHeight,
                 modifier = Modifier
                     .focusRequester(authRequester)
                     .testTag(ProviderAccountBrowserFallbackButtonTag),
@@ -749,11 +596,76 @@ private fun DeviceCodePanel(
             title = stringResource(R.string.cancel),
             icon = Icons.Default.Close,
             onClick = onCancel,
-            height = TvDimens.SettingsQrActionRowHeight,
             modifier = Modifier
                 .focusRequester(cancelRequester)
                 .testTag(ProviderAccountCancelAuthTag),
         )
+    }
+}
+
+/** Right-hand info panel of the QR login: QR card, manual URL, code and countdown. */
+@Composable
+private fun DeviceCodeInfoPanel(deviceCode: ProviderDeviceCodeUiState, qrBitmap: Bitmap?) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsDp8),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = TvDimens.SettingsPaneStartInset + TvDimens.SettingsTextIndent, end = TvDimens.SettingsPaneEndPadding, top = TvDimens.SettingsDecorTitleTop),
+    ) {
+        qrBitmap?.let { bitmap ->
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .size(TvDimens.SettingsQrSize)
+                    .background(TvColors.Focus, RoundedCornerShape(TvDimens.SettingsQrRadius))
+                    .padding(TvDimens.SettingsQrPadding),
+            )
+        }
+        Text(
+            text = stringResource(R.string.device_pin_manual_url_title).uppercase(),
+            style = TvTextStyles.SettingsCategory,
+            color = TvColors.LabelPanel,
+            modifier = Modifier.padding(top = TvDimens.SettingsDp22),
+        )
+        Text(
+            text = deviceCode.verificationUrl,
+            style = TvTextStyles.SettingsInfo,
+            color = TvColors.Text,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (shouldShowDevicePinCode(deviceCode.userCode)) {
+            Text(
+                text = stringResource(R.string.tv_settings_code).uppercase(),
+                style = TvTextStyles.SettingsCategory,
+                color = TvColors.LabelPanel,
+                modifier = Modifier.padding(top = TvDimens.SettingsDp8),
+            )
+            Text(text = deviceCode.userCode, style = TvTextStyles.SettingsCode, color = TvColors.Text)
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsDp5),
+            modifier = Modifier.padding(top = TvDimens.SettingsDp8),
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Schedule,
+                contentDescription = null,
+                tint = TvColors.Accent,
+                modifier = Modifier.size(TvDimens.SettingsDp12),
+            )
+            Text(
+                text = stringResource(
+                    R.string.device_pin_counter_text,
+                    deviceCode.remainingSeconds / 60,
+                    deviceCode.remainingSeconds % 60
+                ),
+                style = TvTextStyles.Chip,
+                color = TvColors.Accent,
+            )
+        }
     }
 }
 
@@ -767,9 +679,12 @@ private fun BrowserOAuthPanel(
     val loginRequester = remember { FocusRequester() }
     FocusRequestEffect(requester = loginRequester, requestKey = Unit)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
+        modifier = Modifier.fillMaxWidth().padding(start = TvDimens.SettingsPaneStartInset, top = TvDimens.SettingsListTopPadding),
+    ) {
         if (!errorMessage.isNullOrBlank()) {
-            SettingsStateBox(message = errorMessage, modifier = Modifier.padding(bottom = TvDimens.SettingsDp8))
+            SettingsInfoParagraph(text = errorMessage, color = TvColors.ErrorText)
         }
         SettingsActionRow(
             title = stringResource(R.string.login),

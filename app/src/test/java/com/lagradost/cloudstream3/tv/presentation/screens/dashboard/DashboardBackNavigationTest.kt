@@ -1,78 +1,71 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DashboardBackNavigationTest {
-    private val home = 0
-    private val library = 2
-
     private fun resolve(
-        isOnTopBarTab: Boolean = true,
+        isMenuFocused: Boolean = false,
+        isOnHome: Boolean = true,
+        isOnTopLevelScreen: Boolean = true,
         hasPrevious: Boolean = true,
-        isTopBarVisible: Boolean = true,
-        selectedTab: Int = library,
-        isTopBarFocused: Boolean = false,
+        contentHandledBack: Boolean = false,
     ) = resolveDashboardBackAction(
-        isOnTopBarTab = isOnTopBarTab,
+        isMenuFocused = isMenuFocused,
+        isOnHome = isOnHome,
+        isOnTopLevelScreen = isOnTopLevelScreen,
         hasPreviousBackStackEntry = hasPrevious,
-        isTopBarVisible = isTopBarVisible,
-        currentTopBarSelectedTabIndex = selectedTab,
-        homeTabIndex = home,
-        isTopBarFocused = isTopBarFocused,
+        contentHandledBack = contentHandledBack,
     )
 
     @Test
-    fun `back from a scrolled tab with hidden top bar shows it and focuses the selected tab`() {
-        assertEquals(DashboardBackAction.ShowTopBarAndFocusSelectedTab, resolve(isTopBarVisible = false))
+    fun `back in the menu on home exits right away`() {
+        assertEquals(DashboardBackAction.ExitApp, resolve(isMenuFocused = true))
     }
 
     @Test
-    fun `back from tab content with visible top bar focuses the selected tab`() {
-        assertEquals(DashboardBackAction.FocusSelectedTab, resolve())
+    fun `back in the menu on another section switches to home`() {
+        assertEquals(DashboardBackAction.MenuGoHome, resolve(isMenuFocused = true, isOnHome = false))
     }
 
     @Test
-    fun `back from a grid screen pops the back stack`() {
-        assertEquals(DashboardBackAction.PopBackStack, resolve(isOnTopBarTab = false, isTopBarVisible = false))
-    }
-
-    @Test
-    fun `back on a non home tab with focused top bar goes to home`() {
-        assertEquals(DashboardBackAction.FocusHomeTab, resolve(isTopBarFocused = true))
-    }
-
-    @Test
-    fun `back on home with focused top bar exits the app`() {
-        assertEquals(DashboardBackAction.ExitApp, resolve(selectedTab = home, isTopBarFocused = true))
-    }
-
-    @Test
-    fun `back to the top bar resets the content and its remembered focus`() {
-        val entry = DashboardContentEntry()
-        var resets = 0
-        entry.resetToTop = { resets++ }
-
-        entry.resetToTop?.invoke()
-
-        assertEquals(1, resets)
-    }
-
-    @Test
-    fun `content entry has no reset until a screen registers one`() {
-        assertNull(DashboardContentEntry().resetToTop)
-    }
-
-    @Test
-    fun `reset actions are the ones that return focus to the top bar`() {
-        val resetting = setOf(
-            DashboardBackAction.ShowTopBarAndFocusSelectedTab,
-            DashboardBackAction.FocusSelectedTab,
+    fun `the menu wins over everything underneath it`() {
+        assertEquals(
+            DashboardBackAction.ExitApp,
+            resolve(isMenuFocused = true, isOnTopLevelScreen = false, contentHandledBack = true),
         )
-        assertTrue(resolve(isTopBarVisible = false) in resetting)
-        assertTrue(resolve() in resetting)
-        assertTrue(resolve(isOnTopBarTab = false) !in resetting)
+    }
+
+    @Test
+    fun `back from a sub screen pops it`() {
+        assertEquals(DashboardBackAction.PopBackStack, resolve(isOnHome = false, isOnTopLevelScreen = false))
+    }
+
+    @Test
+    fun `scrolled content consumes back and stays in content`() {
+        assertEquals(DashboardBackAction.ContentHandled, resolve(contentHandledBack = true))
+    }
+
+    @Test
+    fun `content at the top of any section opens the menu`() {
+        assertEquals(DashboardBackAction.OpenMenu, resolve())
+        assertEquals(DashboardBackAction.OpenMenu, resolve(isOnHome = false))
+    }
+
+    @Test
+    fun `a sub screen without a previous entry falls back to the menu`() {
+        assertEquals(
+            DashboardBackAction.OpenMenu,
+            resolve(isOnHome = false, isOnTopLevelScreen = false, hasPrevious = false),
+        )
+    }
+
+    @Test
+    fun `focus is restored after returning from another screen`() {
+        assertTrue(shouldRestoreDashboardFocusAfterReturn(true, false))
+        assertFalse(shouldRestoreDashboardFocusAfterReturn(true, true))
+        assertFalse(shouldRestoreDashboardFocusAfterReturn(false, false))
     }
 }

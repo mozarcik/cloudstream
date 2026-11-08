@@ -85,7 +85,7 @@ internal fun SearchSection(
 ) {
     val focusedItem = remember { mutableStateOf<MediaItemCompat?>(null) }
     val state = section.state
-    val inset = TvDimens.ScreenHorizontalPadding
+    val inset = TvDimens.ContentStartWithRail
     // A new search must not show the title of the poster focused in the previous results.
     LaunchedEffect(state is HomeFeedLoadState.Loading) {
         if (state is HomeFeedLoadState.Loading) focusedItem.value = null
@@ -102,7 +102,7 @@ internal fun SearchSection(
             title = section.title,
             state = state,
             focusedItem = focusedItem,
-            modifier = Modifier.padding(horizontal = inset),
+            modifier = Modifier.padding(start = inset, end = TvDimens.ScreenHorizontalPadding),
         )
         // The row owns SearchRowVerticalPadding of ring headroom; take it out of the header gap.
         Spacer(Modifier.height(TvDimens.FeedHeaderGridGap - TvDimens.SearchRowVerticalPadding))
@@ -217,7 +217,7 @@ private fun SearchPosterRow(
         state = rowState,
         horizontalArrangement = Arrangement.spacedBy(TvDimens.MiniGridGap),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(
-            start = TvDimens.ScreenHorizontalPadding,
+            start = TvDimens.ContentStartWithRail,
             end = TvDimens.ScreenHorizontalPadding,
             top = TvDimens.SearchRowVerticalPadding,
             bottom = TvDimens.SearchRowVerticalPadding,

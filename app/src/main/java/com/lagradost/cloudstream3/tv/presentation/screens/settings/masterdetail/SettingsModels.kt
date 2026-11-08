@@ -79,8 +79,14 @@ internal fun multiSelectEntry(
 /** Thrown from [SettingsScreen.load] to show the Error state with a title and a message. */
 class SettingsLoadException(val errorTitle: String?, message: String) : Exception(message)
 
-/** Titles of the levels above the current one ("Settings › Player"), provided by the host. */
-internal val LocalSettingsBreadcrumb = compositionLocalOf { "" }
+/**
+ * Lets the active level fill the info panel on its right (alpha 1, `Preview` background) while it
+ * is shown; pass null to clear it.
+ */
+internal val LocalSettingsInfoPanel = compositionLocalOf<(( @Composable () -> Unit)?) -> Unit> { {} }
+
+/** False inside the preview panel: its rows are drawn but can never take focus. */
+internal val LocalSettingsPanelFocusable = compositionLocalOf { true }
 
 interface SettingsScreen {
     val id: String

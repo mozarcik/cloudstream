@@ -77,7 +77,6 @@ fun settingsEntryTestTag(stableKey: String): String {
 @Composable
 internal fun ActiveSettingsPanelList(
     title: String,
-    crumb: String,
     description: String?,
     entries: List<SettingsEntry>,
     listState: LazyListState,
@@ -129,14 +128,19 @@ internal fun ActiveSettingsPanelList(
     )
 
     Column(modifier = modifier.fillMaxSize()) {
-        SettingsLevelHeader(title = title, crumb = crumb, description = description)
+        SettingsLevelHeader(title = title, description = description)
         if (entries.none { entry -> entry.type != SettingsEntryType.Message }) {
             SettingsMessageBlock(title = stringResource(R.string.no_data))
         }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(bottom = TvDimens.SettingsCardPaddingVertical),
+            contentPadding = PaddingValues(
+                start = TvDimens.SettingsPaneStartInset,
+                top = TvDimens.SettingsListTopPadding,
+                bottom = TvDimens.SettingsListTopPadding,
+            ),
+            verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
         ) {
             items(items = entries, key = { item -> item.stableKey }) { entry ->
                 SettingsEntryRow(
@@ -163,64 +167,6 @@ internal fun ActiveSettingsPanelList(
 
 internal fun SettingsEntry.isFocusable(): Boolean {
     return type != SettingsEntryType.Header && type != SettingsEntryType.Message
-}
-
-/** The dimmed, non-interactive card that shows the next level of the focused row. */
-@Composable
-internal fun PreviewSettingsPanelList(
-    title: String,
-    entries: List<SettingsEntry>,
-    modifier: Modifier = Modifier
-) {
-    val listState = rememberLazyListState()
-    Column(modifier = modifier.fillMaxSize()) {
-        SettingsPreviewHeader(title = title)
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            state = listState,
-            userScrollEnabled = false,
-            contentPadding = PaddingValues(bottom = TvDimens.SettingsCardPaddingVertical),
-        ) {
-            items(items = entries, key = { item -> item.stableKey }) { entry ->
-                when (entry.type) {
-                    SettingsEntryType.Header -> SettingsPreviewSection(text = entry.title)
-                    else -> SettingsPreviewRow(
-                        title = entry.title,
-                        subtitle = previewSubtitle(entry),
-                        // Radio / multi-select: the chosen option gets a check mark (the mockup preview is empty).
-                        leading = previewSelectionMark(entry),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun previewSelectionMark(entry: SettingsEntry): (@Composable () -> Unit)? {
-    val selected = when (entry.type) {
-        SettingsEntryType.Radio -> entry.showCheckmark
-        SettingsEntryType.MultiSelect -> entry.toggleValue
-        else -> false
-    }
-    if (!selected) return null
-    return {
-        Icon(
-            imageVector = Icons.Filled.Check,
-            contentDescription = null,
-            tint = TvColors.SettingsPreviewText,
-            modifier = Modifier.size(TvDimens.SettingsDp14),
-        )
-    }
-}
-
-@Composable
-private fun previewSubtitle(entry: SettingsEntry): String? {
-    return when (entry.type) {
-        SettingsEntryType.Toggle -> stringResource(if (entry.toggleValue) R.string.tv_settings_on else R.string.tv_settings_off)
-        SettingsEntryType.Slider -> entry.valueText ?: entry.sliderValue.toString()
-        else -> entry.subtitle
-    }
 }
 
 @Composable
@@ -305,91 +251,51 @@ internal fun SettingsEntryRow(
         } else {
             null
         }
+    // Initials circles carry their own color (plugin palette); other circles use the neutral fill.
+    val circleColor = entry.tileColorArgb?.let { Color(it) }
 
-    when (entry.type) {
-        SettingsEntryType.Radio -> TvListRow(
-            title = entry.title,
-            onClick = onClick,
-            height = TvDimens.SettingsRadioRowHeight,
-            horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-            gap = TvDimens.SettingsRowGap,
-            leadingIndicator = TvRowLeading.Radio(selected = entry.showCheckmark),
-            trailing = when {
-                entry.trailingColorArgb != null -> TvRowTrailing.Custom { _ -> SettingsColorSwatch(entry.trailingColorArgb) }
-                !entry.subtitle.isNullOrBlank() -> TvRowTrailing.Custom { focused ->
-                    Text(
-                        text = entry.subtitle,
-                        style = TvTextStyles.RowSubtitle,
-                        color = if (focused) TvColors.OnFocusSecondary else TvColors.LabelPanel,
-                        maxLines = 1,
-                    )
-                }
-                else -> TvRowTrailing.None
-            },
-            modifier = rowModifier,
-        )
-        SettingsEntryType.MultiSelect -> TvListRow(
-            title = entry.title,
-            subtitle = entry.subtitle,
-            onClick = onClick,
-            height = TvDimens.SettingsMultiRowHeight,
-            horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-            gap = TvDimens.SettingsRowGap,
-            leadingIndicator = TvRowLeading.Checkbox(checked = entry.toggleValue),
-            modifier = rowModifier,
-        )
-        SettingsEntryType.Slider -> TvListRow(
-            title = entry.title,
-            subtitle = entry.subtitle,
-            onClick = onClick,
-            height = TvDimens.SettingsSliderRowHeight,
-            verticalPadding = TvDimens.SettingsSliderRowVerticalPadding,
-            verticalAlignment = Alignment.Top,
-            horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-            gap = TvDimens.SettingsRowGap,
-            leading = leading,
-            bodyContent = { focused ->
-                SettingsSlider(
-                    entry = entry,
-                    focused = focused,
+    val widget: SettingsRowWidget = when {
+        entry.type == SettingsEntryType.Toggle -> SettingsRowWidget.Switch(on = entry.toggleValue)
+        entry.type == SettingsEntryType.Radio -> when {
+            entry.trailingColorArgb != null -> SettingsRowWidget.Custom { _ ->
+                SettingsColorSwatch(entry.trailingColorArgb)
+            }
+            else -> SettingsRowWidget.Radio(selected = entry.showCheckmark)
+        }
+        entry.type == SettingsEntryType.MultiSelect -> SettingsRowWidget.Checkbox(checked = entry.toggleValue)
+        entry.type == SettingsEntryType.Slider -> SettingsRowWidget.None
+        entry.trailingIcon != null && entry.nextScreenId != null -> SettingsRowWidget.Custom { _ ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = entry.trailingIcon,
+                    contentDescription = null,
+                    modifier = Modifier.size(TvDimens.SettingsItemGlyphSize),
                 )
-            },
-            modifier = rowModifier,
-        )
-        else -> TvListRow(
-            title = entry.title,
-            subtitle = entry.subtitle,
-            onClick = onClick,
-            height = if (entry.compactRow) TvDimens.SettingsAccountRowHeight else TvDimens.RowHeightLarge,
-            horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-            gap = TvDimens.SettingsRowGap,
-            trailingIconSize = TvDimens.SettingsRowChevronSize,
-            leading = leading,
-            trailing = when {
-                entry.type == SettingsEntryType.Toggle -> TvRowTrailing.Toggle(on = entry.toggleValue)
-                entry.trailingIcon != null && entry.nextScreenId != null -> TvRowTrailing.Custom { _ ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsRowGap),
-                    ) {
-                        Icon(
-                            imageVector = entry.trailingIcon,
-                            contentDescription = null,
-                            modifier = Modifier.size(TvDimens.SettingsRowIconSize),
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            modifier = Modifier.size(TvDimens.SettingsRowChevronSize),
-                        )
-                    }
-                }
-                entry.nextScreenId != null -> TvRowTrailing.Chevron
-                else -> TvRowTrailing.None
-            },
-            modifier = rowModifier,
-        )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(TvDimens.SettingsControlBox),
+                )
+            }
+        }
+        entry.nextScreenId != null -> SettingsRowWidget.Chevron
+        else -> SettingsRowWidget.None
     }
+
+    SettingsListRow(
+        title = entry.title,
+        summary = entry.subtitle,
+        onClick = onClick,
+        leading = leading,
+        leadingCircleColor = circleColor,
+        widget = widget,
+        body = if (entry.type == SettingsEntryType.Slider) {
+            { focused -> SettingsSlider(entry = entry, focused = focused) }
+        } else {
+            null
+        },
+        modifier = rowModifier,
+    )
 }
 
 private fun SettingsEntry.hasLeadingVisual(): Boolean {
@@ -416,8 +322,8 @@ private fun SettingsEntryLeading(entry: SettingsEntry) {
                     painter = painter,
                     contentDescription = null,
                     modifier = Modifier
-                        .size(TvDimens.SettingsPluginTileSize)
-                        .clip(RoundedCornerShape(TvDimens.SettingsPluginTileRadius)),
+                        .size(TvDimens.SettingsItemIconSize)
+                        .clip(CircleShape),
                     contentScale = ContentScale.Fit
                 )
             }
@@ -428,14 +334,13 @@ private fun SettingsEntryLeading(entry: SettingsEntry) {
 
 @Composable
 private fun SettingsEntryFallbackLeading(entry: SettingsEntry, tint: Color) {
-    val size = TvDimens.SettingsRowIconSize
+    val size = TvDimens.SettingsItemGlyphSize
     when {
-        entry.initials != null -> SettingsInitialsTile(
-            initials = entry.initials,
-            size = if (entry.tileColorArgb != null) TvDimens.SettingsPluginTileSize else TvDimens.SettingsTileSize,
-            radius = if (entry.tileColorArgb != null) TvDimens.SettingsPluginTileRadius else TvDimens.SettingsTileRadius,
-            background = entry.tileColorArgb?.let { Color(it) } ?: TvColors.Tile,
-            contentColor = if (entry.tileColorArgb != null) Color.White else TvColors.Meta,
+        entry.initials != null -> Text(
+            text = entry.initials,
+            style = TvTextStyles.SettingsTile,
+            color = if (entry.tileColorArgb != null) Color.White else TvColors.Text,
+            maxLines = 1,
         )
         entry.icon != null -> Icon(
             imageVector = entry.icon,
@@ -470,7 +375,7 @@ internal fun settingsInitials(name: String): String {
 private fun SettingsColorSwatch(colorArgb: Int) {
     Box(
         modifier = Modifier
-            .size(TvDimens.SettingsRowIconSize)
+            .size(TvDimens.SettingsItemGlyphSize)
             .border(TvDimens.SettingsDp1, TvColors.RadioBorder, CircleShape)
             .padding(TvDimens.SettingsDp1)
             .clip(CircleShape)
@@ -478,52 +383,35 @@ private fun SettingsColorSwatch(colorArgb: Int) {
     )
 }
 
-/** Inline slider (mockup SettingsSlider): arrows + track + value; thumb and arrows only on focus. */
+/** Track (2 dp) + thumb (12 dp) under the row text and the value in a 36 dp box; Left / Right change it. */
 @Composable
 private fun SettingsSlider(entry: SettingsEntry, focused: Boolean) {
     val min = entry.sliderRange.first
     val max = entry.sliderRange.last.coerceAtLeast(min + 1)
     val progress = ((entry.sliderValue - min).toFloat() / (max - min).toFloat()).coerceIn(0f, 1f)
-    val trackColor = if (focused) Color(0x260E1015) else Color(0x24FFFFFF)
-    val fillColor = if (focused) TvColors.ToggleOn else TvColors.RadioBorder
-    val trackHeight = if (focused) TvDimens.SettingsSliderTrackFocused else TvDimens.SettingsSliderTrack
-    val thumb = TvDimens.SettingsSliderThumb
+    val trackColor = if (focused) TvColors.OnFocusSecondary else TvColors.ProgressTrack
+    val fillColor = if (focused) TvColors.OnFocus else TvColors.Text
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsSliderGap),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = TvDimens.SettingsSliderTopGap),
+            .padding(top = TvDimens.SettingsDp8, end = TvDimens.SettingsDp22),
     ) {
-        if (focused) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = null,
-                modifier = Modifier.size(TvDimens.SettingsSliderArrow),
-            )
-        }
         BoxWithTrack(
             progress = progress,
             trackColor = trackColor,
             fillColor = fillColor,
-            trackHeight = trackHeight,
-            thumb = if (focused) thumb else null,
+            trackHeight = TvDimens.SettingsDp2,
+            thumb = TvDimens.SettingsSliderThumb,
             modifier = Modifier.weight(1f),
         )
-        if (focused) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                modifier = Modifier.size(TvDimens.SettingsSliderArrow),
-            )
-        }
         Text(
             text = entry.valueText ?: entry.sliderValue.toString(),
-            style = if (focused) TvTextStyles.SettingsSliderValue else TvTextStyles.Row,
-            color = if (focused) TvColors.OnFocus else TvColors.Meta,
+            style = TvTextStyles.SettingsItemSummary,
+            color = if (focused) TvColors.OnFocus else TvColors.Text,
             maxLines = 1,
-            modifier = Modifier.width(TvDimens.SettingsSliderValueWidth),
+            modifier = Modifier.width(TvDimens.SettingsDp36),
             textAlign = androidx.compose.ui.text.style.TextAlign.End,
         )
     }
@@ -567,48 +455,48 @@ private fun BoxWithTrack(
     }
 }
 
-/** Loading state of an active level: header + skeleton rows. */
+/** Loading state of a level: header + skeleton rows. */
 @Composable
 internal fun SettingsLoadingPanel(
     title: String,
-    crumb: String,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxSize()) {
-        SettingsLevelHeader(title = title, crumb = crumb)
+        SettingsLevelHeader(title = title)
         SettingsSkeletonRows()
     }
 }
 
-/** Error state of an active level: message box + a focused "Try again" row. */
+/** Error state of a level: error paragraph + a focused "Try again" row + illustration. */
 @Composable
 internal fun SettingsErrorPanel(
     title: String,
-    crumb: String,
     message: String,
     errorTitle: String?,
     onRetry: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    requestFocus: Boolean = true,
 ) {
     val retryRequester = remember { FocusRequester() }
-    TvInitialFocusEffect(requester = retryRequester)
+    if (requestFocus) TvInitialFocusEffect(requester = retryRequester)
     Column(modifier = modifier.fillMaxSize()) {
-        SettingsLevelHeader(title = title, crumb = crumb)
-        SettingsStateBox(
-            title = errorTitle ?: stringResource(R.string.error),
-            message = message,
-        )
-        Spacer(modifier = Modifier.height(TvDimens.SettingsDp4))
-        SettingsActionRow(
-            title = stringResource(R.string.tv_player_retry),
-            icon = Icons.Default.Refresh,
-            onClick = onRetry,
-            modifier = Modifier.focusRequester(retryRequester),
-        )
+        SettingsLevelHeader(title = title)
+        Column(modifier = Modifier.padding(start = TvDimens.SettingsPaneStartInset)) {
+            SettingsInfoParagraph(text = errorTitle ?: stringResource(R.string.error), color = TvColors.ErrorText)
+            SettingsInfoParagraph(text = message, color = TvColors.ErrorText)
+            SettingsActionRow(
+                title = stringResource(R.string.tv_player_retry),
+                icon = Icons.Default.Refresh,
+                onClick = onRetry,
+                modifier = Modifier.focusRequester(retryRequester),
+            )
+        }
+        Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Image(
+                painter = painterResource(R.drawable.tv_empty_error),
+                contentDescription = null,
+                modifier = Modifier.size(TvDimens.StateIllustrationSize),
+            )
+        }
     }
-}
-
-@Composable
-internal fun EmptyPreviewScreen(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize())
 }

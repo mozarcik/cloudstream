@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
 
-import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,21 +8,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsFocused
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.pressKey
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
+import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
@@ -36,6 +27,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 private const val DashboardProfileTestHomeTag = "dashboard_profile_test_home"
+private const val DashboardProfileTestHomeButtonTag = "dashboard_profile_test_home_button"
 private const val ProfileAccountDefaultTag = "profile_account_0"
 
 @RunWith(AndroidJUnit4::class)
@@ -44,7 +36,7 @@ class DashboardProfileNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
-    private var observedRoute: String? = null
+    private val support by lazy { DashboardNavTestSupport(composeRule) }
     private lateinit var originalAccounts: Array<DataStoreHelper.Account>
     private var originalSelectedKeyIndex: Int = 0
 
@@ -74,24 +66,20 @@ class DashboardProfileNavigationTest {
     }
 
     @Test
-    fun avatarOpenProfile_downFocusesFirstAccount() {
+    fun menuProfileRow_opensProfile_andFocusesFirstAccount() {
         setDashboardContent()
 
-        composeRule.onNodeWithTag(dashboardTopBarTabTestTag(Screens.Home))
-            .assertIsFocused()
-            .performKeyInput {
-                pressKey(androidx.compose.ui.input.key.Key.DirectionLeft)
-            }
-        waitUntilNodeFocused(DashboardTopBarAvatarTestTag)
+        // Left from the first column opens the menu; Up from the current row reaches the pinned profile row.
+        support.openMenuFrom(DashboardProfileTestHomeButtonTag, tvNavScreenTestTag(TvNavTarget.Home))
+        support.pressKeyOn(tvNavScreenTestTag(TvNavTarget.Home), androidx.compose.ui.input.key.Key.DirectionUp)
+        support.waitUntilNodeFocused(TvNavProfileTestTag)
 
-        composeRule.onNodeWithTag(DashboardTopBarAvatarTestTag)
-            .performSemanticsAction(SemanticsActions.OnClick)
-        waitUntilRoute(Screens.Profile)
+        support.click(TvNavProfileTestTag)
+        support.waitUntilRoute(Screens.Profile)
+        support.waitUntilNodeGone(TvNavProfileTestTag)
 
-        composeRule.onNodeWithTag(DashboardTopBarAvatarTestTag).performKeyInput {
-            pressKey(androidx.compose.ui.input.key.Key.DirectionDown)
-        }
-        waitUntilNodeFocused(ProfileAccountDefaultTag)
+        // The menu closed and the profile screen put focus on the active account.
+        support.waitUntilNodeFocused(ProfileAccountDefaultTag)
     }
 
     private fun setDashboardContent() {
@@ -113,8 +101,8 @@ class DashboardProfileNavigationTest {
             }
         }
 
-        waitUntilRoute(Screens.Home)
-        waitUntilNodeFocused(dashboardTopBarTabTestTag(Screens.Home))
+        support.waitUntilRoute(Screens.Home)
+        support.waitUntilNodeFocused(DashboardProfileTestHomeButtonTag)
     }
 
     @Composable
@@ -125,7 +113,7 @@ class DashboardProfileNavigationTest {
     ) {
         LaunchedEffect(navController) {
             navController.addOnDestinationChangedListener { _, destination, _ ->
-                observedRoute = destination.route
+                support.observedRoute = destination.route
             }
         }
 
@@ -134,64 +122,26 @@ class DashboardProfileNavigationTest {
             startDestination = Screens.Home(),
             modifier = modifier,
         ) {
-            composable(Screens.Home()) {
-                ProfileTestHomeScreen(
-                    updateTopBarVisibility = context.updateTopBarVisibility,
-                    updateTopBarFocusable = context.updateTopBarFocusable,
-                    updateTopBarDownNavigationEnabled = context.updateTopBarDownNavigationEnabled,
-                )
+            dashboardComposable(Screens.Home()) {
+                ProfileTestHomeScreen()
             }
-            composable(Screens.Profile()) {
-                ProfileScreen(
-                    topBarFocusRequester = context.topBarSelectedFocusRequester,
-                    isTopBarFocused = context.isTopBarFocused,
-                    onTopBarVisibilityChanged = context.updateTopBarVisibility,
-                    onTopBarFocusableChanged = context.updateTopBarFocusable,
-                    onTopBarDownNavigationEnabledChanged = context.updateTopBarDownNavigationEnabled,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            dashboardComposable(Screens.Profile()) {
+                ProfileScreen(modifier = Modifier.fillMaxSize())
             }
         }
     }
 
     @Composable
-    private fun ProfileTestHomeScreen(
-        updateTopBarVisibility: (Boolean) -> Unit,
-        updateTopBarFocusable: (Boolean) -> Unit,
-        updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
-    ) {
-        LaunchedEffect(Unit) {
-            updateTopBarVisibility(true)
-            updateTopBarFocusable(true)
-            updateTopBarDownNavigationEnabled(true)
-        }
-
+    private fun ProfileTestHomeScreen() {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(DashboardProfileTestHomeTag),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "Home")
+            Button(onClick = {}, modifier = Modifier.testTag(DashboardProfileTestHomeButtonTag)) {
+                Text(text = "Home")
+            }
         }
-    }
-
-    private fun waitUntilRoute(screen: Screens, timeoutMillis: Long = 2_000L) {
-        val expectedRoute = screen()
-        composeRule.waitUntil(timeoutMillis) {
-            observedRoute == expectedRoute
-        }
-    }
-
-    private fun waitUntilNodeFocused(tag: String, timeoutMillis: Long = 2_000L) {
-        composeRule.waitUntil(timeoutMillis) {
-            composeRule
-                .onAllNodes(hasTestTag(tag), useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .any { node ->
-                    node.config.getOrElse(SemanticsProperties.Focused) { false }
-                }
-        }
-        composeRule.onNodeWithTag(tag, useUnmergedTree = true).assertIsFocused()
     }
 }

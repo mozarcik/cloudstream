@@ -134,7 +134,7 @@ internal class PlayerOnlineSubtitlesDownloadLoader(
         loadJob = null
         firstAvailableSubtitleJob = context.coroutineScope.launch {
             val providerResults = providers.amap { provider ->
-                provider to when (val result = Resource.fromResult(provider.search(request))) {
+                provider to when (val result = Resource.fromResult(provider.searchWithYearFallback(request))) {
                     is Resource.Success -> result.value
                     is Resource.Loading -> emptyList()
                     is Resource.Failure -> emptyList()

@@ -268,7 +268,7 @@ internal fun ContinueWatchingHeroLoadedState(
             horizontalArrangement = Arrangement.spacedBy(ContinueWatchingCardSpacing),
             contentPadding = PaddingValues(
                 start = HomeContentHorizontalPadding,
-                end = HomeContentHorizontalPadding,
+                end = TvDimens.ScreenHorizontalPadding,
                 top = ContinueWatchingCardsVerticalInset,
                 bottom = ContinueWatchingCardsVerticalInset,
             ),
@@ -460,7 +460,7 @@ private fun ContinueWatchingMetaRow(
         horizontalArrangement = Arrangement.spacedBy(TvDimens.HeroMetaGap),
     ) {
         parts.forEach { part ->
-            Text(text = part, style = TvTextStyles.HeroMeta, color = TvColors.Meta)
+            Text(text = part, style = TvTextStyles.HeroMeta, color = TvColors.Meta, maxLines = 1, softWrap = false)
             Text(text = "•", style = TvTextStyles.HeroMeta, color = ContinueWatchingMetaDot)
         }
         TvProgressBar(
@@ -469,7 +469,7 @@ private fun ContinueWatchingMetaRow(
             modifier = Modifier.width(ContinueWatchingMetaProgressWidth),
         )
         if (remaining != null) {
-            Text(text = remaining, style = TvTextStyles.HeroMeta, color = TvColors.Meta)
+            Text(text = remaining, style = TvTextStyles.HeroMeta, color = TvColors.Meta, maxLines = 1, softWrap = false)
         }
     }
 }

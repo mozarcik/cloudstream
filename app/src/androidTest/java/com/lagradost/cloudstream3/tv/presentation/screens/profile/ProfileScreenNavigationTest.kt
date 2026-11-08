@@ -69,12 +69,7 @@ class ProfileScreenNavigationTest {
         composeRule.setContent {
             MaterialTheme {
                 val viewModel = remember { ProfileViewModel() }
-                val topBarFocusRequester = remember { FocusRequester() }
                 ProfileScreen(
-                    topBarFocusRequester = topBarFocusRequester,
-                    onTopBarVisibilityChanged = {},
-                    onTopBarFocusableChanged = {},
-                    onTopBarDownNavigationEnabledChanged = {},
                     viewModel = viewModel,
                 )
             }

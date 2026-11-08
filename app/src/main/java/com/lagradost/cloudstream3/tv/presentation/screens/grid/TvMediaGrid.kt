@@ -98,7 +98,7 @@ internal fun TvMediaGrid(
         state = gridState,
         columns = GridCells.Fixed(TvDimens.GridColumns),
         contentPadding = PaddingValues(
-            start = TvDimens.ScreenHorizontalPadding,
+            start = TvDimens.ContentStartWithRail,
             end = TvDimens.ScreenHorizontalPadding,
             top = TvDimens.GridContentTop - TvDimens.GridHeaderTopPadding - TvDimens.GridHeaderHeight -
                 TvDimens.GridHeaderBottomPadding,

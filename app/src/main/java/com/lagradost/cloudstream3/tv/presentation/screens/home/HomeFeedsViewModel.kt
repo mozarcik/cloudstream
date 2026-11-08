@@ -24,6 +24,7 @@ class HomeFeedsViewModel(
     val uiState = _uiState.asStateFlow()
 
     private var homeLoadJob: Job? = null
+    private var currentApi: MainAPI? = null
 
     init {
         observeSelectedSource()
@@ -40,6 +41,7 @@ class HomeFeedsViewModel(
     }
 
     private fun loadHomeForApi(api: MainAPI) {
+        currentApi = api
         homeLoadJob?.cancel()
         homeLoadJob = viewModelScope.launch {
             _uiState.update { state ->
@@ -78,6 +80,12 @@ class HomeFeedsViewModel(
                 }
             }
         }
+    }
+
+    /** Reloads one feed in place (OK on an empty / failed feed); the row keeps its focus meanwhile. */
+    fun refreshFeed(feed: FeedCategory) {
+        val api = currentApi ?: return
+        viewModelScope.launch { loadFeedSection(api, feed) }
     }
 
     private suspend fun loadFeedSection(

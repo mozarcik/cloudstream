@@ -97,8 +97,6 @@ class HomeScreenV2ContinueWatchingRefreshTest {
                         onMediaClick = {},
                         onContinueWatchingPlay = {},
                         onOpenFeedGrid = {},
-                        onScroll = {},
-                        topBarFocusRequester = FocusRequester(),
                         sourcesViewModelFactory = HomeSourcesViewModelFactory(
                             sourcePreferencesRepository = FakeSourcePreferencesRepository(),
                             homeSourceSelectionRepository = FakeHomeSourceSelectionRepository(
@@ -110,9 +108,6 @@ class HomeScreenV2ContinueWatchingRefreshTest {
                             continueWatchingImagePrefetcher = ContinueWatchingImagePrefetcher(
                                 composeRule.activity.applicationContext
                             ),
-                        ),
-                        featuredViewModelFactory = HomeFeaturedViewModelFactory(
-                            featuredRepository = FakeFeaturedRepository()
                         ),
                         feedsViewModelFactory = HomeFeedsViewModelFactory(
                             feedRepository = FakeFeedRepository()
@@ -207,8 +202,6 @@ class HomeScreenV2ContinueWatchingRefreshTest {
                         onMediaClick = {},
                         onContinueWatchingPlay = {},
                         onOpenFeedGrid = {},
-                        onScroll = {},
-                        topBarFocusRequester = FocusRequester(),
                         sourcesViewModelFactory = HomeSourcesViewModelFactory(
                             sourcePreferencesRepository = FakeSourcePreferencesRepository(),
                             homeSourceSelectionRepository = FakeHomeSourceSelectionRepository(
@@ -220,9 +213,6 @@ class HomeScreenV2ContinueWatchingRefreshTest {
                             continueWatchingImagePrefetcher = ContinueWatchingImagePrefetcher(
                                 composeRule.activity.applicationContext
                             ),
-                        ),
-                        featuredViewModelFactory = HomeFeaturedViewModelFactory(
-                            featuredRepository = FakeFeaturedRepository()
                         ),
                         feedsViewModelFactory = HomeFeedsViewModelFactory(
                             feedRepository = FakeFeedRepository()
@@ -515,8 +505,6 @@ private fun HomeScreenWithFakePlayerHarness(
                 isFakePlayerVisible = true
             },
             onOpenFeedGrid = {},
-            onScroll = {},
-            topBarFocusRequester = FocusRequester(),
             sourcesViewModelFactory = HomeSourcesViewModelFactory(
                 sourcePreferencesRepository = FakeSourcePreferencesRepository(),
                 homeSourceSelectionRepository = FakeHomeSourceSelectionRepository(
@@ -528,9 +516,6 @@ private fun HomeScreenWithFakePlayerHarness(
                 continueWatchingImagePrefetcher = ContinueWatchingImagePrefetcher(
                     composeRuleContext()
                 ),
-            ),
-            featuredViewModelFactory = HomeFeaturedViewModelFactory(
-                featuredRepository = FakeFeaturedRepository()
             ),
             feedsViewModelFactory = HomeFeedsViewModelFactory(
                 feedRepository = FakeFeedRepository()

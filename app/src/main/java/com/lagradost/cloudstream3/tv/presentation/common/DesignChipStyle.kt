@@ -20,14 +20,14 @@ object DesignChipStyle {
     val scale get() = FilterChipDefaults.scale(focusedScale = 1f)
 
     @Composable
-    fun colors(accent: Color) = FilterChipDefaults.colors(
+    fun colors(accent: Color, selectedFill: Color = accent.copy(alpha = 0.10f)) = FilterChipDefaults.colors(
         containerColor = TvColors.FillChip,
         contentColor = TvColors.Body,
         focusedContainerColor = MaterialTheme.colorScheme.inverseSurface,
         focusedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
         pressedContainerColor = MaterialTheme.colorScheme.inverseSurface,
         pressedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        selectedContainerColor = accent.copy(alpha = 0.10f),
+        selectedContainerColor = selectedFill,
         selectedContentColor = accent,
         focusedSelectedContainerColor = MaterialTheme.colorScheme.inverseSurface,
         focusedSelectedContentColor = MaterialTheme.colorScheme.inverseOnSurface,
@@ -36,12 +36,12 @@ object DesignChipStyle {
     )
 
     @Composable
-    fun border(accent: Color) = TvDimens.ChipBorderWidth.let { width ->
+    fun border(accent: Color, selectedBorderColor: Color = accent) = TvDimens.ChipBorderWidth.let { width ->
         FilterChipDefaults.border(
             border = Border(BorderStroke(width, TvColors.BorderChip), shape = CircleShape),
             focusedBorder = Border(BorderStroke(width, MaterialTheme.colorScheme.inverseSurface), shape = CircleShape),
             pressedBorder = Border(BorderStroke(width, MaterialTheme.colorScheme.inverseSurface), shape = CircleShape),
-            selectedBorder = Border(BorderStroke(width, accent), shape = CircleShape),
+            selectedBorder = Border(BorderStroke(width, selectedBorderColor), shape = CircleShape),
             focusedSelectedBorder = Border(BorderStroke(width, MaterialTheme.colorScheme.inverseSurface), shape = CircleShape),
             pressedSelectedBorder = Border(BorderStroke(width, MaterialTheme.colorScheme.inverseSurface), shape = CircleShape),
         )

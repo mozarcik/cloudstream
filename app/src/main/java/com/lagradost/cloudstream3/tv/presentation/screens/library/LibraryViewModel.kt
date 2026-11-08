@@ -36,6 +36,46 @@ internal fun resolveLibraryGridRatingHundred(item: SyncAPI.LibraryItem): Int? {
     return item.personalRating?.toInt(100) ?: item.score?.toInt(100)
 }
 
+/** The library's lists as the TV UI shows them: favourites / watching / plan to watch first. */
+internal fun SyncAPI.LibraryMetadata.toSectionUiStates(): PersistentList<LibrarySectionUiState> {
+    val pages = allLibraryLists.map { list ->
+        SyncAPI.Page(list.name, list.items)
+    }
+    val supportedSortingMethods = resolveSupportedLibrarySortingMethods(supportedListSorting)
+
+    val orderedPages = pages
+        .withIndex()
+        .sortedWith(
+            compareBy<IndexedValue<SyncAPI.Page>>(
+                { pagePriority(it.value.title) },
+                { it.index }
+            )
+        )
+        .map { it.value }
+
+    val context = CloudStreamApp.context
+    return orderedPages.mapIndexed { index, page ->
+        val resolvedTitle = page.title.asStringNull(context) ?: page.title.toString()
+        val gridItems = page.items.mapIndexed { itemIndex, item ->
+            LibraryGridItemUiState(
+                mediaItem = item.toMediaItemCompat(),
+                originalIndex = itemIndex,
+                name = item.name,
+                personalRatingHundred = resolveLibraryGridRatingHundred(item),
+                lastUpdatedUnixTime = item.lastUpdatedUnixTime,
+                releaseDateUnixTimeMs = item.releaseDate?.time,
+            )
+        }.toPersistentList()
+        LibrarySectionUiState(
+            id = "${resolvedTitle}_${index}",
+            title = resolvedTitle,
+            previewItems = gridItems.map { item -> item.mediaItem }.toPersistentList(),
+            gridItems = gridItems,
+            supportedSortingMethods = supportedSortingMethods,
+        )
+    }.toPersistentList()
+}
+
 @Immutable
 data class LibraryScreenUiState(
     val isLoading: Boolean = true,
@@ -177,44 +217,7 @@ class LibraryViewModel : ViewModel() {
 
             syncApi.requireLibraryRefresh = false
 
-            val pages = library.allLibraryLists.map { list ->
-                SyncAPI.Page(list.name, list.items)
-            }
-            val supportedSortingMethods = resolveSupportedLibrarySortingMethods(
-                library.supportedListSorting
-            )
-
-            val orderedPages = pages
-                .withIndex()
-                .sortedWith(
-                    compareBy<IndexedValue<SyncAPI.Page>>(
-                        { pagePriority(it.value.title) },
-                        { it.index }
-                    )
-                )
-                .map { it.value }
-
-            val context = CloudStreamApp.context
-            val sections = orderedPages.mapIndexed { index, page ->
-                val resolvedTitle = page.title.asStringNull(context) ?: page.title.toString()
-                val gridItems = page.items.mapIndexed { itemIndex, item ->
-                    LibraryGridItemUiState(
-                        mediaItem = item.toMediaItemCompat(),
-                        originalIndex = itemIndex,
-                        name = item.name,
-                        personalRatingHundred = resolveLibraryGridRatingHundred(item),
-                        lastUpdatedUnixTime = item.lastUpdatedUnixTime,
-                        releaseDateUnixTimeMs = item.releaseDate?.time,
-                    )
-                }.toPersistentList()
-                LibrarySectionUiState(
-                    id = "${resolvedTitle}_${index}",
-                    title = resolvedTitle,
-                    previewItems = gridItems.map { item -> item.mediaItem }.toPersistentList(),
-                    gridItems = gridItems,
-                    supportedSortingMethods = supportedSortingMethods,
-                )
-            }.toPersistentList()
+            val sections = library.toSectionUiStates()
 
             _uiState.update { state ->
                 state.copy(
@@ -243,33 +246,33 @@ class LibraryViewModel : ViewModel() {
         return apis.firstOrNull { api -> api.name == lastSelection } ?: apis.firstOrNull()
     }
 
-    private fun pagePriority(title: UiText): Int {
-        val stringRes = (title as? UiText.StringResource)?.resId
-        return when (stringRes) {
-            R.string.favorites_list_name -> PRIORITY_FAVORITES
-            R.string.type_watching -> PRIORITY_WATCHING
-            R.string.type_plan_to_watch -> PRIORITY_PLAN_TO_WATCH
-            else -> fallbackPriority(title)
-        }
-    }
-
-    private fun fallbackPriority(title: UiText): Int {
-        val normalized = title
-            .asStringNull(CloudStreamApp.context)
-            ?.trim()
-            ?.lowercase(Locale.ROOT)
-            ?: return PRIORITY_DEFAULT
-
-        return when (normalized) {
-            "favorites", "ulubione" -> PRIORITY_FAVORITES
-            "watching", "w trakcie" -> PRIORITY_WATCHING
-            "plan to watch", "planowane" -> PRIORITY_PLAN_TO_WATCH
-            else -> PRIORITY_DEFAULT
-        }
-    }
-
     override fun onCleared() {
         MainActivity.reloadLibraryEvent -= reloadLibraryObserver
         super.onCleared()
+    }
+}
+
+private fun pagePriority(title: UiText): Int {
+    val stringRes = (title as? UiText.StringResource)?.resId
+    return when (stringRes) {
+        R.string.favorites_list_name -> PRIORITY_FAVORITES
+        R.string.type_watching -> PRIORITY_WATCHING
+        R.string.type_plan_to_watch -> PRIORITY_PLAN_TO_WATCH
+        else -> fallbackPriority(title)
+    }
+}
+
+private fun fallbackPriority(title: UiText): Int {
+    val normalized = title
+        .asStringNull(CloudStreamApp.context)
+        ?.trim()
+        ?.lowercase(Locale.ROOT)
+        ?: return PRIORITY_DEFAULT
+
+    return when (normalized) {
+        "favorites", "ulubione" -> PRIORITY_FAVORITES
+        "watching", "w trakcie" -> PRIORITY_WATCHING
+        "plan to watch", "planowane" -> PRIORITY_PLAN_TO_WATCH
+        else -> PRIORITY_DEFAULT
     }
 }

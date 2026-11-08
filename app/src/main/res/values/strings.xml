@@ -531,7 +531,6 @@
     <string name="tv_crash_reporting_builds_summary">Crash reporting is enabled in debug, stable and prerelease builds.</string>
     <string name="tv_crash_reporting_privacy_summary">Reports avoid intentionally attaching full URLs, tokens or cookies.</string>
     <string name="tv_home_back">Back</string>
-    <string name="tv_press_back_again_to_exit">Press back again to exit</string>
     <string name="tv_home_empty_continue_watching">Nothing to continue yet</string>
     <string name="tv_home_no_feeds">No feeds available for this source</string>
     <string name="tv_home_no_feeds_message">%1$s doesn\'t provide a home page. Pick another source above.</string>
@@ -1025,4 +1024,18 @@
     <string name="tv_player_video_adaptive_source">Adaptive stream • %1$s</string>
     <string name="tv_player_aspect_stretch">Stretch</string>
     <string name="tv_player_aspect_zoom">Zoom</string>
+    <string name="tv_menu_switch_profile">Switch profile</string>
+    <string name="tv_menu_no_lists">No lists</string>
+    <string name="tv_feed_show_all">Show all</string>
+    <string name="tv_feed_show_all_subtitle">%1$s · %2$s</string>
+    <string name="tv_feed_show_all_hint">Show all · full %1$s list</string>
+    <string name="tv_home_all_sources">All sources (%1$d)</string>
+    <string name="tv_sources_panel_title">Sources</string>
+    <string name="tv_sources_panel_subtitle">%1$d installed · hold OK to pin to Home</string>
+    <string name="tv_sources_group_pinned">Pinned on Home</string>
+    <string name="tv_sources_group_movies_series">Movies &amp; series</string>
+    <string name="tv_sources_group_live">Live</string>
+    <string name="tv_feed_empty_title">No items in this feed</string>
+    <string name="tv_feed_empty_hint">↓ next feed  •  OK — refresh</string>
+    <string name="tv_feed_error_title">Failed to load this feed</string>
 </resources>

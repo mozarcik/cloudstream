@@ -76,7 +76,11 @@ class SubtitleRepo(override val api: SubtitleAPI) : AuthRepo(api) {
                 found
             }
 
-            if (cached != null) return@runCatching cached
+            if (cached != null) {
+                android.util.Log.i("TvSubsSearch", "[$idPrefix] cache hit: ${cached.size} results")
+                return@runCatching cached
+            }
+            android.util.Log.i("TvSubsSearch", "[$idPrefix] request: $query")
             val returnValue = api.search(freshAuth(), query) ?: emptyList()
 
             // only cache valid return values

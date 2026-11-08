@@ -10,7 +10,7 @@ import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.collections.immutable.toPersistentSet
 import java.util.Locale
 
-private const val QUICK_SOURCES_LIMIT = 10
+private const val QUICK_SOURCES_LIMIT = 5
 
 internal data class HomeSourcesRefreshResult(
     val state: HomeSourcesUiState,

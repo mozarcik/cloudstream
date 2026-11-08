@@ -20,7 +20,8 @@ object LibraryFeedGridSelectionStore {
     }
 
     fun setSelectedSection(section: LibrarySectionUiState) {
-        focus.reset()
+        // Re-opening the list that is already shown keeps the focused poster.
+        if (_selectedSection.value?.id != section.id) focus.reset()
         _selectedSection.value = section
     }
 }

@@ -18,6 +18,9 @@ class TvGridFocusStore(private val keyPrefix: String) {
     private var lastFocusedTargetId: String? = null
     private var lastFocusedIndex: Int? = null
 
+    /** Poster that had focus last, or null when none has yet. */
+    val lastIndex: Int? get() = lastFocusedIndex
+
     fun targetId(item: MediaItemCompat): String =
         "$keyPrefix:item:${item.apiName}|${item.id}|${item.url}"
 

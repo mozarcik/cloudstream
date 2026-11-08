@@ -1,78 +1,94 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
 
-import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.zIndex
-import androidx.tv.material3.MaterialTheme
-import com.lagradost.cloudstream3.tv.presentation.theme.CloudStreamTokens
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.lagradost.cloudstream3.MainActivity
-import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesters
+import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
+import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Lets a screen that draws under the transparent top bar (Home) ask for an opaque bar once its
- * content scrolls beneath it.
- */
-val LocalDashboardTopBarOpaque = compositionLocalOf<(Boolean) -> Unit> { {} }
-
-/**
- * Lets the screen under the top bar (Home) take over "Down from the top bar": [handler] moves
- * focus to the right element (Resume, last focused feed item, ...) and returns true when it did.
+ * What the screen under the menu lends to the Dashboard: how to move focus into it after a
+ * screen change ([handler]) and what Back does inside it before the Dashboard takes over.
  */
 class DashboardContentEntry {
+    /** Moves focus to the right element (Resume, last focused feed item, ...) and returns true when it did. */
     var handler: (() -> Boolean)? = null
 
-    /** Back from the content to the top bar: scroll to the top and forget the last focused item. */
-    var resetToTop: (() -> Unit)? = null
+    /**
+     * Back inside the screen (Home: rows scroll back to the hero). Returns true when it did
+     * something, false when the screen is already at its start and Back belongs to the Dashboard.
+     */
+    var backHandler: (() -> Boolean)? = null
+
+    /** Focus back to where it was after the menu closed; returns true when the screen did it itself. */
+    var restoreFocus: (() -> Boolean)? = null
 }
 
 val LocalDashboardContentEntry = compositionLocalOf { DashboardContentEntry() }
 
+/**
+ * The Dashboard's Back. Each screen's wrapper ([dashboardComposable]) registers it: that is after the
+ * NavHost's own handler (which would pop a section off to Home) and before the screen's panels and dialogs.
+ */
+val LocalDashboardBack = compositionLocalOf<() -> Unit> { {} }
+
+/** Opens the navigation menu; screens call it for "Left from the first column". */
+val LocalDashboardOpenMenu = compositionLocalOf<() -> Unit> { {} }
+
 private const val SearchNavLogTag = "TvSearchNav"
 private const val ProgrammaticSearchNavigationGuardMs = 450L
-private const val ProgrammaticTopBarFocusNavigationGuardMs = 450L
+private const val EnterContentRetryMs = 60L
+// The old screen keeps focus until its fade-out (MaxAnimationMs) has finished.
+private const val EnterContentSettleMs = TvDimens.MaxAnimationMs + 30L
+private const val EnterContentMaxAttempts = 50
+private const val EnterContentFallbackAttempt = 12
 
 internal fun shouldRestoreDashboardFocusAfterReturn(
     isComingBackFromDifferentScreen: Boolean,
@@ -81,45 +97,15 @@ internal fun shouldRestoreDashboardFocusAfterReturn(
     return isComingBackFromDifferentScreen && !isProgrammaticSearchNavigationPending
 }
 
-internal enum class DashboardBackAction {
-    PopBackStack,
-    ShowTopBarAndFocusSelectedTab,
-    ExitApp,
-    FocusSelectedTab,
-    FocusHomeTab,
-}
-
-internal fun resolveDashboardBackAction(
-    isOnTopBarTab: Boolean,
-    hasPreviousBackStackEntry: Boolean,
-    isTopBarVisible: Boolean,
-    currentTopBarSelectedTabIndex: Int,
-    homeTabIndex: Int,
-    isTopBarFocused: Boolean,
-): DashboardBackAction {
-    return when {
-        currentTopBarSelectedTabIndex < 0 && !isTopBarFocused -> DashboardBackAction.FocusSelectedTab
-        !isOnTopBarTab && hasPreviousBackStackEntry -> DashboardBackAction.PopBackStack
-        !isTopBarVisible -> DashboardBackAction.ShowTopBarAndFocusSelectedTab
-        !isTopBarFocused -> DashboardBackAction.FocusSelectedTab
-        currentTopBarSelectedTabIndex == homeTabIndex -> DashboardBackAction.ExitApp
-        else -> DashboardBackAction.FocusHomeTab
-    }
-}
-
+/** Parts of the Dashboard a screen can act on. */
 data class DashboardBodyContext(
-    val topBarSelectedFocusRequester: FocusRequester,
-    val isTopBarFocused: Boolean,
     val homeRestoreFocusToken: Int,
-    val libraryRestoreFocusToken: Int,
     val homeFeedGridRestoreFocusToken: Int,
     val libraryFeedGridRestoreFocusToken: Int,
     val homeContentRefreshToken: Int,
     val accountRefreshToken: Int,
-    val updateTopBarVisibility: (Boolean) -> Unit,
-    val updateTopBarFocusable: (Boolean) -> Unit,
-    val updateTopBarDownNavigationEnabled: (Boolean) -> Unit,
-    val requestHomeTopBarFocus: () -> Unit,
+    /** Settings left to Home: switch there and put focus into Home. */
+    val goHomeAndEnterContent: () -> Unit,
 )
 
 typealias DashboardBodyContent = @Composable (
@@ -137,7 +123,7 @@ fun NavHostController.navigateToDashboardTab(screen: Screens) {
             saveState = true
         }
         launchSingleTop = true
-        // Leaving a tab and coming back starts from the top; only Back from details restores focus.
+        // Leaving a screen and coming back starts from the top; only Back from details restores focus.
         restoreState = false
     }
 }
@@ -153,64 +139,52 @@ fun DashboardScaffold(
     navController: NavHostController = rememberNavController(),
     body: DashboardBodyContent,
 ) {
-    val density = LocalDensity.current
     val contentEntry = remember { DashboardContentEntry() }
     val focusManager = LocalFocusManager.current
     val coroutineScope = rememberCoroutineScope()
-    val topBarFocusRequesters = rememberFocusRequesters(count = TopBarTabs.size + 1)
+    val contentFocusRequester = remember { FocusRequester() }
 
-    var isTopBarVisible by remember { mutableStateOf(true) }
-    var isTopBarFocused by remember { mutableStateOf(false) }
-    var focusedTopBarTabIndex by remember { mutableStateOf<Int?>(null) }
-    var isTopBarFocusable by remember { mutableStateOf(true) }
-    var isTopBarOpaque by remember { mutableStateOf(false) }
-    var isTopBarDownNavigationEnabled by remember { mutableStateOf(true) }
-
-    val homeTabIndex = remember { TopBarTabs.indexOf(Screens.Home).coerceAtLeast(0) }
-    val libraryTabIndex = remember { TopBarTabs.indexOf(Screens.Library).coerceAtLeast(0) }
-    val searchTabIndex = remember { TopBarTabs.indexOf(Screens.Search).coerceAtLeast(0) }
+    var isMenuOpen by remember { mutableStateOf(false) }
+    var isMenuExpanded by remember { mutableStateOf(false) }
+    val edgeExitGuard = remember { EdgeExitGuard() }
+    val bounce = remember { Animatable(0f) }
+    val bouncePx = with(LocalDensity.current) { 6.dp.toPx() }
+    var contentHasFocus by remember { mutableStateOf(false) }
     var currentDestination: String? by remember { mutableStateOf(null) }
     var previousDestination: String? by remember { mutableStateOf(null) }
     var isProgrammaticSearchNavigationPending by rememberSaveable { mutableStateOf(false) }
-    var isProgrammaticTopBarFocusNavigationPending by rememberSaveable { mutableStateOf(false) }
-    var programmaticTopBarFocusGuardRequestId by rememberSaveable { mutableIntStateOf(0) }
     var homeRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var libraryRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var homeFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var libraryFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var homeContentRefreshToken by rememberSaveable { mutableIntStateOf(0) }
     var accountRefreshToken by rememberSaveable { mutableIntStateOf(0) }
-    var pendingTopBarFocusTabIndex by rememberSaveable { mutableIntStateOf(-1) }
-    var topBarFocusRestorerResetToken by rememberSaveable { mutableIntStateOf(0) }
-    val currentTopBarSelectedTabIndex by remember(
-        currentDestination,
-        homeTabIndex,
-        libraryTabIndex,
-        searchTabIndex
-    ) {
-        derivedStateOf {
-            val destination = currentDestination ?: return@derivedStateOf homeTabIndex
-            if (destination == Screens.HomeFeedGrid.name) {
-                return@derivedStateOf homeTabIndex
-            }
-            if (destination == Screens.LibraryFeedGrid.name) {
-                return@derivedStateOf libraryTabIndex
-            }
-            if (destination == Screens.SearchFeedGrid.name) {
-                return@derivedStateOf searchTabIndex
-            }
-            if (destination == Screens.Profile.name) {
-                return@derivedStateOf -1
-            }
+    var enterContentToken by remember { mutableIntStateOf(0) }
+    var isFallbackFocusable by remember { mutableStateOf(false) }
+    var fallbackHasFocus by remember { mutableStateOf(false) }
+    val fallbackFocusRequester = remember { FocusRequester() }
 
-            val screen = runCatching { Screens.valueOf(destination) }.getOrNull()
-            val tabIndex = screen?.let { TopBarTabs.indexOf(it) } ?: -1
-            if (tabIndex >= 0) tabIndex else homeTabIndex
+    val libraryMenu: TvLibraryMenuViewModel = viewModel()
+    val libraryProviders by libraryMenu.providers.collectAsState()
+    val listGroups = remember(libraryProviders) {
+        libraryProviders.map { provider ->
+            TvNavListGroup(
+                providerName = provider.providerName,
+                lists = provider.sections.map { section ->
+                    TvNavList(
+                        key = libraryMenuListKey(provider.providerName, section.id),
+                        title = section.title,
+                        count = section.gridItems.size,
+                    )
+                },
+                isLoading = provider.isLoading,
+                hasError = provider.hasError,
+            )
         }
     }
-    val currentTopBarFocusRequester = topBarFocusRequesters[
-        (currentTopBarSelectedTabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
-    ]
+    var openedListKey by remember { mutableStateOf<String?>(null) }
+    val selection by remember {
+        derivedStateOf { navSelectionForRoute(currentDestination, openedListKey) }
+    }
 
     DisposableEffect(navController) {
         val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
@@ -243,26 +217,14 @@ fun DashboardScaffold(
     }
 
     LaunchedEffect(currentDestination) {
-        isTopBarDownNavigationEnabled = true
         when {
-            previousDestination == Screens.Settings.name &&
-                currentDestination == Screens.Home.name -> {
-                focusedTopBarTabIndex = null
-                topBarFocusRestorerResetToken += 1
-                isProgrammaticTopBarFocusNavigationPending = true
-                programmaticTopBarFocusGuardRequestId += 1
-                pendingTopBarFocusTabIndex = homeTabIndex
-            }
+            // Back from Search / Downloads / Settings / a list: the NavHost popped to Home on its own.
+            currentDestination == Screens.Home.name &&
+                previousDestination != null &&
+                previousDestination != Screens.HomeFeedGrid.name -> enterContentToken += 1
 
             previousDestination == Screens.HomeFeedGrid.name &&
-                currentDestination == Screens.Home.name -> {
-                homeRestoreFocusToken += 1
-            }
-
-            previousDestination == Screens.LibraryFeedGrid.name &&
-                currentDestination == Screens.Library.name -> {
-                libraryRestoreFocusToken += 1
-            }
+                currentDestination == Screens.Home.name -> homeRestoreFocusToken += 1
         }
         if (currentDestination != null) {
             previousDestination = currentDestination
@@ -293,13 +255,6 @@ fun DashboardScaffold(
         }
     }
 
-    LaunchedEffect(programmaticTopBarFocusGuardRequestId) {
-        if (!isProgrammaticTopBarFocusNavigationPending) return@LaunchedEffect
-
-        delay(ProgrammaticTopBarFocusNavigationGuardMs)
-        isProgrammaticTopBarFocusNavigationPending = false
-    }
-
     LaunchedEffect(
         isComingBackFromDifferentScreen,
         currentDestination,
@@ -322,10 +277,6 @@ fun DashboardScaffold(
                 homeRestoreFocusToken += 1
             }
 
-            Screens.Library.name -> {
-                libraryRestoreFocusToken += 1
-            }
-
             Screens.HomeFeedGrid.name -> {
                 homeFeedGridRestoreFocusToken += 1
             }
@@ -337,212 +288,208 @@ fun DashboardScaffold(
         resetIsComingBackFromDifferentScreen()
     }
 
-    suspend fun requestTopBarFocusWithRetry(tabIndex: Int): Boolean {
-        val requesterIndex = (tabIndex + 1).coerceIn(0, topBarFocusRequesters.lastIndex)
-        repeat(120) {
-            topBarFocusRequesters[requesterIndex].requestFocus()
-            delay(16L)
-            if (focusedTopBarTabIndex == tabIndex) {
-                return true
+    // After a screen change from the menu the new screen composes (and may load) asynchronously:
+    // keep asking it for focus until it has it.
+    LaunchedEffect(enterContentToken) {
+        if (enterContentToken == 0) return@LaunchedEffect
+        isFallbackFocusable = false
+        // The old screen is still composed (and answers for itself) until the screen change has settled.
+        delay(EnterContentSettleMs)
+        repeat(EnterContentMaxAttempts) { attempt ->
+            if (contentHasFocus && !fallbackHasFocus) return@LaunchedEffect
+            // The user already opened the menu: never pull focus out of it.
+            if (isMenuOpen) return@LaunchedEffect
+            val entered = contentEntry.handler?.invoke() == true
+            if (!entered) runCatching { contentFocusRequester.requestFocus() }
+            delay(EnterContentRetryMs)
+            // A screen with nothing to focus (empty Downloads) still has to hear Left, or the menu is unreachable.
+            if (attempt == EnterContentFallbackAttempt && !contentHasFocus) {
+                isFallbackFocusable = true
+                delay(EnterContentRetryMs)
+                runCatching { fallbackFocusRequester.requestFocus() }
             }
         }
-
-        return focusedTopBarTabIndex == tabIndex
     }
 
-    fun startProgrammaticTopBarFocusNavigationGuard() {
-        isProgrammaticTopBarFocusNavigationPending = true
-        programmaticTopBarFocusGuardRequestId += 1
+    // Nothing else gives the first screen its focus now that the top bar is gone.
+    LaunchedEffect(Unit) { enterContentToken += 1 }
+
+    fun openMenu() {
+        isMenuExpanded = false
+        isMenuOpen = true
     }
 
-    fun requestTopBarFocus(tabIndex: Int) {
-        focusedTopBarTabIndex = null
-        topBarFocusRestorerResetToken += 1
-        startProgrammaticTopBarFocusNavigationGuard()
-        focusManager.clearFocus(force = true)
+    fun closeMenuAndRestoreFocus() {
+        isMenuOpen = false
+        isMenuExpanded = false
         coroutineScope.launch {
-            requestTopBarFocusWithRetry(tabIndex)
+            contentFocusRequester.requestFocusWithRetry(attempts = 18)
+            // A screen whose own position is lost with its items (scrolled grid) puts focus back itself.
+            contentEntry.restoreFocus?.invoke()
         }
     }
 
-    LaunchedEffect(
-        pendingTopBarFocusTabIndex,
-        isTopBarFocusable,
-        currentTopBarSelectedTabIndex,
-    ) {
-        val tabIndex = pendingTopBarFocusTabIndex
-        if (tabIndex < 0 || !isTopBarFocusable) return@LaunchedEffect
-        if (currentTopBarSelectedTabIndex != tabIndex) return@LaunchedEffect
+    fun openLibraryList(providerName: String, listKey: String) {
+        val section = libraryMenu.section(listKey) ?: return
+        // The list that is already open: just close the menu, the grid keeps its place.
+        if (currentDestination == Screens.LibraryFeedGrid.name && openedListKey == listKey) {
+            closeMenuAndRestoreFocus()
+            return
+        }
+        LibraryFeedGridSelectionStore.setAccountName(providerName)
+        LibraryFeedGridSelectionStore.setSelectedSection(section)
+        openedListKey = listKey
+        isMenuOpen = false
+        isMenuExpanded = false
+        navController.navigate(Screens.LibraryFeedGrid()) {
+            popUpTo(Screens.Home()) { saveState = false }
+            launchSingleTop = true
+        }
+        enterContentToken += 1
+    }
 
-        if (requestTopBarFocusWithRetry(tabIndex)) {
-            pendingTopBarFocusTabIndex = -1
+    fun navigateFromMenu(target: TvNavTarget) {
+        // OK on the section that is already active: just hand focus back to the remembered card.
+        if (selection == TvNavSelection.Screen(target) && currentDestination == target.screen.name) {
+            closeMenuAndRestoreFocus()
+            return
+        }
+        isMenuOpen = false
+        isMenuExpanded = false
+        navController.navigateToDashboardTab(target.screen)
+        enterContentToken += 1
+    }
+
+    /** Left at the content's edge: opens the menu unless the press was part of a quick / held burst. */
+    fun requestMenuFromEdge() {
+        if (isMenuOpen) return
+        if (!edgeExitGuard.blocked) {
+            openMenu()
+        } else if (edgeExitGuard.consumeBounce()) {
+            coroutineScope.launch {
+                bounce.snapTo(0f)
+                bounce.animateTo(-bouncePx, tween(50))
+                bounce.animateTo(0f, tween(70))
+            }
         }
     }
 
-    BackPressHandledArea(
-        modifier = modifier.fillMaxSize(),
-        onBackPressed = {
-            val action = resolveDashboardBackAction(
-                isOnTopBarTab = TopBarTabs.any { tab -> tab() == currentDestination },
-                hasPreviousBackStackEntry = navController.previousBackStackEntry != null,
-                isTopBarVisible = isTopBarVisible,
-                currentTopBarSelectedTabIndex = currentTopBarSelectedTabIndex,
-                homeTabIndex = homeTabIndex,
-                isTopBarFocused = isTopBarFocused,
-            )
-            when (action) {
-                DashboardBackAction.PopBackStack -> navController.popBackStack()
-                DashboardBackAction.ShowTopBarAndFocusSelectedTab -> {
-                    contentEntry.resetToTop?.invoke()
-                    isTopBarVisible = true
-                    startProgrammaticTopBarFocusNavigationGuard()
-                    pendingTopBarFocusTabIndex = currentTopBarSelectedTabIndex
-                }
-
-                DashboardBackAction.ExitApp -> onBackPressed()
-                DashboardBackAction.FocusSelectedTab -> {
-                    contentEntry.resetToTop?.invoke()
-                    isTopBarVisible = true
-                    requestTopBarFocus(currentTopBarSelectedTabIndex)
-                }
-
-                DashboardBackAction.FocusHomeTab -> {
-                    startProgrammaticTopBarFocusNavigationGuard()
-                    navController.navigateToDashboardTab(Screens.Home)
-                    pendingTopBarFocusTabIndex = homeTabIndex
-                }
-            }
-        }
-    ) {
-        var wasTopBarFocusRequestedBefore by rememberSaveable { mutableStateOf(false) }
-        var topBarHeightPx: Int by rememberSaveable { mutableIntStateOf(0) }
-
-        // Settings is a full-screen mode: the bar fades out in place instead of sliding away next to the screen change.
-        val isSettingsScreen = currentDestination == Screens.Settings.name
-        val topBarAlpha by animateFloatAsState(
-            targetValue = if (isSettingsScreen && !isTopBarVisible) 0f else 1f,
-            animationSpec = tween(durationMillis = TvDimens.MaxAnimationMs),
-            label = "",
+    fun handleBack() {
+        val route = currentDestination
+        val isOnTopLevelScreen = route == Screens.Home.name ||
+            route == Screens.Search.name ||
+            route == Screens.Downloads.name ||
+            route == Screens.Settings.name
+        val contentHandledBack = !isMenuOpen && isOnTopLevelScreen &&
+            contentEntry.backHandler?.invoke() == true
+        val action = resolveDashboardBackAction(
+            isMenuFocused = isMenuOpen,
+            isOnHome = route == Screens.Home.name,
+            isOnTopLevelScreen = isOnTopLevelScreen,
+            hasPreviousBackStackEntry = navController.previousBackStackEntry != null,
+            contentHandledBack = contentHandledBack,
         )
-        val topBarYOffsetPx by animateIntAsState(
-            targetValue = if (isTopBarVisible) 0 else -topBarHeightPx,
-            animationSpec = if (isSettingsScreen) snap() else tween(durationMillis = TvDimens.MaxAnimationMs),
-            label = "",
-            finishedListener = {
-                if (it == -topBarHeightPx && isComingBackFromDifferentScreen) {
-                    resetIsComingBackFromDifferentScreen()
-                }
-            }
-        )
-
-        val navHostTopPaddingDp by animateDpAsState(
-            targetValue = if (isTopBarVisible) with(density) { topBarHeightPx.toDp() } else 0.dp,
-            animationSpec = tween(durationMillis = TvDimens.MaxAnimationMs),
-            label = "",
-        )
-
-        LaunchedEffect(Unit) {
-            if (!wasTopBarFocusRequestedBefore) {
-                requestTopBarFocus(currentTopBarSelectedTabIndex)
-                wasTopBarFocusRequestedBefore = true
-            }
+        when (action) {
+            // The menu stays open with focus on the Home row (the drawer follows the selection).
+            DashboardBackAction.MenuGoHome -> navController.navigateToDashboardTab(Screens.Home)
+            DashboardBackAction.ExitApp -> onBackPressed()
+            DashboardBackAction.PopBackStack -> navController.popBackStack()
+            DashboardBackAction.ContentHandled -> Unit
+            DashboardBackAction.OpenMenu -> openMenu()
         }
+    }
 
-        // Content with a full-bleed backdrop sits under the bar, so hiding the bar does not move the backdrop.
-        val isTopBarOverlay = currentDestination == Screens.Home.name ||
-            currentDestination == Screens.Downloads.name
-        val isTopBarTransparent = isTopBarOverlay && !isTopBarOpaque
-        LaunchedEffect(currentDestination) { isTopBarOpaque = false }
-
-        DashboardTopBar(
-            transparentBackground = isTopBarTransparent,
-            onDownIntoContent = { contentEntry.handler?.invoke() == true },
-            modifier = Modifier
-                .zIndex(1f)
-                .offset { IntOffset(x = 0, y = topBarYOffsetPx) }
-                .graphicsLayer { alpha = topBarAlpha }
-                .onSizeChanged { topBarHeightPx = it.height }
-                .then(
-                    if (isTopBarTransparent) {
-                        Modifier.background(
-                            TopBarScrimBrush
-                        )
-                    } else {
-                        Modifier.background(MaterialTheme.colorScheme.surface)
-                    }
-                )
-                .onFocusChanged {
-                    isTopBarFocused = it.hasFocus
-                    if (!it.hasFocus) {
-                        focusedTopBarTabIndex = null
-                    }
-                }
-                .padding(horizontal = DashboardTopBarHorizontalPadding)
-                .padding(
-                    top = DashboardTopBarVerticalPadding,
-                    bottom = DashboardTopBarVerticalPadding
-                ),
-            selectedTabIndex = currentTopBarSelectedTabIndex,
-            accountRefreshToken = accountRefreshToken,
-            focusRequesters = topBarFocusRequesters,
-            isFocusable = isTopBarFocusable,
-            isDownNavigationEnabled = isTopBarDownNavigationEnabled,
-            suppressDelayedNavigation = isProgrammaticSearchNavigationPending ||
-                isProgrammaticTopBarFocusNavigationPending,
-            focusRestorerResetToken = topBarFocusRestorerResetToken,
-            onFocusedTabIndexChanged = { focusedTopBarTabIndex = it },
-        ) { screen ->
-            navController.navigateToDashboardTab(screen)
-        }
+    Box(modifier = modifier.fillMaxSize()) {
+        // Registered before the screens' own handlers, so panels and dialogs get Back first.
+        BackHandler(onBack = ::handleBack)
 
         CompositionLocalProvider(
-            LocalDashboardTopBarOpaque provides { isTopBarOpaque = it },
             LocalDashboardContentEntry provides contentEntry,
-            LocalDashboardTopInset provides { navHostTopPaddingDp },
+            LocalDashboardOpenMenu provides ::requestMenuFromEdge,
+            LocalDashboardBack provides ::handleBack,
         ) {
-            body(
-                navController,
-                Modifier,
-                DashboardBodyContext(
-                    topBarSelectedFocusRequester = currentTopBarFocusRequester,
-                    isTopBarFocused = isTopBarFocused,
-                    homeRestoreFocusToken = homeRestoreFocusToken,
-                    libraryRestoreFocusToken = libraryRestoreFocusToken,
-                    homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
-                    libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
-                    homeContentRefreshToken = homeContentRefreshToken,
-                    accountRefreshToken = accountRefreshToken,
-                    updateTopBarVisibility = { isTopBarVisible = it },
-                    updateTopBarFocusable = { isTopBarFocusable = it },
-                    updateTopBarDownNavigationEnabled = { isTopBarDownNavigationEnabled = it },
-                    requestHomeTopBarFocus = {
-                        focusedTopBarTabIndex = null
-                        topBarFocusRestorerResetToken += 1
-                        startProgrammaticTopBarFocusNavigationGuard()
-                        focusManager.clearFocus(force = true)
-                        pendingTopBarFocusTabIndex = homeTabIndex
-                    },
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { translationX = bounce.value }
+                    // Every horizontal press is timed before the screens see it (see EdgeExitGuard).
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown &&
+                            (event.key == Key.DirectionLeft || event.key == Key.DirectionRight)
+                        ) {
+                            val native = event.nativeKeyEvent
+                            edgeExitGuard.onHorizontalKey(native.eventTime, native.repeatCount)
+                        }
+                        false
+                    }
+                    // Left with nowhere to go (first column / first item) opens the menu.
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft && !isMenuOpen) {
+                            if (!focusManager.moveFocus(FocusDirection.Left)) requestMenuFromEdge()
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    .focusRequester(contentFocusRequester)
+                    .focusRestorer()
+                    // onFocusChanged reports the focus target that follows it, hence the explicit group.
+                    // The wrapper holding focus itself is not a screen that took focus (nothing in it can be focused).
+                    .onFocusChanged { contentHasFocus = it.hasFocus && !it.isFocused }
+                    .focusGroup()
+            ) {
+                // Invisible focus holder, enabled only when the screen has nothing focusable of its own.
+                Box(
+                    Modifier
+                        .size(1.dp)
+                        .focusRequester(fallbackFocusRequester)
+                        .focusProperties { canFocus = isFallbackFocusable }
+                        .onFocusChanged { fallbackHasFocus = it.isFocused }
+                        .focusable()
                 )
-            )
+                body(
+                    navController,
+                    Modifier,
+                    DashboardBodyContext(
+                        homeRestoreFocusToken = homeRestoreFocusToken,
+                        homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
+                        libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
+                        homeContentRefreshToken = homeContentRefreshToken,
+                        accountRefreshToken = accountRefreshToken,
+                        goHomeAndEnterContent = {
+                            navController.navigateToDashboardTab(Screens.Home)
+                            enterContentToken += 1
+                        },
+                    )
+                )
+            }
         }
+
+        // Composed only while the menu is open, so it is registered after the NavHost's own Back handler
+        // (which would otherwise pop the screen underneath the open menu) and takes precedence over it.
+        if (isMenuOpen) {
+            BackHandler(onBack = ::handleBack)
+        }
+
+        // The collapsed menu is the rail itself, focusable: the passive rail is only drawn while it is closed.
+        // Settings use the full width (panels start at x = 0): the menu is drawn over them only when opened.
+        if (!isMenuOpen && currentDestination != Screens.Settings.name) TvNavRail(selection = selection, accountRefreshToken = accountRefreshToken)
+        TvNavDrawer(
+            open = isMenuOpen,
+            expanded = isMenuExpanded,
+            onExpand = { isMenuExpanded = true },
+            selection = selection,
+            listGroups = listGroups,
+            accountRefreshToken = accountRefreshToken,
+            onOpenProfile = {
+                isMenuOpen = false
+                isMenuExpanded = false
+                navController.navigate(Screens.Profile()) { launchSingleTop = true }
+                enterContentToken += 1
+            },
+            onNavigate = ::navigateFromMenu,
+            onOpenList = ::openLibraryList,
+            onDismiss = ::closeMenuAndRestoreFocus,
+        )
     }
 }
-
-@Composable
-private fun BackPressHandledArea(
-    onBackPressed: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable BoxScope.() -> Unit,
-) {
-    Box(
-        modifier = modifier,
-    ) {
-        content()
-        BackHandler(onBack = onBackPressed)
-    }
-}
-
-private val TopBarScrimBrush = Brush.verticalGradient(
-    0f to CloudStreamTokens.Ground.copy(alpha = 0.85f),
-    1f to Color.Transparent,
-)

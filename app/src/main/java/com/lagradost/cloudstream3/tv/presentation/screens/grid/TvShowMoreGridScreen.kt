@@ -16,9 +16,22 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
+import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardContentEntry
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -88,7 +101,6 @@ fun TvShowMoreGridScreen(
     pagingItems: LazyPagingItems<MediaItemCompat>,
     focusStore: TvGridFocusStore,
     onMediaClick: (MediaItemCompat) -> Unit,
-    onScroll: (Boolean) -> Unit,
     screenKey: Any,
     modifier: Modifier = Modifier,
     subtitle: String? = null,
@@ -104,6 +116,28 @@ fun TvShowMoreGridScreen(
     var focusFirstItemToken by rememberSaveable(screenKey) { mutableIntStateOf(0) }
     var focusSortButtonToken by rememberSaveable(screenKey) { mutableIntStateOf(0) }
     var initialFocusHandled by rememberSaveable(screenKey) { mutableStateOf(false) }
+    // Focus coming back into the grid (from the menu, or Down from Sort) goes to the poster that had it.
+    var reenterToken by remember { mutableIntStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
+    fun reenterGrid(): Boolean {
+        if (pagingItems.itemCount == 0) return false
+        if (focusStore.lastIndex != null) {
+            focusStore.scheduleRestoreToLastFocused()
+            reenterToken += 1
+        } else {
+            coroutineScope.launch {
+                gridState.scrollToItem(0)
+                firstItemFocusRequester.requestFocusWithRetry(attempts = 18)
+            }
+        }
+        return true
+    }
+    val contentEntry = LocalDashboardContentEntry.current
+    DisposableEffect(contentEntry, focusStore) {
+        val restore: () -> Boolean = { focusStore.lastIndex != null && reenterGrid() }
+        contentEntry.restoreFocus = restore
+        onDispose { if (contentEntry.restoreFocus === restore) contentEntry.restoreFocus = null }
+    }
 
     val focusedItem = remember { mutableStateOf<MediaItemCompat?>(null) }
     val subtitleStyle = SpanStyle(
@@ -127,11 +161,6 @@ fun TvShowMoreGridScreen(
     val isEmpty = itemCount == 0 && refresh is LoadState.NotLoading
     val hasRestoreTarget = restoreFocusToken > 0 && focusStore.pendingRestoreTargetId != null
 
-    // Full-screen grid (mockup): hide the dashboard top bar while it is open, bring it back on exit.
-    DisposableEffect(Unit) {
-        onScroll(false)
-        onDispose { onScroll(true) }
-    }
 
     // The sort order changed: start again from the top.
     LaunchedEffect(sort?.selectedId) {
@@ -166,7 +195,7 @@ fun TvShowMoreGridScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
-                    start = TvDimens.ScreenHorizontalPadding,
+                    start = TvDimens.ContentStartWithRail,
                     end = TvDimens.ScreenHorizontalPadding,
                     top = TvDimens.GridHeaderTopPadding,
                 )
@@ -198,9 +227,10 @@ fun TvShowMoreGridScreen(
                     onClick = { isSortPanelOpen = true },
                     modifier = Modifier
                         .focusRequester(sortButtonFocusRequester)
-                        .focusProperties {
-                            up = FocusRequester.Cancel
-                            down = firstItemFocusRequester
+                        .focusProperties { up = FocusRequester.Cancel }
+                        // The poster below may be scrolled out of the grid: bring it back first.
+                        .onPreviewKeyEvent { event ->
+                            event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown && reenterGrid()
                         },
                 )
             }
@@ -211,6 +241,7 @@ fun TvShowMoreGridScreen(
         Box(modifier = Modifier.weight(1f)) {
         when {
             isRefreshError -> TvErrorState(
+                illustration = R.drawable.tv_empty_error,
                 message = (refresh as LoadState.Error).error.message
                     ?: stringResource(R.string.error),
                 retryText = stringResource(R.string.tv_player_retry),
@@ -219,7 +250,7 @@ fun TvShowMoreGridScreen(
             )
 
             isEmpty -> TvEmptyState(
-                icon = Icons.Outlined.Inbox,
+                illustration = R.drawable.tv_empty_empty_list,
                 title = stringResource(R.string.tv_feed_empty),
             )
 
@@ -240,7 +271,7 @@ fun TvShowMoreGridScreen(
                 restore = TvGridRestore(
                     targetId = focusStore.pendingRestoreTargetId,
                     index = focusStore.pendingRestoreIndex,
-                    token = restoreFocusToken,
+                    token = restoreFocusToken + reenterToken,
                     onConsumed = { targetId ->
                         initialFocusHandled = true
                         focusStore.clearPendingRestore(targetId)
@@ -251,11 +282,22 @@ fun TvShowMoreGridScreen(
                     .onFocusChanged { state -> if (!state.hasFocus) focusedItem.value = null },
             )
         }
-        // The header sits "above" the posters: they scroll under its soft shadow.
+        // The header sits "above" the posters: once they scroll under it, a soft shadow separates
+        // them. Hidden at the top (nothing under the header) and not drawn over the nav rail.
+        val isScrolled by remember(gridState) {
+            derivedStateOf { gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 0 }
+        }
+        val shadowAlpha by animateFloatAsState(
+            targetValue = if (isScrolled) 1f else 0f,
+            animationSpec = tween(TvDimens.MaxAnimationMs),
+            label = "gridHeaderShadow",
+        )
         Box(
             modifier = Modifier
+                .padding(start = TvDimens.ContentStartWithRail)
                 .fillMaxWidth()
                 .height(TvDimens.GridHeaderShadowHeight)
+                .graphicsLayer { alpha = shadowAlpha }
                 .background(HeaderShadowBrush),
         )
         }

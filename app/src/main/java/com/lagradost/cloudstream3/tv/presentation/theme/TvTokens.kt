@@ -54,10 +54,6 @@ object TvColors {
         Color(0xFF7A4FD8), Color(0xFFC81E3A), Color(0xFF1E6E8C), Color(0xFF3A5A9A),
     )
     /** Inset card inside the settings cards (account summary). */
-    val SettingsInset = Color(0xFF191C23)
-    val SettingsAvatar = Color(0xFF252A35)
-    val SettingsPreviewRadio = Color(0xFF3A404C)
-    val SettingsPreviewRadioSelected = Color(0xFF4C5F86)
     val DotSeparator = CsColors.DotSeparator
     val RadioBorder = Color(0xFF5A6170)
     val RadioBorderFocused = Color(0xFF4A5160)
@@ -68,6 +64,10 @@ object TvColors {
     val ToggleThumb = Color(0xFFFFFFFF)
     /** Source chips, progress of "Continue watching". */
     val Accent = Color(0xFFF2B880)
+    /** Selected nav item: accent @22%, content #FFD9B0. */
+    val AccentContainer = Color(0x38F2B880)
+    val OnAccentContainer = Color(0xFFFFD9B0)
+    val RailIcon = Color(0xFFC4C7C5)
     /** "Featured" eyebrow label. */
     val FeaturedEyebrow = CsColors.Info
     val FeaturedPanel = Color(0xFF14181F)
@@ -140,6 +140,30 @@ object TvColors {
 object TvDimens {
     // Screen
     val ScreenHorizontalPadding = 48.dp
+    /** Collapsed navigation rail; screens never place content under it. */
+    val RailWidth = 80.dp
+    /** Left edge of screen content: rail (64 dp) + 24 dp. */
+    val ContentStartWithRail = 88.dp
+    /** Where rows are clipped: the rail's edge, so posters hide under it and not under its icons. */
+    val ContentClipStart = 68.dp
+    // Navigation menu (mockups 3, 4, 6)
+    val NavMenuRowInset = 12.dp
+    val NavMenuRowWidth = 256.dp
+    val NavMenuSolidWidth = 300.dp
+    val NavMenuFadeWidth = 500.dp
+    val NavMenuPanelWidth = 280.dp
+    val NavMenuProfileHeight = 40.dp
+    val NavMenuAvatarSize = 40.dp
+    val NavMenuRowHeight = 48.dp
+    val NavMenuRowGap = 4.dp
+    val NavMenuListRowHeight = 31.dp
+    val NavMenuIconSize = 16.dp
+    val NavMenuDotSize = 7.dp
+    val NavRailDotSize = 4.dp
+    val NavRailTileSize = 48.dp
+    val NavRailIconSize = 16.dp
+    val NavRailAvatarSize = 40.dp
+    val NavRailScrimWidth = 88.dp
     // Top bar (mockup Main: logo 52 px + 28 px gap, tab padding 26 px, search icon 28 px + 10 px)
     val TopBarLogoSize = 26.dp
     val TopBarLogoGap = 14.dp
@@ -211,6 +235,16 @@ object TvDimens {
     val FeedFocusedTitleMaxWidth = 380.dp
     /** Padding above the feed header = space between the pinned header and the screen top (mockup 44 px). */
     val FeedPinnedTop = 22.dp
+    // Home feed as one row (board 2): header 28 + 17 gap, posters 116x174, rows 244 apart
+    val FeedRowTop = 25.dp
+    val FeedRowHeaderGap = 17.dp
+    val FeedRowPosterWidth = 116.dp
+    val FeedRowPosterHeight = 174.dp
+    val FeedRowGap = 12.dp
+    val FeedRowMaxItems = 10
+    val FeedRowEmptyHeight = 112.dp
+    val FeedRowDescriptionWidth = 520.dp
+    val FeedShowAllCircle = 40.dp
 
     // Home "Featured" (mockup 1728x680 px, r24, ring 4 px + offset 5 px)
     val FeaturedHeight = 340.dp
@@ -229,13 +263,13 @@ object TvDimens {
 
     // "Show more" grid: same 6-column poster as the Home mini-grid (261x392 px), header like a feed header
     // (title y=44 px, grid y=124 px); the 32 dp header row also fits the Sort button.
-    const val GridColumns = 6
+    const val GridColumns = 7
     const val PosterAspectRatio = 2f / 3f
     /** Focus restore after Back waits for the poster to be composed: 40 tries, 50 ms apart. */
     const val FocusRestoreAttempts = 40
     const val FocusRestoreRetryMs = 50L
     const val GridSkeletonCount = 18
-    val GridColumnGap = MiniGridGap
+    val GridColumnGap = 14.dp
     val GridRowGap = MiniGridGap
     val GridHeaderTopPadding = 20.dp
     val GridHeaderHeight = 32.dp
@@ -273,6 +307,8 @@ object TvDimens {
 
     // States
     val StateIconSize = 52.dp
+    /** Penpot empty-state illustration: 240 px / 2 = 120 dp. */
+    val StateIllustrationSize = 120.dp
     val StateTitleGap = 14.dp
     val StateMessageGap = 6.dp
     val StateActionGap = 22.dp
@@ -282,14 +318,14 @@ object TvDimens {
 
 
     // Home (1 dp = 2 mockup px): hero page, source row, featured chrome
-    val HomeContentPadding = 48.dp
-    val HeroHeight = 505.dp
-    val HeroInfoTop = 125.dp
-    val HeroInfoWidth = 450.dp
+    val HomeContentPadding = ContentStartWithRail
+    val HeroHeight = 372.dp
+    val HeroInfoTop = 64.dp
+    val HeroInfoWidth = 640.dp
     val HeroTitleHeight = 48.dp
     val FeaturedTitleHeight = 40.dp
-    val HeroSectionTitleTop = 358.dp
-    val HeroCardsTop = 385.dp
+    val HeroSectionTitleTop = 232.dp
+    val HeroCardsTop = 259.dp
     val HeroCardWidth = 176.dp
     val HeroCardHeight = 99.dp
     val HeroCardSpacing = 14.dp
@@ -308,9 +344,9 @@ object TvDimens {
     val HeroBadgeVertical = 2.dp
     val HeroSelectedBorder = 1.5.dp
     val HeroBackdropWidth = 700.dp
-    val HeroBackdropHeight = 390.dp
-    val HeroBackdropFadeTop = 240.dp
-    val HeroBackdropFadeHeight = 150.dp
+    val HeroBackdropHeight = 372.dp
+    val HeroBackdropFadeTop = 230.dp
+    val HeroBackdropFadeHeight = 142.dp
     val SourcesToFeaturedGap = 18.dp
     val TopBarToContentGap = 20.dp
     val FeedPinBottomPadding = 64.dp
@@ -362,21 +398,10 @@ object TvDimens {
     val CheckboxTick = 1.5.dp
 
     // Settings (mockups Settings*: card 1040x904 px, preview 648 px, rows 96 px, 1 dp == 2 px)
-    val SettingsCardWidth = 520.dp
-    val SettingsPreviewWidth = 324.dp
-    val SettingsCardGap = 20.dp
     /** Gap between the 72 dp top bar and the cards on level 1 (mockup 8 dp under a 56 dp bar). */
-    val SettingsTopGap = 8.dp
     /** Levels >= 2 hide the top bar: cards start 24 dp from the top (mockup top: 48 px). */
-    val SettingsTopGapDeep = 24.dp
-    val SettingsBottomGap = 24.dp
+    /** Level 1 leaves room under the cards (mockup: cards end at 960 px). */
     val SettingsCardRadius = 14.dp
-    val SettingsCardPaddingVertical = 20.dp
-    val SettingsCardPaddingHorizontal = 16.dp
-    val SettingsPreviewPaddingHorizontal = 14.dp
-    val SettingsRowHorizontalPadding = 14.dp
-    val SettingsRowGap = 13.dp
-    val SettingsRowIconSize = 17.dp
     val SettingsRowChevronSize = 15.dp
 
     // Settings: spacing and size scale used by the level screens (value in dp == name)
@@ -390,23 +415,17 @@ object TvDimens {
     val SettingsDp6 = 6.dp
     val SettingsDp7 = 7.dp
     val SettingsDp8 = 8.dp
-    val SettingsDp9 = 9.dp
     val SettingsDp10 = 10.dp
-    val SettingsDp11 = 11.dp
     val SettingsDp12 = 12.dp
-    val SettingsDp13 = 13.dp
     val SettingsDp14 = 14.dp
     val SettingsDp16 = 16.dp
     val SettingsDp18 = 18.dp
+    val SettingsDp22 = 22.dp
+    val SettingsDp24 = 24.dp
     val SettingsDp36 = 36.dp
-    val SettingsDp38 = 38.dp
-    val SettingsDp48 = 48.dp
-    val SettingsDp52 = 52.dp
     val SettingsDp64 = 64.dp
     val SettingsDp223 = 223.dp
     val SettingsDp257 = 257.dp
-    val SettingsDp291 = 291.dp
-    val SettingsDp309 = 309.dp
     val SettingsDebugPadding = 10.dp
     val SettingsDebugRadius = 10.dp
     val SettingsDebugHorizontalPadding = 12.dp
@@ -415,37 +434,16 @@ object TvDimens {
     const val SettingsDebugAlpha = 0.88f
     const val SettingsSpinnerTrackAlpha = 0.35f
     const val SettingsStateMessageAlpha = 0.78f
-    val SettingsAccountRowHeight = 46.dp
-    val SettingsQrActionRowHeight = 44.dp
-    val SettingsFormRowHeight = 52.dp
-    val SettingsRadioRowHeight = 40.dp
-    val SettingsMultiRowHeight = 44.dp
-    val SettingsSliderRowHeight = 46.dp
-    val SettingsSliderRowVerticalPadding = 7.dp
     val SettingsHeaderHorizontalPadding = 14.dp
-    val SettingsHeaderBottomGap = 10.dp
-    val SettingsSectionTop = 12.dp
-    val SettingsSectionBottom = 3.dp
     val SettingsPreviewRowHeight = 42.dp
     val SettingsPreviewRowHorizontalPadding = 12.dp
     val SettingsPreviewHeaderBottomGap = 10.dp
-    val SettingsTileSize = 24.dp
-    val SettingsTileRadius = 6.dp
-    val SettingsPluginTileSize = 26.dp
-    val SettingsPluginTileRadius = 7.dp
-    val SettingsSliderTrack = 3.dp
-    val SettingsSliderTrackFocused = 4.dp
     val SettingsSliderThumb = 12.dp
-    val SettingsSliderArrow = 13.dp
-    val SettingsSliderValueWidth = 28.dp
-    val SettingsSliderGap = 9.dp
-    val SettingsSliderTopGap = 7.dp
     val SettingsDividerGap = 14.dp
     val SettingsDividerHeight = 1.dp
-    val SettingsQrSize = 160.dp
-    val SettingsQrPadding = 10.dp
-    val SettingsQrRadius = 10.dp
-    val SettingsQrGap = 20.dp
+    val SettingsQrSize = 200.dp
+    val SettingsQrPadding = 16.dp
+    val SettingsQrRadius = 12.dp
     val SettingsTextBlockRadius = 9.dp
     val SettingsTextBlockPadding = 14.dp
     val SettingsTextBlockRing = 2.dp
@@ -453,7 +451,43 @@ object TvDimens {
     val SettingsStateBoxPadding = 14.dp
     val SettingsSkeletonHeight = 12.dp
     val SettingsSpinnerSize = 17.dp
-    val SettingsAvatarSize = 26.dp
+
+    // Settings (system): flat 504 dp panels in a horizontal strip, values in dp (Penpot px / 2)
+    val SettingsPaneWidth = 504.dp
+    val SettingsPaneStartInset = 58.dp
+    val SettingsItemWidth = 347.dp
+    val SettingsPaneEndPadding = 62.dp
+    val SettingsItemMinHeight = 60.dp
+    val SettingsItemTwoLineMinHeight = 64.dp
+    val SettingsItemGap = 12.dp
+    val SettingsItemIconSize = 40.dp
+    val SettingsItemGlyphSize = 18.dp
+    val SettingsItemIconGap = 12.dp
+    val SettingsItemPaddingStartIcon = 12.dp
+    val SettingsItemPaddingStartText = 24.dp
+    val SettingsItemPaddingEnd = 28.dp
+    val SettingsItemPaddingVerticalIcon = 12.dp
+    val SettingsItemPaddingVerticalText = 14.dp
+    const val SettingsItemFocusScale = 1.05f
+    const val SettingsItemPressedScale = 1.025f
+    const val SettingsItemFocusPivotX = 0.72f
+    val SettingsItemFocusElevation = 12.dp
+    val SettingsItemPressedElevation = 6.dp
+    const val SettingsFocusInMs = 320
+    const val SettingsPressMs = 160
+    const val SettingsPanelSlideMs = 450
+    const val SettingsBackQueueMs = 200L
+    const val SettingsPanelAlphaMs = 90
+    const val SettingsPanelColorMs = 225
+    const val SettingsPreviewFadeMs = 225
+    const val SettingsPreviewInactiveAlpha = 0.6f
+    val SettingsDecorTitleTop = 68.dp
+    val SettingsCategoryHeight = 36.dp
+    val SettingsTextIndent = 20.dp
+    val SettingsSwitchTrackWidth = 40.dp
+    val SettingsSwitchTrackHeight = 24.dp
+    val SettingsControlBox = 32.dp
+    val SettingsListTopPadding = 24.dp
 
     // Card focus: 4 px ring, 5 px offset, scale 1.05
     val FocusRingWidth = 2.dp
@@ -594,8 +628,8 @@ object TvDimens {
     val UnavailableActionsTop = 28.dp
 
     // Search (mockup Search: field x=96 y=124 1100x76 px, results header y=240, error row 1100x84 px)
-    val SearchFieldTop = 0.dp
-    val SearchFieldWidth = 550.dp
+    val SearchFieldTop = 28.dp
+    val SearchFieldWidth = 524.dp
     val SearchFieldHeight = 38.dp
     val SearchFieldIconSize = 15.dp
     val SearchFieldGap = 9.dp
@@ -711,6 +745,9 @@ object TvDimens {
     /** Focus/transform animations never run longer than this. */
     const val FocusAnimationMs = 120
     const val MaxAnimationMs = 150
+    /** Nav drawer (handoff 2.3): expand 250 ms ease-out, collapse 200 ms ease-in. */
+    const val DrawerExpandMs = 250
+    const val DrawerCollapseMs = 200
 }
 
 object TvShapes {
@@ -769,13 +806,17 @@ object TvTextStyles {
     val PlayerSyncAction = style(9.5f, FontWeight.SemiBold)
     val Section = style(18f, FontWeight.Bold)
     /** Settings level crumb 22 px/600, section label 19 px/700 (+.12em), preview rows 25 px/20 px. */
-    val SettingsCrumb = style(11f, FontWeight.SemiBold)
+    val SettingsDecorTitle = style(28f, FontWeight.Normal)
+    val SettingsDecorSubtitle = style(14f, FontWeight.Normal)
+    val SettingsItemTitle = style(14f, FontWeight.Medium).copy(letterSpacing = 0.01.em)
+    val SettingsItemSummary = style(12f, FontWeight.Normal).copy(letterSpacing = 0.01.em)
+    val SettingsCategory = style(11f, FontWeight.Medium).copy(letterSpacing = 0.07.em)
+    val SettingsInfo = style(14f, FontWeight.Normal)
     val SettingsPreviewHeader = style(18f, FontWeight.Bold)
     val SettingsPreviewRow = style(12.5f, FontWeight.SemiBold)
     val SettingsPreviewSubtitle = style(10f, FontWeight.Normal)
     val SettingsPreviewSection = style(9f, FontWeight.Bold).copy(letterSpacing = 0.12.em)
-    val SettingsTile = style(7.5f, FontWeight.ExtraBold).copy(letterSpacing = 0.02.em)
-    val SettingsSliderValue = style(15f, FontWeight.Bold)
+    val SettingsTile = style(12f, FontWeight.Bold)
     val SettingsCode = style(22f, FontWeight.ExtraBold).copy(letterSpacing = 0.12.em)
     val SettingsLabelSmall = style(9.5f, FontWeight.SemiBold).copy(letterSpacing = 0.1.em)
     /** Settings rows (mockup 28 px). */

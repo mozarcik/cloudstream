@@ -27,8 +27,6 @@ import kotlinx.coroutines.flow.flowOf
 fun LibraryFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onBack: () -> Unit,
-    onScroll: (Boolean) -> Unit,
-    @Suppress("UNUSED_PARAMETER") topBarFocusRequester: FocusRequester, // top bar is hidden on this screen
     restoreFocusToken: Int = 0,
 ) {
     val selectedSection by LibraryFeedGridSelectionStore.selectedSection.collectAsState()
@@ -77,7 +75,6 @@ fun LibraryFeedGridScreen(
         pagingItems = pagingItems,
         focusStore = LibraryFeedGridSelectionStore.focus,
         onMediaClick = onMediaClick,
-        onScroll = onScroll,
         screenKey = section.id,
         sort = sort,
         restoreFocusToken = restoreFocusToken,

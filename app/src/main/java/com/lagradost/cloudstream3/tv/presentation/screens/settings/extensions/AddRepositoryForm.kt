@@ -26,10 +26,11 @@ import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsActionRow
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsDivider
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsInfoParagraph
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsFieldRow
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsLevelHeader
-import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsStateBox
+import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
+import androidx.compose.foundation.layout.Arrangement
 
 /**
  * Add repository (mockup SettingsAddRepo): the two fields are rows (OK opens the keyboard), the
@@ -83,6 +84,10 @@ fun AddRepositoryForm(
 
     Column(modifier = modifier.fillMaxSize()) {
         SettingsLevelHeader(title = stringResource(R.string.add_repository))
+        Column(
+            verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
+            modifier = Modifier.padding(start = TvDimens.SettingsPaneStartInset, top = TvDimens.SettingsListTopPadding),
+        ) {
         SettingsFieldRow(
             label = stringResource(R.string.tv_settings_repository_name),
             value = name,
@@ -109,15 +114,13 @@ fun AddRepositoryForm(
             rowFocusRequester = urlRequester,
         )
         error?.let { message ->
-            SettingsStateBox(message = message, modifier = Modifier.padding(top = TvDimens.SettingsDp8))
+            SettingsInfoParagraph(text = message, color = TvColors.ErrorText)
         }
-        SettingsDivider(top = TvDimens.SettingsDp10, bottom = TvDimens.SettingsDp10)
         if (isLoading) {
             SettingsActionRow(
                 title = stringResource(R.string.tv_settings_adding_repository),
                 loading = true,
                 onClick = {},
-                height = TvDimens.SettingsDp52,
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
@@ -127,8 +130,8 @@ fun AddRepositoryForm(
                 icon = Icons.Default.Check,
                 enabled = canAdd,
                 onClick = ::submit,
-                height = TvDimens.SettingsDp52,
             )
+        }
         }
     }
 }

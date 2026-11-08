@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.details
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.outlined.ErrorOutline
@@ -140,16 +141,17 @@ internal fun DetailsOverlayPanels(
                     modifier = Modifier.padding(horizontal = TvDimens.PanelTitleHorizontalPadding, vertical = TvDimens.PanelSectionVerticalPadding),
                 )
             } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(TvDimens.RowGap),
-                    modifier = Modifier.padding(horizontal = TvDimens.PanelTitleHorizontalPadding, vertical = TvDimens.PanelSectionVerticalPadding),
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(TvDimens.RowGap),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = TvDimens.PanelTitleHorizontalPadding, vertical = TvDimens.PanelSectionVerticalPadding),
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.ErrorOutline,
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.tv_empty_no_links),
                         contentDescription = null,
-                        tint = TvColors.Danger,
-                        modifier = Modifier.size(TvDimens.RowIconSize),
+                        modifier = Modifier.size(TvDimens.StateIllustrationSize),
                     )
                     Text(
                         text = stringResource(R.string.no_links_found_toast),

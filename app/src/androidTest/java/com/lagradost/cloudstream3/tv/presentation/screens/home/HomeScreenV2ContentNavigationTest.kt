@@ -17,7 +17,6 @@ import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.MainAPI
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
-import com.lagradost.cloudstream3.tv.compat.home.FeaturedItemCompat
 import com.lagradost.cloudstream3.tv.compat.home.MainPageRequest
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.compat.resume.ContinueWatchingState
@@ -34,9 +33,8 @@ class HomeScreenV2ContentNavigationTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun hiddenSourcesRow_keepsFeaturedReachableBetweenContinueWatchingAndFeeds() {
+    fun hiddenSourcesRow_continueWatchingCardsReachFirstFeedAndBack() {
         val onlySource = testSource(name = "Local")
-        val topBarFocusRequester = FocusRequester()
 
         composeRule.setContent {
             MaterialTheme {
@@ -49,11 +47,6 @@ class HomeScreenV2ContentNavigationTest {
                     continueWatchingUiState = HomeContinueWatchingUiState(
                         state = HomeFeedLoadState.Success(
                             persistentListOf(testContinueWatchingItem())
-                        )
-                    ),
-                    featuredUiState = HomeFeaturedUiState(
-                        state = HomeFeaturedLoadState.Success(
-                            persistentListOf(testFeaturedItem())
                         )
                     ),
                     feedsUiState = HomeFeedsUiState(
@@ -77,11 +70,10 @@ class HomeScreenV2ContentNavigationTest {
                     onMediaClick = {},
                     onContinueWatchingPlay = {},
                     onOpenFeedGrid = { _ -> },
-                    onScroll = { _ -> },
-                    topBarFocusRequester = topBarFocusRequester,
                     onSourceSelected = { _ -> },
                     onMorePanelOpenChange = {},
                     onTogglePin = { _ -> },
+                    onRefreshFeed = { _ -> },
                     onRemoveContinueWatching = { _ -> },
                 )
             }
@@ -102,21 +94,13 @@ class HomeScreenV2ContentNavigationTest {
             pressKey(Key.DirectionDown)
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("home_featured_carousel").assertIsDisplayed()
-        composeRule.onNodeWithTag("home_featured_carousel").assertIsFocused()
-
-        composeRule.onNodeWithTag("home_featured_carousel").performKeyInput {
-            pressKey(Key.DirectionDown)
-        }
-        composeRule.waitForIdle()
         composeRule.onNodeWithTag("home:feed:feed-1:slot:0", useUnmergedTree = true).assertIsFocused()
 
         composeRule.onNodeWithTag("home:feed:feed-1:slot:0", useUnmergedTree = true).performKeyInput {
             pressKey(Key.DirectionUp)
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("home_featured_carousel").assertIsDisplayed()
-        composeRule.onNodeWithTag("home_featured_carousel").assertIsFocused()
+        composeRule.onNodeWithTag("continue_watching_card_cw-1").assertIsFocused()
     }
 
     private fun testSource(
@@ -154,26 +138,6 @@ class HomeScreenV2ContentNavigationTest {
         )
     }
 
-    private fun testFeaturedItem(): FeaturedItemCompat {
-        val navigationTarget = MediaItemCompat.Movie(
-            id = "featured-1",
-            url = "https://example.com/featured-1",
-            apiName = "Local",
-            name = "Featured",
-            posterUri = "",
-            type = TvType.Movie,
-            score = null,
-        )
-
-        return FeaturedItemCompat(
-            id = "featured-1",
-            name = "Featured",
-            description = "Featured description",
-            posterUri = "",
-            backdropUri = "",
-            navigationTarget = navigationTarget
-        )
-    }
 
     private fun testFeedItem(): MediaItemCompat.Movie {
         return MediaItemCompat.Movie(

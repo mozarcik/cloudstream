@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -33,25 +34,45 @@ fun TvChip(
     accent: Color,
     modifier: Modifier = Modifier,
     height: Dp = TvDimens.ChipHeight,
+    /** Marker shown instead of the check mark when [selected] (Home sources: an accent dot). */
+    selectedTrailing: (@Composable () -> Unit)? = null,
+    /** Icon before the text while not selected. */
+    leadingIcon: ImageVector? = null,
+    /** Selected look other than the accent tint (Home sources: white 14%, no outline). */
+    selectedFill: Color? = null,
+    selectedBorderColor: Color? = null,
 ) {
     FilterChip(
         selected = selected,
         onClick = onClick,
         shape = DesignChipStyle.shape,
-        colors = DesignChipStyle.colors(accent = accent),
-        border = DesignChipStyle.border(accent = accent),
+        colors = if (selectedFill != null) DesignChipStyle.colors(accent, selectedFill) else DesignChipStyle.colors(accent),
+        border = if (selectedBorderColor != null) DesignChipStyle.border(accent, selectedBorderColor) else DesignChipStyle.border(accent),
         scale = DesignChipStyle.scale,
-        leadingIcon = if (selected) {
-            {
-                Icon(
-                    imageVector = Icons.Default.Done,
-                    contentDescription = null,
-                    modifier = Modifier.size(TvDimens.ChipIconSize),
-                )
+        leadingIcon = when {
+            selected && selectedTrailing == null -> {
+                {
+                    Icon(
+                        imageVector = Icons.Default.Done,
+                        contentDescription = null,
+                        modifier = Modifier.size(TvDimens.ChipIconSize),
+                    )
+                }
             }
-        } else {
-            null
+
+            !selected && leadingIcon != null -> {
+                {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        modifier = Modifier.size(TvDimens.ChipIconSize),
+                    )
+                }
+            }
+
+            else -> null
         },
+        trailingIcon = if (selected) selectedTrailing else null,
         modifier = modifier.height(height),
     ) {
         ProvideTextStyle(value = TvTextStyles.Chip) {

@@ -25,6 +25,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardContentTopInset
+import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -94,7 +96,12 @@ private object ProfileScreenTags {
 }
 
 private object ProfileScreenTokens {
-    val ScreenPadding = PaddingValues(horizontal = 48.dp, vertical = 28.dp)
+    val ScreenPadding = PaddingValues(
+        start = TvDimens.ContentStartWithRail,
+        end = TvDimens.ScreenHorizontalPadding,
+        top = 28.dp + DashboardContentTopInset,
+        bottom = 28.dp,
+    )
     val PanelSpacing = 28.dp
     val PanelShape = RoundedCornerShape(20.dp)
     val PanelPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp)
@@ -118,11 +125,6 @@ private object ProfileScreenTokens {
 
 @Composable
 fun ProfileScreen(
-    topBarFocusRequester: FocusRequester,
-    isTopBarFocused: Boolean = false,
-    onTopBarVisibilityChanged: (Boolean) -> Unit,
-    onTopBarFocusableChanged: (Boolean) -> Unit,
-    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: ProfileViewModel = viewModel(),
 ) {
@@ -143,16 +145,6 @@ fun ProfileScreen(
     val editorNameFocusRequester = remember { FocusRequester() }
     val pinInputFocusRequester = remember { FocusRequester() }
     val pendingFocusKey = uiState.pendingListFocusKey
-
-    val topBarVisibilityState by rememberUpdatedState(onTopBarVisibilityChanged)
-    val topBarFocusableState by rememberUpdatedState(onTopBarFocusableChanged)
-    val topBarDownNavigationState by rememberUpdatedState(onTopBarDownNavigationEnabledChanged)
-
-    LaunchedEffect(Unit) {
-        topBarVisibilityState(true)
-        topBarFocusableState(true)
-        topBarDownNavigationState(true)
-    }
 
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
@@ -184,16 +176,10 @@ fun ProfileScreen(
         enabled = uiState.pinPrompt != null
     )
 
-    BackHandler(
-        enabled = uiState.pinPrompt != null ||
-            uiState.mode == ProfileMode.Manage ||
-            !isTopBarFocused
-    ) {
+    BackHandler(enabled = uiState.pinPrompt != null || uiState.mode == ProfileMode.Manage) {
         when {
             uiState.pinPrompt != null -> viewModel.dismissPinPrompt()
-            uiState.mode == ProfileMode.Manage -> viewModel.exitManageMode()
-            !isTopBarFocused -> topBarFocusRequester.requestFocus()
-            else -> Unit
+            else -> viewModel.exitManageMode()
         }
     }
 
@@ -207,7 +193,6 @@ fun ProfileScreen(
                 ProfileSelectionContent(
                     accounts = uiState.accounts,
                     selectedAccount = selectedAccount,
-                    topBarFocusRequester = topBarFocusRequester,
                     listFocusRequesterMap = listFocusRequesterMap,
                     summaryButtonFocusRequester = summaryButtonFocusRequester,
                     onAccountSelected = viewModel::selectAccount,
@@ -221,7 +206,6 @@ fun ProfileScreen(
                 ProfileManageContent(
                     accounts = uiState.accounts,
                     editor = uiState.editor,
-                    topBarFocusRequester = topBarFocusRequester,
                     listFocusRequesterMap = listFocusRequesterMap,
                     doneButtonFocusRequester = doneButtonFocusRequester,
                     editorNameFocusRequester = editorNameFocusRequester,
@@ -257,7 +241,6 @@ fun ProfileScreen(
 private fun ProfileSelectionContent(
     accounts: PersistentList<ProfileAccountItemUiState>,
     selectedAccount: ProfileAccountItemUiState?,
-    topBarFocusRequester: FocusRequester,
     listFocusRequesterMap: Map<String, FocusRequester>,
     summaryButtonFocusRequester: FocusRequester,
     onAccountSelected: (Int) -> Unit,
@@ -274,7 +257,6 @@ private fun ProfileSelectionContent(
             accounts = accounts,
             selectionMode = true,
             activeEditorKeyIndex = null,
-            topBarFocusRequester = topBarFocusRequester,
             rightPanelFocusRequester = summaryButtonFocusRequester,
             listFocusRequesterMap = listFocusRequesterMap,
             onAccountClick = onAccountSelected,
@@ -297,7 +279,6 @@ private fun ProfileSelectionContent(
 private fun ProfileManageContent(
     accounts: PersistentList<ProfileAccountItemUiState>,
     editor: ProfileEditorUiState?,
-    topBarFocusRequester: FocusRequester,
     listFocusRequesterMap: Map<String, FocusRequester>,
     doneButtonFocusRequester: FocusRequester,
     editorNameFocusRequester: FocusRequester,
@@ -344,7 +325,7 @@ private fun ProfileManageContent(
                         .fillMaxWidth()
                         .focusRequester(doneButtonFocusRequester)
                         .focusProperties {
-                            up = topBarFocusRequester
+                            up = FocusRequester.Cancel
                             right = editorNameFocusRequester
                         }
                         .testTag(ProfileScreenTags.DoneButton)
@@ -356,7 +337,6 @@ private fun ProfileManageContent(
                     accounts = accounts,
                     selectionMode = false,
                     activeEditorKeyIndex = editor?.keyIndex,
-                    topBarFocusRequester = topBarFocusRequester,
                     rightPanelFocusRequester = editorNameFocusRequester,
                     listFocusRequesterMap = listFocusRequesterMap,
                     onAccountClick = onEditAccount,
@@ -368,7 +348,6 @@ private fun ProfileManageContent(
 
         ProfileEditorPanel(
             editor = editor,
-            topBarFocusRequester = topBarFocusRequester,
             leftPanelFocusRequester = editor
                 ?.takeUnless { it.isNew }
                 ?.let { listFocusRequesterMap[profileAccountFocusKey(it.keyIndex)] }
@@ -392,7 +371,6 @@ private fun ProfileAccountsPanel(
     accounts: PersistentList<ProfileAccountItemUiState>,
     selectionMode: Boolean,
     activeEditorKeyIndex: Int?,
-    topBarFocusRequester: FocusRequester,
     rightPanelFocusRequester: FocusRequester,
     listFocusRequesterMap: Map<String, FocusRequester>,
     onAccountClick: (Int) -> Unit,
@@ -422,7 +400,6 @@ private fun ProfileAccountsPanel(
                 accounts = accounts,
                 selectionMode = selectionMode,
                 activeEditorKeyIndex = activeEditorKeyIndex,
-                topBarFocusRequester = topBarFocusRequester,
                 rightPanelFocusRequester = rightPanelFocusRequester,
                 listFocusRequesterMap = listFocusRequesterMap,
                 onAccountClick = onAccountClick,
@@ -438,7 +415,6 @@ private fun ProfileAccountsList(
     accounts: PersistentList<ProfileAccountItemUiState>,
     selectionMode: Boolean,
     activeEditorKeyIndex: Int?,
-    topBarFocusRequester: FocusRequester,
     rightPanelFocusRequester: FocusRequester,
     listFocusRequesterMap: Map<String, FocusRequester>,
     onAccountClick: (Int) -> Unit,
@@ -458,7 +434,6 @@ private fun ProfileAccountsList(
                 account = account,
                 isActive = if (selectionMode) account.isSelected else account.keyIndex == activeEditorKeyIndex,
                 focusRequester = focusRequester,
-                topBarFocusRequester = topBarFocusRequester,
                 rightPanelFocusRequester = rightPanelFocusRequester,
                 onClick = { onAccountClick(account.keyIndex) },
                 modifier = Modifier
@@ -471,7 +446,6 @@ private fun ProfileAccountsList(
             val focusRequester = listFocusRequesterMap[ProfileAddAccountFocusKey]
             ProfileAddAccountItem(
                 focusRequester = focusRequester,
-                topBarFocusRequester = topBarFocusRequester,
                 rightPanelFocusRequester = rightPanelFocusRequester,
                 onClick = onAddAccount,
                 modifier = Modifier
@@ -487,7 +461,6 @@ private fun ProfileAccountListItem(
     account: ProfileAccountItemUiState,
     isActive: Boolean,
     focusRequester: FocusRequester?,
-    topBarFocusRequester: FocusRequester,
     rightPanelFocusRequester: FocusRequester,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -498,7 +471,7 @@ private fun ProfileAccountListItem(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
-                up = topBarFocusRequester
+                up = FocusRequester.Cancel
                 right = rightPanelFocusRequester
             },
         shape = SelectableSurfaceDefaults.shape(shape = ProfileScreenTokens.ListItemShape),
@@ -558,7 +531,6 @@ private fun ProfileAccountListItem(
 @Composable
 private fun ProfileAddAccountItem(
     focusRequester: FocusRequester?,
-    topBarFocusRequester: FocusRequester,
     rightPanelFocusRequester: FocusRequester,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -569,7 +541,7 @@ private fun ProfileAddAccountItem(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
-                up = topBarFocusRequester
+                up = FocusRequester.Cancel
                 right = rightPanelFocusRequester
             },
         shape = SelectableSurfaceDefaults.shape(shape = ProfileScreenTokens.ListItemShape),
@@ -689,7 +661,6 @@ private fun ProfileSummaryPanel(
 @Composable
 private fun ProfileEditorPanel(
     editor: ProfileEditorUiState?,
-    topBarFocusRequester: FocusRequester,
     leftPanelFocusRequester: FocusRequester?,
     nameFocusRequester: FocusRequester,
     onNameChanged: (String) -> Unit,
@@ -773,7 +744,7 @@ private fun ProfileEditorPanel(
                     modifier = Modifier
                         .focusRequester(nameFocusRequester)
                         .focusProperties {
-                            up = topBarFocusRequester
+                            up = FocusRequester.Cancel
                             left = leftPanelFocusRequester ?: FocusRequester.Default
                         }
                         .testTag(ProfileScreenTags.EditorName)

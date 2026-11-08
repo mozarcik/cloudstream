@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
@@ -22,37 +23,31 @@ private val HomeNoFeedsStateHeight = 260.dp
 internal fun LazyListScope.homeFeedSections(
     feedsUiState: HomeFeedsUiState,
     sourceName: String?,
-    loadingLabel: String,
+    sourceId: String?,
     isMorePanelOpen: Boolean,
-    firstFeedCardFocusRequester: FocusRequester,
+    firstFeedRowFocusRequester: FocusRequester,
     firstSectionUpFocusRequester: FocusRequester? = null,
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
+    onRefreshFeed: (FeedCategory) -> Unit,
     pendingRestoreFocusTargetId: String? = null,
     restoreFocusToken: Int = 0,
     onItemFocused: ((FeedCategory, MediaItemCompat) -> Unit)? = null,
-    onShowMoreFocused: ((FeedCategory) -> Unit)? = null,
+    onShowAllFocused: ((FeedCategory) -> Unit)? = null,
     onRestoreFocusConsumed: ((String) -> Unit)? = null,
     onSectionFocusChanged: ((feedId: String, hasFocus: Boolean) -> Unit)? = null,
-    onVerticalExit: ((feedIndex: Int, up: Boolean, column: Int) -> Boolean)? = null,
-    /** Focus target of a feed's first element (or its empty / error box), for feeds below the first. */
-    feedFocusRequester: ((feedId: String) -> FocusRequester)? = null,
+    onVerticalExit: ((feedIndex: Int, up: Boolean) -> Boolean)? = null,
+    /** Focus target of a feed row (the first element, or its empty / error box), for feeds below the first. */
+    feedFocusRequester: (feedId: String) -> FocusRequester,
 ) {
     if (feedsUiState.feedSections.isEmpty() && feedsUiState.isFeedListLoading) {
         items(count = 2) {
-            FeedSection(
-                title = loadingLabel,
-                state = HomeFeedLoadState.Loading,
-                onMediaClick = {},
-                onShowMoreClick = {},
-                isInteractive = false,
-                modifier = Modifier.padding(horizontal = HomeContentHorizontalPadding),
-            )
+            FeedRowPlaceholderSection()
         }
     } else if (feedsUiState.feedSections.isEmpty()) {
         item {
             TvEmptyState(
-                icon = Icons.Default.GridView,
+                illustration = R.drawable.tv_empty_empty_list,
                 title = stringResource(R.string.tv_home_no_feeds),
                 message = sourceName?.let { stringResource(R.string.tv_home_no_feeds_message, it) },
                 modifier = Modifier
@@ -65,43 +60,40 @@ internal fun LazyListScope.homeFeedSections(
             items = feedsUiState.feedSections,
             key = { _, section -> section.feed.id }
         ) { index, section ->
-            FeedSection(
+            FeedRow(
                 title = section.feed.name,
                 sourceName = sourceName,
                 state = section.state,
+                rowKey = "$sourceId|${section.feed.id}",
+                feedId = section.feed.id,
+                rowFocusRequester = if (index == 0) firstFeedRowFocusRequester else feedFocusRequester(section.feed.id),
                 onMediaClick = onMediaClick,
-                onShowMoreClick = {
-                    onOpenFeedGrid(section.feed)
-                },
+                onShowAllClick = { onOpenFeedGrid(section.feed) },
+                onRefreshClick = { onRefreshFeed(section.feed) },
                 isInteractive = !isMorePanelOpen,
-                modifier = Modifier.padding(horizontal = HomeContentHorizontalPadding),
-                firstItemFocusRequester = if (index == 0) {
-                    firstFeedCardFocusRequester
-                } else {
-                    feedFocusRequester?.invoke(section.feed.id)
-                },
-                upFocusRequester = if (index == 0) {
-                    firstSectionUpFocusRequester
-                } else {
-                    null
-                },
-                sectionFocusKey = "home:feed:${section.feed.id}",
+                upFocusRequester = if (index == 0) firstSectionUpFocusRequester else null,
                 pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
                 restoreFocusToken = restoreFocusToken,
-                onItemFocused = { item ->
-                    onItemFocused?.invoke(section.feed, item)
-                },
-                onShowMoreFocused = {
-                    onShowMoreFocused?.invoke(section.feed)
-                },
+                onItemFocused = { item -> onItemFocused?.invoke(section.feed, item) },
+                onShowAllFocused = { onShowAllFocused?.invoke(section.feed) },
                 onRestoreFocusConsumed = onRestoreFocusConsumed,
-                onSectionFocusChanged = { hasFocus ->
-                    onSectionFocusChanged?.invoke(section.feed.id, hasFocus)
-                },
-                onVerticalExit = onVerticalExit?.let { exit ->
-                    { up, column -> exit(index, up, column) }
-                },
+                onSectionFocusChanged = { hasFocus -> onSectionFocusChanged?.invoke(section.feed.id, hasFocus) },
+                onVerticalExit = onVerticalExit?.let { exit -> { up -> exit(index, up) } },
             )
         }
     }
+}
+
+@Composable
+private fun FeedRowPlaceholderSection() {
+    FeedRow(
+        title = stringResource(R.string.loading),
+        state = HomeFeedLoadState.Loading,
+        rowKey = "loading",
+        feedId = "loading",
+        rowFocusRequester = FocusRequester(),
+        onMediaClick = {},
+        onShowAllClick = {},
+        isInteractive = false,
+    )
 }

@@ -16,7 +16,6 @@ import com.lagradost.cloudstream3.tv.presentation.screens.grid.TvShowMoreGridScr
 fun HomeFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onBack: () -> Unit,
-    onScroll: (Boolean) -> Unit,
     restoreFocusToken: Int = 0,
     mediaGridViewModel: MediaGridViewModel = viewModel(
         factory = MediaGridViewModelFactory(FeedRepositoryImpl())
@@ -39,7 +38,6 @@ fun HomeFeedGridScreen(
         pagingItems = pagingItems,
         focusStore = HomeFeedGridSelectionStore.focus,
         onMediaClick = onMediaClick,
-        onScroll = onScroll,
         screenKey = feed.id,
         restoreFocusToken = restoreFocusToken,
     )

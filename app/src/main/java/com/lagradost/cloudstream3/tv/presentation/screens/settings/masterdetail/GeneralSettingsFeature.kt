@@ -340,18 +340,9 @@ class GeneralSettingsFeature(
         ) {
             val text = context.getString(R.string.legal_notice_text)
             Column(modifier = modifier.fillMaxSize()) {
-                if (isPreview) {
-                    SettingsPreviewHeader(title = title)
-                    Text(
-                        text = text,
-                        style = TvTextStyles.SettingsPreviewSubtitle,
-                        color = TvColors.SettingsPreviewSubtext,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier.padding(horizontal = TvDimens.SettingsPreviewRowHorizontalPadding)
-                    )
-                } else {
-                    SettingsLevelHeader(title = title)
-                    SettingsTextBlock(text = text)
+                SettingsLevelHeader(title = title)
+                Box(modifier = Modifier.padding(start = TvDimens.SettingsPaneStartInset, end = TvDimens.SettingsPaneEndPadding)) {
+                    SettingsTextBlock(text = text, requestInitialFocus = !isPreview)
                 }
             }
         }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
@@ -69,66 +71,87 @@ import kotlinx.coroutines.launch
  * add repository) are made of these plus [TvListRow].
  */
 
-/** Crumb ("Settings › Player"), 24 sp title and an optional description. */
+/** 28 sp title (Decor title) and an optional 14 sp description at alpha 0.6; no breadcrumb. */
 @Composable
 internal fun SettingsLevelHeader(
     title: String,
     modifier: Modifier = Modifier,
-    crumb: String = LocalSettingsBreadcrumb.current,
     description: String? = null,
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = TvDimens.SettingsHeaderHorizontalPadding)
-            .padding(bottom = TvDimens.SettingsHeaderBottomGap)
-    ) {
-        if (crumb.isNotEmpty()) {
-            Text(
-                text = crumb,
-                style = TvTextStyles.SettingsCrumb,
-                color = TvColors.LabelPanel,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            .padding(
+                start = TvDimens.SettingsPaneStartInset + TvDimens.SettingsTextIndent,
+                end = TvDimens.SettingsPaneEndPadding,
+                top = TvDimens.SettingsDecorTitleTop,
+                bottom = TvDimens.SettingsItemGap * 2,
             )
-        }
+    ) {
         Text(
             text = title,
-            style = TvTextStyles.Level,
+            style = TvTextStyles.SettingsDecorTitle,
             color = TvColors.Text,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = if (crumb.isNotEmpty()) TvDimens.SettingsDp3 else TvDimens.SettingsDp0),
         )
         if (!description.isNullOrBlank()) {
             Text(
                 text = description,
-                style = TvTextStyles.RowSubtitle,
-                color = TvColors.RowSubtitle,
-                modifier = Modifier.padding(top = TvDimens.SettingsDp4),
+                style = TvTextStyles.SettingsDecorSubtitle,
+                color = TvColors.Text.copy(alpha = TvDimens.SettingsPreviewInactiveAlpha),
+                modifier = Modifier.padding(top = TvDimens.SettingsDp8),
             )
         }
     }
 }
 
-/** Uppercase section label between groups of rows. */
+/** Paragraph of an info panel (plugin description, authors, error): not focusable. */
 @Composable
-internal fun SettingsSectionLabel(text: String, modifier: Modifier = Modifier) {
+internal fun SettingsInfoParagraph(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = TvColors.Body,
+    maxLines: Int = Int.MAX_VALUE,
+) {
     Text(
-        text = text.uppercase(),
-        style = TvTextStyles.PanelGroupHeader,
-        color = TvColors.LabelPanel,
-        maxLines = 1,
+        text = text,
+        maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,
+        style = TvTextStyles.SettingsInfo,
+        color = color,
         modifier = modifier
             .fillMaxWidth()
             .padding(
-                start = TvDimens.SettingsHeaderHorizontalPadding,
-                end = TvDimens.SettingsHeaderHorizontalPadding,
-                top = TvDimens.SettingsSectionTop,
-                bottom = TvDimens.SettingsSectionBottom,
+                start = TvDimens.SettingsTextIndent,
+                end = TvDimens.SettingsPaneEndPadding,
+                bottom = TvDimens.SettingsItemGap,
             ),
     )
+}
+
+/** Category label (11 sp caps) in a 36 dp block, text at the bottom. */
+@Composable
+internal fun SettingsSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Box(
+        contentAlignment = Alignment.BottomStart,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(TvDimens.SettingsCategoryHeight)
+            .padding(
+                start = TvDimens.SettingsTextIndent,
+                end = TvDimens.SettingsPaneEndPadding,
+                bottom = TvDimens.SettingsDp4,
+            ),
+    ) {
+        Text(
+            text = text.uppercase(),
+            style = TvTextStyles.SettingsCategory,
+            color = TvColors.LabelPanel,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Composable
@@ -157,51 +180,21 @@ internal fun SettingsMessageBlock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = TvDimens.SettingsHeaderHorizontalPadding, vertical = TvDimens.SettingsDp7),
+            .padding(start = TvDimens.SettingsTextIndent, end = TvDimens.SettingsPaneEndPadding, top = TvDimens.SettingsDp8, bottom = TvDimens.SettingsDp8),
     ) {
         Text(
             text = title,
-            style = TvTextStyles.RowPanel,
+            style = TvTextStyles.SettingsItemTitle,
             color = TvColors.Text,
         )
         if (!message.isNullOrBlank()) {
             Text(
                 text = message,
-                style = TvTextStyles.RowSubtitle,
+                style = TvTextStyles.SettingsItemSummary,
                 color = TvColors.RowSubtitle,
                 modifier = Modifier.padding(top = TvDimens.SettingsDp3),
             )
         }
-    }
-}
-
-/** Error box (red tint) with an optional title, used for load / login errors. */
-@Composable
-internal fun SettingsStateBox(
-    message: String,
-    modifier: Modifier = Modifier,
-    title: String? = null,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = TvDimens.SettingsDp7, vertical = TvDimens.SettingsDp3)
-            .background(TvColors.ErrorFill, RoundedCornerShape(TvDimens.SettingsStateBoxRadius))
-            .padding(TvDimens.SettingsStateBoxPadding),
-    ) {
-        if (!title.isNullOrBlank()) {
-            Text(
-                text = title,
-                style = TvTextStyles.SearchErrorRow,
-                color = TvColors.ErrorText,
-            )
-        }
-        Text(
-            text = message,
-            style = TvTextStyles.SearchErrorRow,
-            color = if (title.isNullOrBlank()) TvColors.ErrorText else TvColors.ErrorText.copy(alpha = TvDimens.SettingsStateMessageAlpha),
-            modifier = Modifier.padding(top = if (title.isNullOrBlank()) TvDimens.SettingsDp0 else TvDimens.SettingsDp3),
-        )
     }
 }
 
@@ -216,33 +209,21 @@ internal fun SettingsActionRow(
     enabled: Boolean = true,
     loading: Boolean = false,
     destructive: Boolean = false,
-    trailing: TvRowTrailing = TvRowTrailing.None,
-    height: Dp = TvDimens.RowHeightLarge,
+    widget: SettingsRowWidget = SettingsRowWidget.None,
 ) {
-    TvListRow(
+    SettingsListRow(
         title = title,
-        subtitle = subtitle,
+        summary = subtitle,
         onClick = onClick,
         enabled = enabled,
-        height = height,
-        horizontalPadding = TvDimens.SettingsRowHorizontalPadding,
-        gap = TvDimens.SettingsRowGap,
-        trailing = trailing,
-        trailingIconSize = TvDimens.SettingsRowChevronSize,
-        tint = if (destructive) TvColors.Danger else null,
-        focusedTint = if (destructive) TvColors.DangerOnFocus else null,
+        destructive = destructive,
+        widget = widget,
         leading = when {
             loading -> {
                 { _ -> SettingsSpinner(color = androidx.tv.material3.LocalContentColor.current) }
             }
             icon != null -> {
-                { _ ->
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(TvDimens.SettingsRowChevronSize),
-                    )
-                }
+                { _ -> SettingsGlyph(imageVector = icon) }
             }
             else -> null
         },
@@ -287,24 +268,29 @@ internal fun SettingsSpinner(color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Skeleton rows of the Loading state (mockup SettingsStates: 4 bars of different widths). */
+/** Skeleton rows of the Loading state: the layout of an item (40 dp circle + two bars) in `Tile`. */
 @Composable
 internal fun SettingsSkeletonRows(modifier: Modifier = Modifier) {
-    val widths = remember { listOf(TvDimens.SettingsDp223, TvDimens.SettingsDp309, TvDimens.SettingsDp257, TvDimens.SettingsDp291) }
-    Column(modifier = modifier) {
+    val widths = remember { listOf(TvDimens.SettingsDp223, TvDimens.SettingsDp257, TvDimens.SettingsDp223, TvDimens.SettingsDp257) }
+    Column(
+        verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsItemGap),
+        modifier = modifier.padding(start = TvDimens.SettingsPaneStartInset, top = TvDimens.SettingsDp4),
+    ) {
         widths.forEach { width ->
-            Box(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(TvDimens.RowHeightLarge)
-                    .padding(horizontal = TvDimens.SettingsRowHorizontalPadding),
-                contentAlignment = Alignment.CenterStart,
+                    .size(TvDimens.SettingsItemWidth, TvDimens.SettingsItemTwoLineMinHeight)
+                    .padding(horizontal = TvDimens.SettingsItemPaddingStartIcon),
             ) {
-                Spacer(
-                    modifier = Modifier
-                        .size(width, TvDimens.SettingsSkeletonHeight)
-                        .background(TvColors.Tile, RoundedCornerShape(TvDimens.SettingsDp3))
-                )
+                Spacer(Modifier.size(TvDimens.SettingsItemIconSize).background(TvColors.Tile, CircleShape))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(TvDimens.SettingsDp8),
+                    modifier = Modifier.padding(start = TvDimens.SettingsItemIconGap),
+                ) {
+                    Spacer(Modifier.size(width / 2, TvDimens.SettingsSkeletonHeight).background(TvColors.Tile, RoundedCornerShape(TvDimens.SettingsDp3)))
+                    Spacer(Modifier.size(width / 3, TvDimens.SettingsSkeletonHeight).background(TvColors.Tile, RoundedCornerShape(TvDimens.SettingsDp3)))
+                }
             }
         }
     }
@@ -324,6 +310,7 @@ internal fun SettingsTextBlock(
     val scope = rememberCoroutineScope()
     val requester = remember { FocusRequester() }
     var focused by remember { mutableStateOf(false) }
+    val panelFocusable = LocalSettingsPanelFocusable.current
     val stepPx = with(androidx.compose.ui.platform.LocalDensity.current) { TvDimens.SettingsDp64.toPx() }
 
     if (requestInitialFocus) {
@@ -355,6 +342,7 @@ internal fun SettingsTextBlock(
                         else -> false
                     }
                 }
+                .focusProperties { canFocus = panelFocusable }
                 .focusable()
                 .then(
                     if (focused) {
@@ -466,30 +454,3 @@ internal fun SettingsPreviewRow(
         }
     }
 }
-
-/** Rounded square with 1-3 letters (accounts, plugins without an icon). */
-@Composable
-internal fun SettingsInitialsTile(
-    initials: String,
-    size: Dp,
-    radius: Dp,
-    modifier: Modifier = Modifier,
-    background: Color = TvColors.Tile,
-    contentColor: Color = TvColors.Meta,
-) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier
-            .size(size)
-            .background(background, RoundedCornerShape(radius)),
-    ) {
-        Text(
-            text = initials,
-            style = TvTextStyles.SettingsTile,
-            color = contentColor,
-            maxLines = 1,
-        )
-    }
-}
-
-internal val SettingsCardShape = RoundedCornerShape(TvDimens.SettingsCardRadius)

@@ -245,8 +245,6 @@ private fun HomeScreenContinueWatchingRemoveFocusHarness(
                 onMediaClick = {},
                 onContinueWatchingPlay = {},
                 onOpenFeedGrid = {},
-                onScroll = {},
-                topBarFocusRequester = topBarFocusRequester,
                 sourcesViewModelFactory = HomeSourcesViewModelFactory(
                     sourcePreferencesRepository = RemoveFocusFakeSourcePreferencesRepository(),
                     homeSourceSelectionRepository = RemoveFocusFakeHomeSourceSelectionRepository(
@@ -256,9 +254,6 @@ private fun HomeScreenContinueWatchingRemoveFocusHarness(
                 continueWatchingViewModelFactory = HomeContinueWatchingViewModelFactory(
                     continueWatchingRepository = continueWatchingRepository,
                     continueWatchingImagePrefetcher = ContinueWatchingImagePrefetcher(context),
-                ),
-                featuredViewModelFactory = HomeFeaturedViewModelFactory(
-                    featuredRepository = RemoveFocusFakeFeaturedRepository()
                 ),
                 feedsViewModelFactory = HomeFeedsViewModelFactory(
                     feedRepository = RemoveFocusFakeFeedRepository()

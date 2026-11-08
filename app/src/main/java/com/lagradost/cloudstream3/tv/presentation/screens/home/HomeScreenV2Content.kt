@@ -29,14 +29,21 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.MainAPI
+import com.lagradost.cloudstream3.tv.compat.home.sourceId
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.FeedCategory
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
@@ -51,28 +58,23 @@ import com.lagradost.cloudstream3.tv.presentation.common.tvSkeleton
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardTopBarHeight
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardTopBarOpaque
+import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardContentTopInset
 import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-/** Gap between the source chips and the featured carousel (Home board, 36 px). */
-private val SourcesToFeaturedSpacing = TvDimens.SourcesToFeaturedGap
 /** Gap between the top bar and the first row when there is no hero. */
 private val TopBarToContentSpacing = TvDimens.TopBarToContentGap
 /** Lets the last feed scroll to the top edge (screen 540 dp - feed item 476 dp). */
 private val FeedPinBottomPadding = TvDimens.FeedPinBottomPadding
 private val SourceChipSkeletonWidths = listOf(TvDimens.SkeletonChipWidthA, TvDimens.SkeletonChipWidthB, TvDimens.SkeletonChipWidthC)
-/** Longer than the navigation transition that keeps the previous screen composed. */
-private const val TopBarReHideDelayMs = 600L
 private const val HomeContinueWatchingListIndex = 0
 private const val HomeFocusDebugTag = "TvHomeFocus"
 
 /**
- * Home scrolls itself (hero, centred Featured, pinned feeds). Compose's default focus
+ * Home scrolls itself (hero, pinned feeds). Compose's default focus
  * bring-into-view on TV (pivot at ~30% of the screen) would fight the pinned feed position.
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -90,16 +92,14 @@ private enum class MorePanelCloseTarget {
 fun HomeScreenV2Content(
     sourcesUiState: HomeSourcesUiState,
     continueWatchingUiState: HomeContinueWatchingUiState,
-    featuredUiState: HomeFeaturedUiState,
     feedsUiState: HomeFeedsUiState,
     onMediaClick: (MediaItemCompat) -> Unit,
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
-    onScroll: (isTopBarVisible: Boolean) -> Unit,
-    topBarFocusRequester: FocusRequester,
     onSourceSelected: (MainAPI) -> Unit,
     onMorePanelOpenChange: (Boolean) -> Unit,
     onTogglePin: (MainAPI) -> Unit,
+    onRefreshFeed: (FeedCategory) -> Unit,
     onRemoveContinueWatching: (MediaItemCompat) -> Unit,
     restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
@@ -108,9 +108,8 @@ fun HomeScreenV2Content(
     val continueWatchingCardsFocusRequester = remember { FocusRequester() }
     val quickSourcesEntryFocusRequester = remember { FocusRequester() }
     val moreButtonFocusRequester = remember { FocusRequester() }
-    val featuredFocusRequester = remember { FocusRequester() }
     val firstFeedCardFocusRequester = remember { FocusRequester() }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(prefetchStrategy = remember { NeighbourRowsPrefetchStrategy() })
     val coroutineScope = rememberCoroutineScope()
 
     var hasInitialFocusBeenRequested by rememberSaveable { mutableStateOf(false) }
@@ -121,11 +120,9 @@ fun HomeScreenV2Content(
     var armedRestoreTargetId by rememberSaveable { mutableStateOf<String?>(null) }
     var feedNavTargetId by remember { mutableStateOf<String?>(null) }
     var feedNavToken by remember { mutableIntStateOf(0) }
-    var isTopBarHiddenByFeeds by remember { mutableStateOf(false) }
     var feedPinJob by remember { mutableStateOf<Job?>(null) }
     var wasMorePanelOpen by rememberSaveable { mutableStateOf(false) }
     var morePanelCloseTarget by rememberSaveable { mutableStateOf(MorePanelCloseTarget.MoreButton) }
-    var featuredCenterJob by remember { mutableStateOf<Job?>(null) }
 
     val isMorePanelOpen = sourcesUiState.isMorePanelOpen
     val hasContinueWatchingItems = (continueWatchingUiState.state as? HomeFeedLoadState.Success)
@@ -137,8 +134,6 @@ fun HomeScreenV2Content(
     val showQuickSourcesRow = sourcesUiState.allSources.size > 1
     val isMorePanelVisible = showQuickSourcesRow && isMorePanelOpen
     val hasQuickSourceTargets = showQuickSourcesRow && sourcesUiState.quickSources.isNotEmpty()
-    val featuredItems = (featuredUiState.state as? HomeFeaturedLoadState.Success)?.items
-    val hasFeaturedItems = featuredItems?.isNotEmpty() == true
     val loadingLabel = stringResource(id = R.string.loading)
     val isNoSources = sourcesUiState.isBootstrapped && sourcesUiState.allSources.isEmpty()
     val pendingRestoreTargetId = HomeFocusStore.pendingRestoreTargetId
@@ -150,31 +145,19 @@ fun HomeScreenV2Content(
     } else {
         0
     }
+    // Nothing below / above: stop, never jump somewhere unexpected.
     val continueWatchingDownFocusRequester = when {
         showQuickSourcesRow -> quickSourcesEntryFocusRequester
-        hasFeaturedItems -> featuredFocusRequester
         feedsUiState.feedSections.isNotEmpty() -> firstFeedCardFocusRequester
-        else -> topBarFocusRequester
-    }
-    val featuredUpFocusRequester = when {
-        hasQuickSourceTargets -> quickSourcesEntryFocusRequester
-        hasContinueWatchingItems -> continueWatchingCardsFocusRequester
-        else -> topBarFocusRequester
+        else -> FocusRequester.Cancel
     }
     val firstFeedUpFocusRequester = when {
-        hasFeaturedItems -> featuredFocusRequester
         hasQuickSourceTargets -> quickSourcesEntryFocusRequester
         hasContinueWatchingItems -> continueWatchingCardsFocusRequester
-        else -> topBarFocusRequester
+        else -> FocusRequester.Cancel
     }
-    val featuredListIndex = remember(showQuickSourcesRow) {
-        homeFeaturedListIndex(showQuickSourcesRow = showQuickSourcesRow)
-    }
-    val feedSectionsStartIndex = remember(showQuickSourcesRow, hasFeaturedItems) {
-        homeFeedSectionsStartIndex(
-            showQuickSourcesRow = showQuickSourcesRow,
-            hasFeaturedItems = hasFeaturedItems
-        )
+    val feedSectionsStartIndex = remember(showQuickSourcesRow) {
+        homeFeedSectionsStartIndex(showQuickSourcesRow = showQuickSourcesRow)
     }
     val homeFeedRestoreListIndex = remember(
         armedRestoreTargetId,
@@ -195,26 +178,6 @@ fun HomeScreenV2Content(
         coroutineScope.launch {
             listState.animateScrollToItem(HomeContinueWatchingListIndex)
         }
-    }
-
-    fun centerFeaturedInViewport() {
-        if (!hasFeaturedItems) return
-
-        featuredCenterJob?.cancel()
-        featuredCenterJob = coroutineScope.launch {
-            listState.centerItemInViewport(itemIndex = featuredListIndex)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        onScroll(true)
-    }
-
-    val setTopBarOpaque = LocalDashboardTopBarOpaque.current
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 24
-        }.collect { setTopBarOpaque(it) }
     }
 
     LaunchedEffect(restoreFocusToken) {
@@ -298,11 +261,6 @@ fun HomeScreenV2Content(
             Log.d(HomeFocusDebugTag, "home restore scroll -> continue watching")
             return@LaunchedEffect
         }
-        if (armedRestoreTargetId == HomeFocusStore.Featured) {
-            listState.scrollToItem(featuredListIndex)
-            Log.d(HomeFocusDebugTag, "home restore scroll -> featured")
-            return@LaunchedEffect
-        }
         if (homeFeedRestoreListIndex != null) {
             listState.scrollToItem(homeFeedRestoreListIndex)
             feedSectionsRestoreFocusToken += 1
@@ -316,19 +274,6 @@ fun HomeScreenV2Content(
     fun consumeArmedRestore(targetId: String) {
         if (feedNavTargetId == targetId) {
             feedNavTargetId = null
-        }
-        if (HomeFocusStore.feedIdFromTarget(targetId) != null && armedRestoreTargetId == targetId) {
-            // Back from "Show more"/details: the screen we came from shows the top bar when it
-            // leaves composition (after the transition), so hide it again for the restored feed.
-            coroutineScope.launch {
-                // The state may be fresh after the other screen (flag false), so hide unconditionally, and
-                // once more for slow transitions.
-                repeat(2) {
-                    delay(TopBarReHideDelayMs)
-                    isTopBarHiddenByFeeds = true
-                    onScroll(false)
-                }
-            }
         }
         if (armedRestoreTargetId != targetId) {
             return
@@ -358,14 +303,13 @@ fun HomeScreenV2Content(
     val feedRequesters = remember { HashMap<String, FocusRequester>() }
     fun feedRequester(feedId: String) = feedRequesters.getOrPut(feedId) { FocusRequester() }
 
-    fun navigateFromFeed(feedIndex: Int, up: Boolean, column: Int): Boolean {
+    fun navigateFromFeed(feedIndex: Int, up: Boolean): Boolean {
         val sections = feedsUiState.feedSections
         val targetIndex = if (up) feedIndex - 1 else feedIndex + 1
         val target = sections.getOrNull(targetIndex)
         if (target == null) {
             if (!up || feedIndex != 0) return false
             val scrollIndex = when {
-                hasFeaturedItems -> featuredListIndex
                 hasQuickSourceTargets -> HomeContinueWatchingListIndex + 1
                 hasContinueWatchingItems -> HomeContinueWatchingListIndex
                 else -> return false
@@ -376,27 +320,25 @@ fun HomeScreenV2Content(
             }
             return true
         }
-        val success = target.state as? HomeFeedLoadState.Success
-        val config = success?.let { resolveFeedMiniGridConfig(it.items) }
-        if (target.state is HomeFeedLoadState.Loading) return false
-        if (config == null || config.totalSlots == 0) {
-            // Empty / failed feed: its box is the focus target; scroll to it with the same slide.
-            val requester = if (targetIndex == 0) firstFeedCardFocusRequester else feedRequester(target.feed.id)
-            coroutineScope.launch {
-                listState.slideToItem(feedSectionsStartIndex + targetIndex)
-                requester.requestFocusWithRetry(attempts = 18)
-            }
-            return true
+        // A feed that is still loading has nothing to focus: stay in the row instead of jumping past it.
+        if (target.state is HomeFeedLoadState.Loading) return true
+        // The row enters at the position it was left at.
+        val requester = if (targetIndex == 0) firstFeedCardFocusRequester else feedRequester(target.feed.id)
+        coroutineScope.launch {
+            listState.slideToItem(feedSectionsStartIndex + targetIndex)
+            requester.requestFocusWithRetry(attempts = 18)
         }
-        val slot = feedEntrySlot(config, fromAbove = !up, column = column)
-        feedNavTargetId = feedSlotTargetId("home:feed:${target.feed.id}", config, slot)
-        feedNavToken += 1
         return true
     }
 
-    // "Down" from the top bar: Resume while the hero is on screen, otherwise back to where the
-    // focus was (feed item / Featured / Source), otherwise the first visible section.
-    fun enterFromTopBar(): Boolean {
+    // The feed rows are not recomposed when the feeds finish loading, so they must call the latest version
+    // (an old one would still see every feed as loading).
+    // (A lambda, not a function reference: references compare equal and the state would never update.)
+    val latestNavigateFromFeed by rememberUpdatedState { feedIndex: Int, up: Boolean -> navigateFromFeed(feedIndex, up) }
+
+    // Entering Home from the menu: Resume while the hero is on screen, otherwise back to where the
+    // focus was (feed item / Source), otherwise the first visible section.
+    fun enterContent(): Boolean {
         val last = HomeFocusStore.lastTargetId
         if (hasContinueWatchingItems && listState.isScrolledToTop()) {
             return resumeFocusRequester.tryRequestFocus()
@@ -408,10 +350,8 @@ fun HomeScreenV2Content(
             return true
         }
         val (index, requester) = when {
-            last == HomeFocusStore.Featured && hasFeaturedItems -> featuredListIndex to featuredFocusRequester
             hasContinueWatchingItems -> HomeContinueWatchingListIndex to resumeFocusRequester
             hasQuickSourceTargets -> (HomeContinueWatchingListIndex + 1) to quickSourcesEntryFocusRequester
-            hasFeaturedItems -> featuredListIndex to featuredFocusRequester
             feedsUiState.feedSections.isNotEmpty() -> feedSectionsStartIndex to firstFeedCardFocusRequester
             else -> return false
         }
@@ -424,10 +364,10 @@ fun HomeScreenV2Content(
     val contentEntry = LocalDashboardContentEntry.current
     // Re-registered whenever what it reads changes (a stale closure would see the loading state).
     DisposableEffect(
-        contentEntry, hasContinueWatchingItems, hasQuickSourceTargets, hasFeaturedItems,
-        feedsUiState.feedSections, featuredListIndex, feedSectionsStartIndex,
+        contentEntry, hasContinueWatchingItems, hasQuickSourceTargets,
+        feedsUiState.feedSections, feedSectionsStartIndex,
     ) {
-        val handler: () -> Boolean = { enterFromTopBar() }
+        val handler: () -> Boolean = { enterContent() }
         contentEntry.handler = handler
         onDispose { if (contentEntry.handler === handler) contentEntry.handler = null }
     }
@@ -441,39 +381,28 @@ fun HomeScreenV2Content(
         feedSectionsRestoreFocusToken += 1
     }
 
-    // The top bar hides while a feed has focus and returns when focus moves to the hero, source
-    // chips or Featured. Driven by focus gain only, so leaving Home never fights another screen.
-    fun showTopBar() {
-        if (isTopBarHiddenByFeeds) {
-            isTopBarHiddenByFeeds = false
-            onScroll(true)
-        }
-    }
-
-    DisposableEffect(contentEntry) {
-        val reset: () -> Unit = {
+    // Back from the rows goes back to the top of Home (the hero's Resume, or the source pills without a
+    // hero); from there Back belongs to the Dashboard (it opens the menu).
+    DisposableEffect(contentEntry, hasContinueWatchingItems, hasQuickSourceTargets) {
+        val back: () -> Boolean = back@{
+            val last = HomeFocusStore.lastTargetId
+            val isAtTop = if (hasContinueWatchingItems) {
+                HomeFocusStore.isHeroButtonTarget(last)
+            } else {
+                !hasQuickSourceTargets || last == null || last == HomeFocusStore.Sources
+            }
+            if (isAtTop) return@back false
+            val target = if (hasContinueWatchingItems) resumeFocusRequester else quickSourcesEntryFocusRequester
             HomeFocusStore.resetLastFocused()
-            showTopBar()
-            coroutineScope.launch { listState.scrollToItem(0) }
+            coroutineScope.launch {
+                listState.scrollToItem(0)
+                target.requestFocusWithRetry(attempts = 18)
+            }
+            true
         }
-        contentEntry.resetToTop = reset
-        onDispose { if (contentEntry.resetToTop === reset) contentEntry.resetToTop = null }
+        contentEntry.backHandler = back
+        onDispose { if (contentEntry.backHandler === back) contentEntry.backHandler = null }
     }
-
-
-    FocusRequestEffect(
-        requester = if (armedRestoreTargetId == HomeFocusStore.Featured) {
-            featuredFocusRequester
-        } else {
-            null
-        },
-        requestKey = armedRestoreFocusToken to armedRestoreTargetId,
-        enabled = armedRestoreFocusToken > 0 && armedRestoreTargetId == HomeFocusStore.Featured,
-        onFocused = {
-            centerFeaturedInViewport()
-            consumeArmedRestore(HomeFocusStore.Featured)
-        }
-    )
 
     BackHandler(enabled = isMorePanelVisible) {
         morePanelCloseTarget = MorePanelCloseTarget.MoreButton
@@ -496,7 +425,7 @@ fun HomeScreenV2Content(
                 if (isNoSources) {
                     item {
                         TvEmptyState(
-                            icon = Icons.Default.Extension,
+                            illustration = R.drawable.tv_empty_no_sources,
                             title = stringResource(R.string.tv_home_no_sources_found),
                             message = stringResource(R.string.tv_home_no_sources_message),
                             modifier = Modifier.fillParentMaxSize(),
@@ -506,7 +435,7 @@ fun HomeScreenV2Content(
                 }
 
                 if (!showContinueWatchingHero) {
-                    item { Spacer(Modifier.height(DashboardTopBarHeight + TopBarToContentSpacing)) }
+                    item { Spacer(Modifier.height(DashboardContentTopInset + TopBarToContentSpacing)) }
                 }
 
                 if (showContinueWatchingHero) item {
@@ -514,7 +443,7 @@ fun HomeScreenV2Content(
                         state = continueWatchingUiState.state,
                         resumeFocusRequester = resumeFocusRequester,
                         cardsFocusRequester = continueWatchingCardsFocusRequester,
-                        upFocusRequester = topBarFocusRequester,
+                        upFocusRequester = FocusRequester.Cancel,
                         sourceButtonFocusRequester = continueWatchingDownFocusRequester,
                         isInteractive = !isMorePanelVisible,
                         pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
@@ -534,7 +463,6 @@ fun HomeScreenV2Content(
                             onMediaClick(item)
                         },
                         onHeroContentFocused = {
-                            showTopBar()
                             restoreContinueWatchingToTop()
                         },
                         onFocusTargetFocused = HomeFocusStore::onTargetFocused,
@@ -565,10 +493,27 @@ fun HomeScreenV2Content(
                     item {
                         Box(
                             modifier = Modifier
-                                .padding(horizontal = HomeContentHorizontalPadding - TvDimens.SourceRowInset)
+                                .padding(start = HomeContentHorizontalPadding)
+                                // The first feed is below the hero page and not composed yet: scroll to it first.
+                                .onPreviewKeyEvent { event ->
+                                    if (
+                                        event.type == KeyEventType.KeyDown &&
+                                        event.key == Key.DirectionDown &&
+                                        !isMorePanelVisible &&
+                                        feedsUiState.feedSections.isNotEmpty()
+                                    ) {
+                                        coroutineScope.launch {
+                                            listState.slideToItem(feedSectionsStartIndex)
+                                            firstFeedCardFocusRequester.requestFocusWithRetry(attempts = 18)
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
                                 // Chips sit at the bottom of the hero page: bring it back into view.
                                 .onFocusChanged { focusState ->
-                                    if (focusState.hasFocus) showTopBar()
+                                    if (focusState.hasFocus) HomeFocusStore.onTargetFocused(HomeFocusStore.Sources)
                                     if (focusState.hasFocus && !listState.isScrolledToTop()) {
                                         coroutineScope.launch {
                                             listState.animateScrollToItem(HomeContinueWatchingListIndex)
@@ -586,11 +531,9 @@ fun HomeScreenV2Content(
                                 upFocusRequester = if (hasContinueWatchingItems) {
                                     continueWatchingCardsFocusRequester
                                 } else {
-                                    topBarFocusRequester
+                                    FocusRequester.Cancel
                                 },
-                                downFocusRequester = if (hasFeaturedItems) {
-                                    featuredFocusRequester
-                                } else if (feedsUiState.feedSections.isNotEmpty()) {
+                                downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
                                     firstFeedCardFocusRequester
                                 } else {
                                     null
@@ -605,47 +548,12 @@ fun HomeScreenV2Content(
                     }
                 }
 
-                if (hasFeaturedItems) {
-                    item {
-                        FeaturedCarousel(
-                            items = featuredItems.orEmpty(),
-                            focusRequester = featuredFocusRequester,
-                            upFocusRequester = featuredUpFocusRequester,
-                            downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
-                                firstFeedCardFocusRequester
-                            } else {
-                                null
-                            },
-                            isInteractive = !isMorePanelVisible,
-                            modifier = Modifier
-                                .padding(
-                                    start = HomeContentHorizontalPadding,
-                                    end = HomeContentHorizontalPadding,
-                                    top = SourcesToFeaturedSpacing,
-                                    bottom = TvDimens.FeedSectionBottomPadding,
-                                )
-                                .bringIntoViewIfChildrenAreFocused(),
-                            onFocused = {
-                                // Mockup HomeFeatured has no bar: hide it so "Source" is fully visible.
-                                onScroll(false)
-                                isTopBarHiddenByFeeds = true
-                                HomeFocusStore.onTargetFocused(HomeFocusStore.Featured)
-                                centerFeaturedInViewport()
-                            },
-                            onItemClick = { item ->
-                                HomeFocusStore.scheduleRestoreToLastFocused()
-                                onMediaClick(item)
-                            }
-                        )
-                    }
-                }
-
                 homeFeedSections(
                     feedsUiState = feedsUiState,
                     sourceName = sourcesUiState.selectedSource?.name,
-                    loadingLabel = loadingLabel,
+                    sourceId = sourcesUiState.selectedSource?.sourceId(),
                     isMorePanelOpen = isMorePanelVisible,
-                    firstFeedCardFocusRequester = firstFeedCardFocusRequester,
+                    firstFeedRowFocusRequester = firstFeedCardFocusRequester,
                     firstSectionUpFocusRequester = firstFeedUpFocusRequester,
                     onMediaClick = { item ->
                         HomeFocusStore.scheduleRestoreToLastFocused()
@@ -658,21 +566,17 @@ fun HomeScreenV2Content(
                     pendingRestoreFocusTargetId = feedNavTargetId ?: armedRestoreTargetId,
                     restoreFocusToken = feedSectionsRestoreFocusToken,
                     onSectionFocusChanged = { feedId, hasFocus ->
-                        if (hasFocus) {
-                            // Always (not only on change): Back shows the bar without leaving the feed state.
-                            onScroll(false)
-                            isTopBarHiddenByFeeds = true
-                            pinFeedToTop(feedId)
-                        }
+                        if (hasFocus) pinFeedToTop(feedId)
                     },
-                    onVerticalExit = ::navigateFromFeed,
+                    onVerticalExit = { feedIndex, up -> latestNavigateFromFeed(feedIndex, up) },
                     feedFocusRequester = ::feedRequester,
                     onItemFocused = { feed, item ->
                         HomeFocusStore.onTargetFocused(
                             HomeFocusStore.feedPoster(feed.id, item)
                         )
                     },
-                    onShowMoreFocused = { feed ->
+                    onRefreshFeed = onRefreshFeed,
+                    onShowAllFocused = { feed ->
                         HomeFocusStore.onTargetFocused(
                             HomeFocusStore.feedShowMore(feed.id)
                         )
@@ -695,7 +599,6 @@ fun HomeScreenV2Content(
                 sources = sourcesUiState.morePanelSources,
                 selectedSource = sourcesUiState.selectedSource,
                 pinnedSourceIds = sourcesUiState.pinnedSourceIds,
-                usageCountBySourceId = sourcesUiState.usageCountBySourceId,
                 onSourceSelected = { source ->
                     onSourceSelected(source)
                     onMorePanelOpenChange(false)
@@ -718,39 +621,10 @@ private fun LazyListState.isScrolledToTop(): Boolean {
     return firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
 }
 
-private suspend fun LazyListState.centerItemInViewport(
-    itemIndex: Int,
-) {
-    var targetItem = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == itemIndex }
-    if (targetItem == null) {
-        animateScrollToItem(itemIndex)
-        targetItem = layoutInfo.visibleItemsInfo.firstOrNull { item -> item.index == itemIndex }
-            ?: return
-    }
-
-    val viewportCenter = (layoutInfo.viewportStartOffset + layoutInfo.viewportEndOffset) / 2f
-    val itemCenter = targetItem.offset + (targetItem.size / 2f)
-    val delta = itemCenter - viewportCenter
-
-    if (abs(delta) > 1f) {
-        animateScrollBy(delta)
-    }
-}
-
-private fun homeFeaturedListIndex(
+private fun homeFeedSectionsStartIndex(
     showQuickSourcesRow: Boolean,
 ): Int {
     return HomeContinueWatchingListIndex + 1 + if (showQuickSourcesRow) 1 else 0
-}
-
-private fun homeFeedSectionsStartIndex(
-    showQuickSourcesRow: Boolean,
-    hasFeaturedItems: Boolean,
-): Int {
-    return HomeContinueWatchingListIndex +
-        1 +
-        (if (showQuickSourcesRow) 1 else 0) +
-        (if (hasFeaturedItems) 1 else 0)
 }
 
 private fun FocusRequester.tryRequestFocus(): Boolean = runCatching { requestFocus() }.getOrDefault(false)

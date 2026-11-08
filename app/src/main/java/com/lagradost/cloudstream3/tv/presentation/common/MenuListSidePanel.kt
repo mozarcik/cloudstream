@@ -144,6 +144,8 @@ data class SidePanelMenuItem(
     val onLeftActionToken: Any? = null,
     val onClick: () -> Unit = {},
     val onMenuClick: (() -> Unit)? = null,
+    /** Press and hold OK (the following release does not click). */
+    val onLongClick: (() -> Unit)? = null,
     val onKeyUp: ((Int) -> Boolean)? = null,
     val inlineTextField: SidePanelInlineTextField? = null,
     val supportingContent: (@Composable () -> Unit)? = null,
@@ -462,6 +464,7 @@ fun MenuListSidePanel(
                                 )
                             } else {
                                 var isFocused by remember(menuItem.id) { mutableStateOf(false) }
+                                val longPressFired = remember(menuItem.id) { BooleanArray(1) }
                                 val groupKey = menuItem.expandableGroupKey
                                 val isGroupExpanded = groupKey?.let { key ->
                                     expandedGroups[key] ?: menuItem.chevronExpanded
@@ -761,6 +764,28 @@ fun MenuListSidePanel(
                                                     if (isExitUpEvent && nativeEvent.action == AndroidKeyEvent.ACTION_DOWN) {
                                                         onExitUpRequested()
                                                         return@onPreviewKeyEvent true
+                                                    }
+
+                                                    val longClick = menuItem.onLongClick
+                                                    val isConfirmKey = nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+                                                        nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER ||
+                                                        nativeEvent.keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER
+                                                    if (longClick != null && isConfirmKey) {
+                                                        when {
+                                                            nativeEvent.action == AndroidKeyEvent.ACTION_DOWN &&
+                                                                nativeEvent.repeatCount > 0 -> {
+                                                                if (!longPressFired[0]) {
+                                                                    longPressFired[0] = true
+                                                                    longClick()
+                                                                }
+                                                                return@onPreviewKeyEvent true
+                                                            }
+
+                                                            nativeEvent.action == AndroidKeyEvent.ACTION_UP && longPressFired[0] -> {
+                                                                longPressFired[0] = false
+                                                                return@onPreviewKeyEvent true
+                                                            }
+                                                        }
                                                     }
 
                                                     if (nativeEvent.action != AndroidKeyEvent.ACTION_UP) {

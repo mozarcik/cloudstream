@@ -93,59 +93,21 @@ internal fun SettingsFieldRow(
         wasImeVisible = isImeVisible
     }
 
-    val colors = MaterialTheme.colorScheme
-    val titleColor = when {
-        !enabled -> TvColors.Disabled
-        rowHasFocus -> colors.inverseOnSurface
-        else -> colors.onSurface
-    }
-    val subtitleColor = if (rowHasFocus) TvColors.OnFocusSecondary else TvColors.RowSubtitle
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsRowGap),
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = TvDimens.SettingsDp52)
-            .focusRequester(rowFocusRequester)
-            .onFocusChanged { rowHasFocus = it.hasFocus }
-            .tvFocusFill(
-                focused = rowHasFocus && enabled,
-                shape = TvShapes.Row,
-                focusedContainer = colors.inverseSurface,
-            )
-            .clickable(
-                interactionSource = clickInteraction,
-                indication = null,
-                enabled = enabled,
-                role = Role.Button,
-            ) { textFocusRequester.requestFocus() }
-            .padding(horizontal = TvDimens.SettingsRowHorizontalPadding),
-    ) {
-        if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = titleColor,
-                modifier = Modifier.size(TvDimens.SettingsRowChevronSize),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = TvTextStyles.Row,
-                color = titleColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Box(modifier = Modifier.padding(top = TvDimens.SettingsDp3)) {
+    SettingsListRow(
+        title = label,
+        onClick = { textFocusRequester.requestFocus() },
+        enabled = enabled,
+        leading = icon?.let { vector -> { _ -> SettingsGlyph(imageVector = vector) } },
+        body = { focused ->
+            val subtitleColor = if (focused) TvColors.OnFocusSecondary else TvColors.RowSubtitle
+            Box {
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     enabled = enabled,
                     singleLine = true,
                     interactionSource = textInteraction,
-                    textStyle = TvTextStyles.RowSubtitle.copy(color = subtitleColor),
+                    textStyle = TvTextStyles.SettingsItemSummary.copy(color = subtitleColor),
                     cursorBrush = SolidColor(subtitleColor),
                     visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
@@ -158,13 +120,16 @@ internal fun SettingsFieldRow(
                 if (value.isEmpty()) {
                     Text(
                         text = if (rowHasFocus) focusedHint else idleHint,
-                        style = TvTextStyles.RowSubtitle,
+                        style = TvTextStyles.SettingsItemSummary,
                         color = subtitleColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
-        }
-    }
+        },
+        modifier = modifier
+            .focusRequester(rowFocusRequester)
+            .onFocusChanged { rowHasFocus = it.hasFocus },
+    )
 }

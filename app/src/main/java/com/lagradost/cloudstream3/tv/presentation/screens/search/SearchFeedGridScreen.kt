@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.flowOf
 fun SearchFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onBack: () -> Unit,
-    onScroll: (Boolean) -> Unit,
 ) {
     val selectedSection by SearchFeedGridSelectionStore.selectedSection.collectAsState()
     val section = selectedSection
@@ -35,7 +34,6 @@ fun SearchFeedGridScreen(
         pagingItems = pagingItems,
         focusStore = SearchFeedGridSelectionStore.focus,
         onMediaClick = onMediaClick,
-        onScroll = onScroll,
         screenKey = section.id,
         // The search tab has no restore token of its own; a pending target only exists after
         // the user opened a title from this grid.

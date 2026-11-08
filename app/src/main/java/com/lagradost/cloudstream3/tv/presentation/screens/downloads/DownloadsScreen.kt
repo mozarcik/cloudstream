@@ -3,8 +3,9 @@ package com.lagradost.cloudstream3.tv.presentation.screens.downloads
 import android.util.Log
 import androidx.compose.foundation.background
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardTopBarHeight
+import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardContentTopInset
 import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardContentEntry
+import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardOpenMenu
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,9 +59,6 @@ private const val DebugTag = "TvDownloadsScreen"
 fun DownloadsScreen(
     onOpenDetails: (DownloadItemUiModel) -> Unit,
     onPlayDownloaded: (DownloadItemUiModel) -> Unit,
-    onScroll: (isTopBarVisible: Boolean) -> Unit,
-    topBarFocusRequester: FocusRequester? = null,
-    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = viewModel(),
 ) {
@@ -77,7 +75,7 @@ fun DownloadsScreen(
     var focusedItemId by remember { mutableStateOf<String?>(null) }
     var pendingDeleteItem by remember { mutableStateOf<DownloadItemUiModel?>(null) }
     var pendingRestoreFocusId by remember { mutableStateOf<String?>(null) }
-    var topBarFocusFallbackToken by remember { mutableIntStateOf(0) }
+    val openMenu = LocalDashboardOpenMenu.current
     val restoreFocusTargetId = pendingRestoreFocusId
 
     val focusedItem = remember(allItems, focusedItemId) {
@@ -91,7 +89,7 @@ fun DownloadsScreen(
         viewModel.bind(context)
     }
 
-    // The list sits under the (overlay) top bar, so the default Down search does not find it: enter it explicitly.
+    // Entering the list after a screen change from the menu: its first / last focused item.
     val contentEntry = LocalDashboardContentEntry.current
     val coroutineScope = rememberCoroutineScope()
     val entryRequester = (focusedItemId?.let(itemFocusRequesters::get)
@@ -105,10 +103,6 @@ fun DownloadsScreen(
         }
         contentEntry.handler = handler
         onDispose { if (contentEntry.handler === handler) contentEntry.handler = null }
-    }
-
-    LaunchedEffect(allItems.isNotEmpty()) {
-        onTopBarDownNavigationEnabledChanged(allItems.isNotEmpty())
     }
 
     LaunchedEffect(itemIds, restoreFocusTargetId) {
@@ -127,25 +121,6 @@ fun DownloadsScreen(
         }
     )
 
-    FocusRequestEffect(
-        requester = topBarFocusRequester,
-        requestKey = topBarFocusFallbackToken,
-        enabled = topBarFocusRequester != null &&
-            topBarFocusFallbackToken > 0 &&
-            pendingDeleteItem == null &&
-            allItems.isEmpty(),
-        onFocused = {
-            topBarFocusFallbackToken = 0
-        }
-    )
-
-    val shouldShowTopBar by remember {
-        derivedStateOf {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset < 100
-        }
-    }
-    LaunchedEffect(shouldShowTopBar) { onScroll(shouldShowTopBar) }
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -159,17 +134,17 @@ fun DownloadsScreen(
         if (allItems.isEmpty()) {
             DownloadsEmptyState(
                 modifier = Modifier
-                    .padding(top = DashboardTopBarHeight)
+                    .padding(top = DashboardContentTopInset)
                     .padding(bottom = TvDimens.DownloadsEmptyStateLift)
             )
         } else {
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(
-                    start = TvDimens.ScreenHorizontalPadding,
+                    start = TvDimens.ContentStartWithRail,
                     end = TvDimens.ScreenHorizontalPadding,
                     // The top bar overlays the screen (see DashboardScaffold), so the list starts below it.
-                    top = DashboardTopBarHeight + TvDimens.DownloadsContentTopGap,
+                    top = DashboardContentTopInset + TvDimens.DownloadsContentTopGap,
                     bottom = TvDimens.SearchListBottomPadding,
                 ),
                 verticalArrangement = Arrangement.spacedBy(TvDimens.DownloadRowGap),
@@ -210,9 +185,8 @@ fun DownloadsScreen(
                         removedItemId = itemToDelete.id
                     )
                     pendingRestoreFocusId = nextFocusId
-                    if (nextFocusId == null) {
-                        topBarFocusFallbackToken += 1
-                    }
+                    // Nothing left to focus: the menu is the only way on.
+                    if (nextFocusId == null) openMenu()
                     viewModel.deleteItem(
                         context = context,
                         item = itemToDelete
@@ -303,7 +277,7 @@ private fun DownloadsBackdrop(
 @Composable
 private fun DownloadsEmptyState(modifier: Modifier = Modifier) {
     TvEmptyState(
-        icon = Icons.Default.Download,
+        illustration = R.drawable.tv_empty_downloads,
         title = stringResource(R.string.tv_downloads_empty_title),
         message = stringResource(R.string.tv_downloads_empty_subtitle),
         modifier = modifier,

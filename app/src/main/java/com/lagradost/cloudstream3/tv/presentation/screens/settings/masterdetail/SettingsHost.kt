@@ -2,12 +2,12 @@ package com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.Animatable as ColorAnimatable
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,219 +18,247 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private object SettingsHostTokens {
-    const val PreviewDebounceMs = 120L
     val DebugShape = RoundedCornerShape(TvDimens.SettingsDebugRadius)
+    val SlideEasing: Easing = FastOutSlowInEasing
+    val SettleEasing: Easing = CubicBezierEasing(0.18f, 1f, 0.22f, 1f)
 }
 
+/** Look of a panel in the strip: only alpha and background change when its role changes. */
+private enum class PanelRole { Past, Active, Preview }
+
 /**
- * Settings as two cards (Google TV model): the left one is the active level, the right one is a
- * dimmed, non-interactive preview of the next level for the focused row (empty when the row has
- * none). OK / Right on a row with a chevron slides the preview in as the new active level;
- * Left / Back goes up and puts focus back on the row we came from.
+ * Settings as a horizontal strip of flat 504 dp panels (Google TV two-panel model). The 960 dp
+ * window shows the active panel and, to its right, the next level of the focused row as a real,
+ * dimmed, non-focusable panel. Going deeper slides the strip by one panel (the preview becomes
+ * the active panel, same instance); Left / Back slides it back.
  */
 @Composable
 fun SettingsHost(
     hostState: SettingsHostState,
     onExitSettings: () -> Unit,
-    onTopBarFocusableChanged: (Boolean) -> Unit,
-    onTopBarDownNavigationEnabledChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    onTopBarVisibleChanged: (Boolean) -> Unit = {},
-    topBarFocusRequester: FocusRequester? = null,
-    isTopBarFocused: Boolean = false,
     showDebugOverlay: Boolean = false
 ) {
     val onExitSettingsState by rememberUpdatedState(onExitSettings)
-    val onTopBarFocusableChangedState by rememberUpdatedState(onTopBarFocusableChanged)
-    val onTopBarVisibleChangedState by rememberUpdatedState(onTopBarVisibleChanged)
-    val onTopBarDownNavigationEnabledChangedState by rememberUpdatedState(
-        onTopBarDownNavigationEnabledChanged
-    )
+    val scope = rememberCoroutineScope()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val activeInstance = hostState.activeInstance
-    val activeScreen = hostState.screen(activeInstance.id)
-    val activeScreenData = hostState.dataState(activeInstance.id)
+    val depth = hostState.depth
 
-    // Level 1: Back focuses the Settings tab, the next Back leaves to Home (like the other tabs).
-    val isTopBarFocusedState by rememberUpdatedState(isTopBarFocused)
-    BackHandler(enabled = true) {
-        when {
-            hostState.navigateBack() -> Unit
-            !isTopBarFocusedState && topBarFocusRequester != null -> topBarFocusRequester.requestFocus()
-            else -> onExitSettingsState()
+    fun goBack() {
+        scope.launch { if (!hostState.navigateBackQueued()) onExitSettingsState() }
+    }
+
+    // Back goes up a level; from the first level it belongs to the Dashboard (it opens the menu).
+    BackHandler(enabled = depth > 1) { goBack() }
+
+    // The next level of the focused row, created as soon as focus lands on it (no debounce).
+    val previewScreenId by remember(activeInstance.instanceId) {
+        derivedStateOf {
+            val entries = hostState.readyEntries(activeInstance.id).orEmpty()
+            if (entries.isEmpty()) return@derivedStateOf null
+            val focusedKey = activeInstance.focusKey ?: entries.firstOrNull { it.isFocusable() }?.stableKey
+            entries.firstOrNull { it.stableKey == focusedKey }?.nextScreenId
         }
     }
-
-    LaunchedEffect(hostState.depth) {
-        onTopBarFocusableChangedState(hostState.depth == 1)
-        // Deeper levels use the whole screen (mockup: cards start 24 dp from the top).
-        onTopBarVisibleChangedState(hostState.depth == 1)
+    LaunchedEffect(activeInstance.instanceId, previewScreenId) {
+        previewScreenId?.let { hostState.preparePreviewInstance(activeInstance.instanceId, it) }
     }
-    DisposableEffect(Unit) {
-        onDispose { onTopBarVisibleChangedState(true) }
+    val previewInstance = previewScreenId?.let { hostState.previewInstanceOrNull(activeInstance.instanceId, it) }
+
+    val paneWidthPx = with(LocalDensity.current) { TvDimens.SettingsPaneWidth.toPx() }
+    val offset = remember { Animatable((depth - 1) * paneWidthPx) }
+    LaunchedEffect(depth, paneWidthPx) {
+        offset.animateTo(
+            (depth - 1) * paneWidthPx,
+            tween(TvDimens.SettingsPanelSlideMs, easing = SettingsHostTokens.SlideEasing)
+        )
     }
 
-    val isTopBarDownNavigationEnabled = remember(activeInstance.id, activeScreen, activeScreenData) {
-        if (activeScreen.hasCustomContent) {
-            true
-        } else {
-            when (activeScreenData) {
-                is SettingsScreenDataState.Ready ->
-                    activeScreenData.entries.any { entry -> entry.isFocusable() }
-
-                else -> false
+    val setInfoPanel = remember(hostState) { { content: (@Composable () -> Unit)? -> hostState.infoPanel = content } }
+    CompositionLocalProvider(LocalSettingsInfoPanel provides setInfoPanel) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .onPreviewKeyEvent { event ->
+                // Left is Back on every level except where a row uses it (slider).
+                if (
+                    event.type == KeyEventType.KeyDown &&
+                    event.key == Key.DirectionLeft &&
+                    event.nativeKeyEvent.repeatCount == 0 &&
+                    depth > 1 &&
+                    hostState.focusedEntry(hostState.activeInstance)?.type != SettingsEntryType.Slider
+                ) {
+                    // Through the dispatcher, so a level's own Back handling (login flow, confirmation) wins.
+                    backDispatcher?.onBackPressed()
+                    backDispatcher != null
+                } else {
+                    false
+                }
             }
-        }
-    }
-
-    LaunchedEffect(activeInstance.id, isTopBarDownNavigationEnabled) {
-        onTopBarDownNavigationEnabledChangedState(isTopBarDownNavigationEnabled)
-    }
-
-    val topGap by animateDpAsState(
-        targetValue = if (hostState.depth == 1) TvDimens.SettingsTopGap else TvDimens.SettingsTopGapDeep,
-        animationSpec = tween(TvDimens.MaxAnimationMs),
-        label = "SettingsTopGap"
-    )
-
-    Box(modifier = modifier.fillMaxSize()) {
+    ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(TvDimens.SettingsCardGap),
             modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    start = TvDimens.ScreenHorizontalPadding,
-                    end = TvDimens.ScreenHorizontalPadding,
-                    top = topGap,
-                    bottom = TvDimens.SettingsBottomGap
-                )
+                .wrapContentWidth(align = Alignment.Start, unbounded = true)
+                .fillMaxHeight()
+                .graphicsLayer { translationX = -offset.value }
         ) {
-            Box(
-                modifier = Modifier
-                    .width(TvDimens.SettingsCardWidth)
-                    .fillMaxHeight()
-                    .clip(SettingsCardShape)
-                    .background(TvColors.Card)
-                    .onPreviewKeyEvent { event ->
-                        // Left is Back on every level except where a row uses it (slider).
-                        if (
-                            event.type == KeyEventType.KeyUp &&
-                            event.key == Key.DirectionLeft &&
-                            hostState.depth > 1 &&
-                            hostState.focusedEntry(hostState.activeInstance)?.type != SettingsEntryType.Slider
-                        ) {
-                            backDispatcher?.onBackPressed()
-                            backDispatcher != null
-                        } else {
-                            false
-                        }
-                    }
-                    .padding(
-                        start = TvDimens.SettingsCardPaddingHorizontal,
-                        end = TvDimens.SettingsCardPaddingHorizontal,
-                        top = TvDimens.SettingsCardPaddingVertical
-                    )
-            ) {
-                AnimatedContent(
-                    targetState = activeInstance,
-                    transitionSpec = { settingsPanelTransition(hostState.navigationDirection) },
-                    label = "SettingsLeftPanelTransition",
-                    modifier = Modifier.fillMaxSize()
-                ) { panelInstance ->
-                    ActivePanelContent(
+            hostState.stack.forEachIndexed { index, instance ->
+                key(instance.instanceId) {
+                    SettingsPanel(
                         hostState = hostState,
-                        hostDepth = hostState.depth,
-                        instance = panelInstance,
-                        modifier = Modifier.fillMaxSize()
+                        instance = instance,
+                        role = if (index == depth - 1) PanelRole.Active else PanelRole.Past,
+                        hostDepth = depth,
                     )
                 }
             }
+            if (previewInstance != null) {
+                key(previewInstance.instanceId) {
+                    SettingsPanel(
+                        hostState = hostState,
+                        instance = previewInstance,
+                        role = PanelRole.Preview,
+                        hostDepth = depth,
+                    )
+                }
+            } else {
+                // Nothing to preview: an empty info panel (alpha 1, Preview background).
+                Box(
+                    Modifier
+                        .width(TvDimens.SettingsPaneWidth)
+                        .fillMaxHeight()
+                        .background(TvColors.Preview)
+                ) {
+                    hostState.infoPanel?.invoke()
+                }
+            }
+        }
 
-            Box(
+        if (showDebugOverlay) {
+            SettingsDebugOverlay(
+                currentScreenId = activeInstance.id,
+                previewScreenId = previewScreenId,
+                focusedKey = activeInstance.focusKey,
+                loadSource = previewScreenId?.let { hostState.lastLoadSourceByScreenId[it] },
                 modifier = Modifier
-                    .width(TvDimens.SettingsPreviewWidth)
-                    .fillMaxHeight()
-                    .clip(SettingsCardShape)
-                    .background(TvColors.Preview)
-                    .padding(
-                        start = TvDimens.SettingsPreviewPaddingHorizontal,
-                        end = TvDimens.SettingsPreviewPaddingHorizontal,
-                        top = TvDimens.SettingsCardPaddingVertical
-                    )
-            ) {
-                AnimatedContent(
-                    targetState = activeInstance,
-                    transitionSpec = {
-                        fadeIn(tween(TvDimens.MaxAnimationMs)) togetherWith fadeOut(tween(TvDimens.MaxAnimationMs))
-                    },
-                    label = "SettingsRightPanelTransition",
-                    modifier = Modifier.fillMaxSize()
-                ) { panelInstance ->
-                    PreviewPanelContent(
-                        hostState = hostState,
-                        activeInstance = panelInstance,
-                        showDebugOverlay = showDebugOverlay,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
+                    .align(Alignment.BottomStart)
+                    .padding(TvDimens.SettingsDebugPadding)
+            )
+        }
+    }
+    }
+}
+
+/**
+ * One 504 dp panel. It is composed once at its fixed position in the strip; its role only
+ * changes the background color (500 ms) and the content alpha (200 ms), both read in the draw phase.
+ */
+@Composable
+private fun SettingsPanel(
+    hostState: SettingsHostState,
+    instance: ScreenInstance,
+    role: PanelRole,
+    hostDepth: Int,
+) {
+    val isPreview = role == PanelRole.Preview
+    // A new preview fades in; panels that are created active (root) start fully visible.
+    val alpha = remember(instance.instanceId) { Animatable(if (isPreview) 0f else 1f) }
+    val background = remember(instance.instanceId) {
+        ColorAnimatable(if (isPreview) TvColors.Preview else TvColors.Card)
+    }
+    LaunchedEffect(isPreview) {
+        if (isPreview) {
+            alpha.animateTo(
+                TvDimens.SettingsPreviewInactiveAlpha,
+                tween(TvDimens.SettingsPreviewFadeMs, easing = SettingsHostTokens.SettleEasing)
+            )
+        } else {
+            alpha.animateTo(1f, tween(TvDimens.SettingsPanelAlphaMs, easing = SettingsHostTokens.SettleEasing))
+        }
+    }
+    LaunchedEffect(isPreview) {
+        background.animateTo(
+            if (isPreview) TvColors.Preview else TvColors.Card,
+            tween(TvDimens.SettingsPanelColorMs, easing = SettingsHostTokens.SettleEasing)
+        )
+    }
+
+    Box(
+        modifier = Modifier
+            .width(TvDimens.SettingsPaneWidth)
+            .fillMaxHeight()
+            .drawBehind { drawRect(background.value) }
+            .graphicsLayer { this.alpha = alpha.value }
+    ) {
+        // The preview never takes focus (its rows read this); it turns focusable as the active panel.
+        CompositionLocalProvider(LocalSettingsPanelFocusable provides !isPreview) {
+            PanelContent(
+            hostState = hostState,
+            hostDepth = hostDepth,
+            instance = instance,
+            isActive = role == PanelRole.Active,
+            isPreview = isPreview,
+            modifier = Modifier.fillMaxSize()
+        )
         }
     }
 }
 
 @Composable
-private fun ActivePanelContent(
+private fun PanelContent(
     hostState: SettingsHostState,
     hostDepth: Int,
     instance: ScreenInstance,
+    isActive: Boolean,
+    isPreview: Boolean,
     modifier: Modifier = Modifier
 ) {
     val screen = hostState.screen(instance.id)
-    // Computed once per instance: while the level animates out it is no longer in the stack.
-    val crumb = remember(instance.instanceId) { hostState.breadcrumbFor(instance) }
 
     if (screen.hasCustomContent) {
-        CompositionLocalProvider(LocalSettingsBreadcrumb provides crumb) {
-            screen.Content(
-                modifier = modifier,
-                contentPadding = PaddingValues(TvDimens.SettingsDp0),
-                isPreview = false,
-                onBack = { hostState.navigateBack() },
-                onDataChanged = { screenPrefix ->
-                    hostState.invalidateScreens { screenId ->
-                        screenId.startsWith(screenPrefix)
-                    }
+        screen.Content(
+            modifier = modifier,
+            contentPadding = PaddingValues(TvDimens.SettingsDp0),
+            isPreview = isPreview,
+            onBack = { hostState.navigateBack() },
+            onDataChanged = { screenPrefix ->
+                hostState.invalidateScreens { screenId ->
+                    screenId.startsWith(screenPrefix)
                 }
-            )
-        }
+            }
+        )
         return
     }
 
@@ -246,17 +274,15 @@ private fun ActivePanelContent(
         null,
         is SettingsScreenDataState.Loading -> SettingsLoadingPanel(
             title = panelTitle,
-            crumb = crumb,
             modifier = modifier
         )
         is SettingsScreenDataState.Ready -> ActiveSettingsPanelList(
             title = panelTitle,
-            crumb = crumb,
             description = screen.description,
             entries = currentData.entries,
             listState = instance.listState,
             restoreFocusToken = instance.instanceId,
-            autoRequestFocus = instance.focusKey != null || hostDepth > 1,
+            autoRequestFocus = isActive && (instance.focusKey != null || hostDepth > 1),
             modifier = modifier,
             resolveFocusedKey = { instance.focusKey },
             onEntryFocused = { entry ->
@@ -287,106 +313,12 @@ private fun ActivePanelContent(
         )
         is SettingsScreenDataState.Error -> SettingsErrorPanel(
             title = panelTitle,
-            crumb = crumb,
             message = currentData.message,
             errorTitle = currentData.title,
             onRetry = { hostState.retry(instance.id) },
+            requestFocus = isActive,
             modifier = modifier
         )
-    }
-}
-
-@Composable
-private fun PreviewPanelContent(
-    hostState: SettingsHostState,
-    activeInstance: ScreenInstance,
-    showDebugOverlay: Boolean,
-    modifier: Modifier = Modifier
-) {
-    val activeEntries = (hostState.dataState(activeInstance.id) as? SettingsScreenDataState.Ready)
-        ?.entries
-        .orEmpty()
-    val previewId by remember(activeInstance.instanceId, activeEntries) {
-        derivedStateOf {
-            if (activeEntries.isEmpty()) return@derivedStateOf null
-            val focusedKey = activeInstance.focusKey ?: activeEntries.firstOrNull { it.isFocusable() }?.stableKey
-            activeEntries.firstOrNull { it.stableKey == focusedKey }?.nextScreenId
-        }
-    }
-
-    var debouncedPreviewId by remember(activeInstance.instanceId) { mutableStateOf<String?>(null) }
-    val previewRefreshVersion = previewId?.let { screenId ->
-        hostState.refreshVersion(screenId)
-    }
-
-    LaunchedEffect(activeInstance.instanceId, previewId, previewRefreshVersion) {
-        val targetPreviewId = previewId
-        if (targetPreviewId == null) {
-            debouncedPreviewId = null
-            return@LaunchedEffect
-        }
-
-        hostState.preparePreviewInstance(
-            parentInstanceId = activeInstance.instanceId,
-            screenId = targetPreviewId
-        )
-
-        delay(SettingsHostTokens.PreviewDebounceMs)
-        debouncedPreviewId = targetPreviewId
-        val previewScreen = hostState.screen(targetPreviewId)
-        if (!previewScreen.hasCustomContent) {
-            hostState.ensureLoaded(targetPreviewId)
-        }
-    }
-
-    Box(modifier = modifier) {
-        AnimatedContent(
-            targetState = debouncedPreviewId,
-            transitionSpec = { settingsPreviewFadeTransition() },
-            label = "SettingsPreviewSwap",
-            modifier = Modifier.fillMaxSize()
-        ) { previewScreenId ->
-            if (previewScreenId == null) {
-                EmptyPreviewScreen(modifier = Modifier.fillMaxSize())
-            } else {
-                val previewScreen = hostState.screen(previewScreenId)
-                if (previewScreen.hasCustomContent) {
-                    previewScreen.Content(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(TvDimens.SettingsDp0),
-                        isPreview = true,
-                        onBack = {},
-                        onDataChanged = { screenPrefix ->
-                            hostState.invalidateScreens { screenId ->
-                                screenId.startsWith(screenPrefix)
-                            }
-                        }
-                    )
-                } else {
-                    when (val previewData = hostState.dataState(previewScreenId)) {
-                        is SettingsScreenDataState.Ready -> PreviewSettingsPanelList(
-                            title = previewScreen.title,
-                            entries = previewData.entries,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        // Loading / error of the next level show up once it is entered.
-                        else -> EmptyPreviewScreen(modifier = Modifier.fillMaxSize())
-                    }
-                }
-            }
-        }
-
-        if (showDebugOverlay) {
-            SettingsDebugOverlay(
-                currentScreenId = activeInstance.id,
-                previewScreenId = debouncedPreviewId,
-                focusedKey = activeInstance.focusKey,
-                loadSource = debouncedPreviewId?.let { hostState.lastLoadSourceByScreenId[it] },
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(TvDimens.SettingsDebugPadding)
-            )
-        }
     }
 }
 

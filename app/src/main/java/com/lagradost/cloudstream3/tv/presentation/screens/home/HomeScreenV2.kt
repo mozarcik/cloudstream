@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -23,13 +22,10 @@ fun HomeScreenV2(
     onMediaClick: (MediaItemCompat) -> Unit,
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
-    onScroll: (isTopBarVisible: Boolean) -> Unit,
-    topBarFocusRequester: FocusRequester,
     restoreFocusToken: Int = 0,
     sourcesViewModelFactory: HomeSourcesViewModelFactory = HomeSourcesViewModelFactory(),
     continueWatchingViewModelFactory: HomeContinueWatchingViewModelFactory =
         HomeContinueWatchingViewModelFactory(),
-    featuredViewModelFactory: HomeFeaturedViewModelFactory = HomeFeaturedViewModelFactory(),
     feedsViewModelFactory: HomeFeedsViewModelFactory =
         HomeFeedsViewModelFactory(FeedRepositoryImpl()),
     modifier: Modifier = Modifier,
@@ -40,16 +36,12 @@ fun HomeScreenV2(
     val continueWatchingViewModel: HomeContinueWatchingViewModel = viewModel(
         factory = remember(continueWatchingViewModelFactory) { continueWatchingViewModelFactory }
     )
-    val featuredViewModel: HomeFeaturedViewModel = viewModel(
-        factory = remember(featuredViewModelFactory) { featuredViewModelFactory }
-    )
     val feedsViewModel: HomeFeedsViewModel = viewModel(
         factory = remember(feedsViewModelFactory) { feedsViewModelFactory }
     )
 
     val sourcesUiState by sourcesViewModel.uiState.collectAsState()
     val continueWatchingUiState by continueWatchingViewModel.uiState.collectAsState()
-    val featuredUiState by featuredViewModel.uiState.collectAsState()
     val feedsUiState by feedsViewModel.uiState.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     var shouldRefreshContinueWatchingOnResume by remember {
@@ -90,17 +82,15 @@ fun HomeScreenV2(
     HomeScreenV2Content(
         sourcesUiState = sourcesUiState,
         continueWatchingUiState = continueWatchingUiState,
-        featuredUiState = featuredUiState,
         feedsUiState = feedsUiState,
         onMediaClick = onMediaClick,
         onContinueWatchingPlay = onContinueWatchingPlay,
         onOpenFeedGrid = onOpenFeedGrid,
-        onScroll = onScroll,
-        topBarFocusRequester = topBarFocusRequester,
         restoreFocusToken = restoreFocusToken,
         onSourceSelected = sourcesViewModel::selectSource,
         onMorePanelOpenChange = sourcesViewModel::setMorePanelOpen,
         onTogglePin = sourcesViewModel::togglePinned,
+        onRefreshFeed = feedsViewModel::refreshFeed,
         onRemoveContinueWatching = { item ->
             continueWatchingViewModel.removeItem(item.continueWatching?.parentId)
         },
