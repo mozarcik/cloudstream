@@ -233,6 +233,10 @@ android {
 }
 
 dependencies {
+    // Composable names in Perfetto traces (performance analysis of the TV UI).
+    implementation("androidx.compose.runtime:runtime-tracing:1.0.0-beta01")
+    implementation("androidx.tracing:tracing-perfetto:1.0.0")
+    implementation("androidx.tracing:tracing-perfetto-binary:1.0.0")
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.json)

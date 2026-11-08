@@ -68,38 +68,6 @@ private const val POSTER_FOCUS_UPDATE_MIN_INTERVAL_MS = 32L
 private val PosterRatingBadgeShape = RoundedCornerShape(TvDimens.BadgeRadius)
 private val PosterRatingBadgeBackground = Color.Black.copy(alpha = 0.70f)
 
-@Immutable
-data class PosterFocusInfo(
-    val boundsInRoot: Rect,
-    val accentColor: Color,
-    val isFocused: Boolean,
-)
-
-private class PosterCardLayoutState {
-    /** Bounds are read lazily (only while focused): reading them on every placement is costly while scrolling. */
-    var coordinates: LayoutCoordinates? = null
-    val imageBoundsInRoot: Rect
-        get() = coordinates?.takeIf { it.isAttached }?.boundsInRoot() ?: Rect.Zero
-    var lastDispatchedBounds: Rect = Rect.Zero
-    var lastLoadedDrawable: Drawable? = null
-    var isFocused: Boolean = false
-    var lastFocusDispatchUptimeMs: Long = 0L
-}
-
-private class AccentColorHolder(
-    var color: Color,
-)
-
-private fun Rect.isApproximatelyEqualTo(
-    other: Rect,
-    epsilonPx: Float = POSTER_FOCUS_RECT_EPSILON_PX,
-): Boolean {
-    return abs(left - other.left) <= epsilonPx &&
-        abs(top - other.top) <= epsilonPx &&
-        abs(right - other.right) <= epsilonPx &&
-        abs(bottom - other.bottom) <= epsilonPx
-}
-
 @Composable
 fun PosterCard(
     model: Any,
@@ -107,112 +75,22 @@ fun PosterCard(
     ratingLabel: String?,
     shape: Shape,
     onClick: () -> Unit,
-    onFocus: (PosterFocusInfo) -> Unit,
+    /** Called when the poster gains or loses focus (not on every layout change). */
+    onFocusChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     focusableTestTag: String? = null,
     ringCornerRadius: Dp = TvDimens.CardRadius,
     /** The mockup shows the bare card; title (below) and rating badge are opt-in. */
     showTitle: Boolean = false,
     showRating: Boolean = false,
-    paletteCache: PaletteCache = DefaultPosterPaletteCache,
 ) {
-    val onFocusUpdated by rememberUpdatedState(onFocus)
-    val fallbackAccentColor = MaterialTheme.colorScheme.primary
-    val contentKey = remember(model) { model.toString() }
-    val layoutState = remember { PosterCardLayoutState() }
-
+    val onFocusChangeUpdated by rememberUpdatedState(onFocusChange)
     var isFocused by remember { mutableStateOf(false) }
-    val accentColorHolder = remember(contentKey, fallbackAccentColor) {
-        AccentColorHolder(color = paletteCache.get(contentKey) ?: fallbackAccentColor)
-    }
-
-    fun emitFocus(isFocusedNow: Boolean, color: Color = accentColorHolder.color) {
-        val imageBounds = layoutState.imageBoundsInRoot
-        if (imageBounds.width <= 0f || imageBounds.height <= 0f) {
-            return
-        }
-        layoutState.lastDispatchedBounds = imageBounds
-        onFocusUpdated(
-            PosterFocusInfo(
-                boundsInRoot = imageBounds,
-                accentColor = color,
-                isFocused = isFocusedNow,
-            )
-        )
-    }
-
-    fun requestAccentResolve(
-        drawable: Drawable?,
-        highPriority: Boolean,
-    ) {
-        paletteCache.resolveFromDrawableAsync(
-            contentKey = contentKey,
-            drawable = drawable,
-            fallbackColor = fallbackAccentColor,
-            highPriority = highPriority
-        ) { resolvedColor ->
-            if (resolvedColor != accentColorHolder.color) {
-                accentColorHolder.color = resolvedColor
-            }
-            if (layoutState.isFocused) {
-                emitFocus(isFocusedNow = true, color = resolvedColor)
-            }
-        }
-    }
-
-    // Always attached so the modifier chain never changes on focus. Bounds are tracked
-    // on every placement (cheap, keeps imageBoundsInRoot current); dispatch is focused-only.
-    val focusedBoundsReporterModifier = Modifier.onGloballyPositioned { coordinates ->
-        layoutState.coordinates = coordinates
-
-        if (!layoutState.isFocused) {
-            return@onGloballyPositioned
-        }
-
-        val bounds = coordinates.boundsInRoot()
-        if (bounds.isApproximatelyEqualTo(layoutState.lastDispatchedBounds)) {
-            return@onGloballyPositioned
-        }
-
-        val now = SystemClock.uptimeMillis()
-        if (now - layoutState.lastFocusDispatchUptimeMs < POSTER_FOCUS_UPDATE_MIN_INTERVAL_MS) {
-            return@onGloballyPositioned
-        }
-
-        layoutState.lastFocusDispatchUptimeMs = now
-        emitFocus(isFocusedNow = true)
-    }
 
     val onFocusChangedModifier = Modifier.onFocusChanged { focusState ->
-        if (layoutState.isFocused == focusState.isFocused) {
-            return@onFocusChanged
-        }
-
-        layoutState.isFocused = focusState.isFocused
-        isFocused = focusState.isFocused
-
-        if (focusState.isFocused) {
-            layoutState.lastFocusDispatchUptimeMs = SystemClock.uptimeMillis()
-            val cachedAccent = paletteCache.get(contentKey)
-            if (cachedAccent != null) {
-                accentColorHolder.color = cachedAccent
-            }
-            val shouldResolveHighPriority = cachedAccent == null ||
-                (cachedAccent == fallbackAccentColor && layoutState.lastLoadedDrawable != null)
-            if (shouldResolveHighPriority) {
-                requestAccentResolve(
-                    drawable = layoutState.lastLoadedDrawable,
-                    highPriority = true
-                )
-            }
-        } else {
-            onFocusUpdated(
-                PosterFocusInfo(
-                    boundsInRoot = layoutState.imageBoundsInRoot,
-                    accentColor = accentColorHolder.color,
-                    isFocused = false,
-                )
-            )
+        if (isFocused != focusState.isFocused) {
+            isFocused = focusState.isFocused
+            onFocusChangeUpdated(focusState.isFocused)
         }
     }
 
@@ -230,7 +108,6 @@ fun PosterCard(
                 .tvCardFocus(focused = isFocused, cornerRadius = ringCornerRadius)
                 .clip(shape)
                 .background(TvColors.PosterPlaceholder)
-                .then(focusedBoundsReporterModifier)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,

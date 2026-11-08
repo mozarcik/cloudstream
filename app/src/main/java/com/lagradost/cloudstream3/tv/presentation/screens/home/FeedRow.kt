@@ -35,6 +35,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -214,6 +217,24 @@ private fun FeedPosterRow(
         initialFirstVisibleItemIndex = HomeFocusStore.rowIndex(rowKey).coerceIn(0, showAllIndex),
     )
 
+    // A new row composes its posters in two steps (the first few now, the rest two frames later),
+    // so entering a feed does not stall one frame. A row that is restored (back from details / the
+    // grid) or was left scrolled composes everything at once: its target may be further along.
+    val isRestoringThisFeed = restoreFocusToken > 0 &&
+        HomeFocusStore.feedIdFromTarget(pendingRestoreFocusTargetId) == feedId
+    val composeInSteps = HomeFocusStore.rowIndex(rowKey) == 0 && !isRestoringThisFeed
+    var composedCount by remember(rowKey) {
+        mutableIntStateOf(if (composeInSteps) FeedRowFirstStepPosters else Int.MAX_VALUE)
+    }
+    LaunchedEffect(rowKey) {
+        if (composedCount != Int.MAX_VALUE) {
+            withFrameNanos { }
+            withFrameNanos { }
+            composedCount = Int.MAX_VALUE
+        }
+    }
+    val shownPosters = if (composedCount >= posters.size) posters else posters.subList(0, composedCount)
+
     // Back from details / the full grid: scroll to the remembered poster and focus it.
     LaunchedEffect(restoreFocusToken, pendingRestoreFocusTargetId, posters) {
         val target = pendingRestoreFocusTargetId ?: return@LaunchedEffect
@@ -247,11 +268,6 @@ private fun FeedPosterRow(
 
     // Posters hide under the rail's edge (68 dp), not under its icons; the first one sits at 88 dp.
     CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec) {
-    Box(
-        Modifier
-            .padding(start = TvDimens.ContentClipStart)
-            .horizontalClip()
-    ) {
         LazyRow(
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(TvDimens.FeedRowGap),
@@ -260,6 +276,10 @@ private fun FeedPosterRow(
                 end = TvDimens.ScreenHorizontalPadding,
             ),
             modifier = Modifier
+                .padding(start = TvDimens.ContentClipStart)
+                .horizontalClip()
+                // Up / Down from any poster (one handler for the row, not one per poster).
+                .then(verticalKeys())
                 .focusRequester(rowFocusRequester)
                 // Entering the row from above / below lands on the position it was left at.
                 .focusProperties {
@@ -267,7 +287,7 @@ private fun FeedPosterRow(
                 }
                 .focusGroup()
         ) {
-            itemsIndexed(posters, key = { index, item -> "$index:${item.url}" }) { index, item ->
+            itemsIndexed(shownPosters, key = { index, item -> "$index:${item.url}" }) { index, item ->
                 FeedPosterCard(
                     item = item,
                     focusableTestTag = "$slotTagPrefix:$index",
@@ -279,17 +299,16 @@ private fun FeedPosterRow(
                         onItemFocused?.invoke(item)
                     },
                     modifier = Modifier
+                        // Height comes from the poster's 2:3 aspect ratio.
                         .width(TvDimens.FeedRowPosterWidth)
-                        .height(TvDimens.FeedRowPosterHeight)
                         .focusRequester(requesters[index])
                         .focusProperties {
                             canFocus = isInteractive
                             up = upFocusRequester ?: FocusRequester.Default
                         }
-                        .then(verticalKeys())
                 )
             }
-            item(key = "show_all") {
+            if (shownPosters.size == posters.size) item(key = "show_all") {
                 ShowAllTile(
                     subtitle = stringResource(R.string.tv_feed_show_all_subtitle, feedName, "$totalCount+"),
                     onClick = onShowAllClick,
@@ -309,11 +328,9 @@ private fun FeedPosterRow(
                             // End of the row: nothing to the right.
                             right = FocusRequester.Cancel
                         }
-                        .then(verticalKeys())
                 )
             }
         }
-    }
     }
 }
 
@@ -377,19 +394,7 @@ private fun FeedRowHeader(
         }
         Spacer(Modifier.weight(1f))
         // Fixed width, so what the focus shows never moves the title.
-        Box(Modifier.width(TvDimens.FeedRowDescriptionWidth), contentAlignment = Alignment.CenterEnd) {
-            if (isShowAllFocused.value) {
-                Text(
-                    text = stringResource(R.string.tv_feed_show_all_hint, feedName),
-                    style = TvTextStyles.FeedFocusedTitle,
-                    color = TvColors.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else {
-                TvFocusedItemTitle(focusedItem)
-            }
-        }
+        FeedRowFocusDescription(feedName, focusedItem, isShowAllFocused)
     }
 }
 
@@ -533,3 +538,28 @@ private fun FeedEmptyBox(
         )
     }
 }
+
+/** Own scope: moving focus between posters recomposes only this, not the whole header. */
+@Composable
+private fun FeedRowFocusDescription(
+    feedName: String,
+    focusedItem: State<MediaItemCompat?>,
+    isShowAllFocused: State<Boolean>,
+) {
+    Box(Modifier.width(TvDimens.FeedRowDescriptionWidth), contentAlignment = Alignment.CenterEnd) {
+        if (isShowAllFocused.value) {
+            Text(
+                text = stringResource(R.string.tv_feed_show_all_hint, feedName),
+                style = TvTextStyles.FeedFocusedTitle,
+                color = TvColors.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        } else {
+            TvFocusedItemTitle(focusedItem)
+        }
+    }
+}
+
+/** Posters composed in the first step of a new row (see [FeedPosterRow]). */
+private const val FeedRowFirstStepPosters = 4

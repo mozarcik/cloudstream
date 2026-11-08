@@ -232,7 +232,7 @@ internal fun DetailsSimilarTab(
                     ratingLabel = null,
                     shape = TvShapes.Card,
                     onClick = { onMovieSelected(movie) },
-                    onFocus = { info -> if (info.isFocused) focusedName = movie.name },
+                    onFocusChange = { focused -> if (focused) focusedName = movie.name },
                     modifier = (
                         if (index < GridColumnCount) {
                             Modifier.focusProperties { up = upRequester }

@@ -183,7 +183,7 @@ fun ComponentGalleryScreen(onBack: () -> Unit) {
                             ratingLabel = "7.8",
                             shape = TvShapes.Card,
                             onClick = {},
-                            onFocus = {},
+                            onFocusChange = {},
                             modifier = Modifier.width(110.dp),
                         )
                     }

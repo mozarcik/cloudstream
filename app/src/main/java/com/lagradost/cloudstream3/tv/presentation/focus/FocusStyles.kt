@@ -6,6 +6,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -46,6 +47,12 @@ fun Modifier.tvCardFocus(
     ringColor: Color = TvColors.Focus,
     scale: Float = TvDimens.CardFocusScale,
 ): Modifier {
+    // A card that was never focused (most cards in a list) gets no animation state, layer or
+    // draw node at all; they are added when the card first gains focus.
+    val everFocused = remember { BooleanArray(1) }
+    if (focused) everFocused[0] = true
+    if (!everFocused[0]) return this
+
     val scaleState = animateFloatAsState(
         targetValue = if (focused) scale else 1f,
         animationSpec = if (focused) {

@@ -24,7 +24,6 @@ internal fun FeedPosterCard(
     ringCornerRadius: Dp = TvDimens.CardRadius,
     modifier: Modifier = Modifier,
 ) {
-    val wasFocused = remember { BooleanArray(1) }
     PosterCard(
         model = item.posterUri.takeIf { uri -> uri.isNotBlank() } ?: item.url,
         title = item.name,
@@ -33,13 +32,7 @@ internal fun FeedPosterCard(
         ringCornerRadius = ringCornerRadius,
         onClick = onClick,
         focusableTestTag = focusableTestTag,
-        onFocus = { focusInfo ->
-            // PosterCard reports on every layout change while focused; notify only on focus gain.
-            if (focusInfo.isFocused != wasFocused[0]) {
-                wasFocused[0] = focusInfo.isFocused
-                if (focusInfo.isFocused) onFocused?.invoke()
-            }
-        },
+        onFocusChange = { focused -> if (focused) onFocused?.invoke() },
         modifier = modifier,
     )
 }
