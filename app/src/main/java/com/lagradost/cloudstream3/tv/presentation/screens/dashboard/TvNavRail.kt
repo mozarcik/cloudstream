@@ -29,8 +29,10 @@ import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 
 private val RailSeparator = Color.White.copy(alpha = 0.12f)
+// Posters and hero cards scroll under the rail: it stays nearly opaque behind the icons and fades after them.
 internal val RailScrimBrush = Brush.horizontalGradient(
-    0f to TvColors.Ground.copy(alpha = 0.92f),
+    0f to TvColors.Ground.copy(alpha = 0.96f),
+    0.6f to TvColors.Ground.copy(alpha = 0.88f),
     1f to Color.Transparent,
 )
 

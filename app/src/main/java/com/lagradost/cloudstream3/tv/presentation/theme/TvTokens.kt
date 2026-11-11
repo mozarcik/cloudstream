@@ -144,8 +144,6 @@ object TvDimens {
     val RailWidth = 80.dp
     /** Left edge of screen content: rail (64 dp) + 24 dp. */
     val ContentStartWithRail = 88.dp
-    /** Where rows are clipped: the rail's edge, so posters hide under it and not under its icons. */
-    val ContentClipStart = 68.dp
     // Navigation menu (mockups 3, 4, 6)
     val NavMenuRowInset = 12.dp
     val NavMenuRowWidth = 256.dp

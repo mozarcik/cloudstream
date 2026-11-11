@@ -45,8 +45,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -278,23 +276,21 @@ private fun FeedPosterRow(
     val density = LocalDensity.current
     val bringIntoViewSpec = remember(density) {
         horizontalBringIntoViewSpec(
-            startInsetPx = with(density) { (TvDimens.ContentStartWithRail - TvDimens.ContentClipStart).toPx() },
+            startInsetPx = with(density) { TvDimens.ContentStartWithRail.toPx() },
             endInsetPx = with(density) { TvDimens.ScreenHorizontalPadding.toPx() },
         )
     }
 
-    // Posters hide under the rail's edge (68 dp), not under its icons; the first one sits at 88 dp.
+    // Posters scroll under the nav rail (like the hero cards); the first one sits at 88 dp.
     CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec) {
         LazyRow(
             state = listState,
             horizontalArrangement = Arrangement.spacedBy(TvDimens.FeedRowGap),
             contentPadding = PaddingValues(
-                start = TvDimens.ContentStartWithRail - TvDimens.ContentClipStart,
+                start = TvDimens.ContentStartWithRail,
                 end = TvDimens.ScreenHorizontalPadding,
             ),
             modifier = Modifier
-                .padding(start = TvDimens.ContentClipStart)
-                .horizontalClip()
                 // Up / Down from any poster (one handler for the row, not one per poster).
                 .then(verticalKeys())
                 .focusRequester(rowFocusRequester)
@@ -362,13 +358,6 @@ private fun horizontalBringIntoViewSpec(startInsetPx: Float, endInsetPx: Float) 
             end > containerSize - endInsetPx -> end - (containerSize - endInsetPx)
             else -> 0f
         }
-    }
-}
-
-/** Clips sideways only, so the focus ring and scale of a poster are not cut above / below the row. */
-private fun Modifier.horizontalClip(): Modifier = this.drawWithContent {
-    clipRect(left = 0f, top = -size.height, right = size.width, bottom = size.height * 2) {
-        this@drawWithContent.drawContent()
     }
 }
 
