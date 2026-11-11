@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
@@ -76,7 +75,6 @@ private val SourceChipSkeletonWidths = listOf(TvDimens.SkeletonChipWidthA, TvDim
 private const val HomeContinueWatchingListIndex = 0
 /** Feed rows follow the top-section spacer. */
 private const val FeedSectionsStartIndex = 1
-private const val HomeFocusDebugTag = "TvHomeFocus"
 
 /**
  * Home scrolls itself (hero, pinned feeds). Compose's default focus
@@ -178,7 +176,7 @@ fun HomeScreenV2Content(
     }
 
     fun restoreContinueWatchingToTop() {
-        if (listState.isScrolledToTop() || listState.isScrollInProgress) return
+        if (listState.isScrolledToTop()) return
 
         coroutineScope.launch {
             listState.animateScrollToItem(HomeContinueWatchingListIndex)
@@ -192,10 +190,6 @@ fun HomeScreenV2Content(
 
         armedRestoreFocusToken = restoreFocusToken
         armedRestoreTargetId = HomeFocusStore.pendingRestoreTargetId
-        Log.d(
-            HomeFocusDebugTag,
-            "home arm restore token=$armedRestoreFocusToken target=$armedRestoreTargetId"
-        )
     }
 
     LaunchedEffect(showQuickSourcesRow, isMorePanelOpen) {
@@ -207,17 +201,14 @@ fun HomeScreenV2Content(
         if (!isMorePanelVisible && wasMorePanelOpen) {
             when (morePanelCloseTarget) {
                 MorePanelCloseTarget.MoreButton -> {
-                    Log.d(HomeFocusDebugTag, "more panel close -> more button")
                     moreButtonFocusRequestToken += 1
                 }
 
                 MorePanelCloseTarget.ContinueWatching -> {
                     if (hasContinueWatchingItems) {
-                        Log.d(HomeFocusDebugTag, "more panel close -> continue watching")
                         listState.animateScrollToItem(HomeContinueWatchingListIndex)
                         continueWatchingCardsFocusRequestToken += 1
                     } else {
-                        Log.d(HomeFocusDebugTag, "more panel close fallback -> more button")
                         moreButtonFocusRequestToken += 1
                     }
                 }
@@ -236,10 +227,7 @@ fun HomeScreenV2Content(
     FocusRequestEffect(
         requester = continueWatchingCardsFocusRequester,
         requestKey = continueWatchingCardsFocusRequestToken,
-        enabled = continueWatchingCardsFocusRequestToken > 0,
-        onFocused = {
-            restoreContinueWatchingToTop()
-        }
+        enabled = continueWatchingCardsFocusRequestToken > 0
     )
 
     FocusRequestEffect(
@@ -257,22 +245,13 @@ fun HomeScreenV2Content(
 
     LaunchedEffect(armedRestoreFocusToken, armedRestoreTargetId, homeFeedRestoreListIndex) {
         if (armedRestoreFocusToken <= 0) return@LaunchedEffect
-        Log.d(
-            HomeFocusDebugTag,
-            "home restore token=$armedRestoreFocusToken target=$armedRestoreTargetId feedIndex=$homeFeedRestoreListIndex"
-        )
         if (HomeFocusStore.isContinueWatchingTarget(armedRestoreTargetId)) {
             listState.scrollToItem(HomeContinueWatchingListIndex)
-            Log.d(HomeFocusDebugTag, "home restore scroll -> continue watching")
             return@LaunchedEffect
         }
         if (homeFeedRestoreListIndex != null) {
             listState.scrollToItem(homeFeedRestoreListIndex)
             feedSectionsRestoreFocusToken += 1
-            Log.d(
-                HomeFocusDebugTag,
-                "home restore scroll -> feed section index=$homeFeedRestoreListIndex token=$feedSectionsRestoreFocusToken"
-            )
         }
     }
 
@@ -405,139 +384,124 @@ fun HomeScreenV2Content(
         onMorePanelOpenChange(false)
     }
 
-    run {
-        Box(
-            modifier = modifier.fillMaxSize()
-        ) {
-            if (!isNoSources) {
-                // Hero and source chips live outside the list (always composed, no pinning needed) and
-                // follow its scroll through the placement-phase offset below.
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(end = if (isMorePanelVisible) 0.dp else TvDimens.ScrollbarGutter)
-                        // Measured before the offset, so it is the content height.
-                        .onSizeChanged { topSectionHeightPx = it.height }
-                        .offset {
-                            // Read the scroll offset only while the spacer item is the first visible one, so scrolling
-                            // deeper in the list does not re-place the top section on every frame.
-                            val y = if (listState.firstVisibleItemIndex == 0) {
-                                listState.firstVisibleItemScrollOffset
-                            } else {
-                                topSectionHeightPx
-                            }
-                            IntOffset(0, -y)
+    Box(
+        modifier = modifier.fillMaxSize()
+    ) {
+        if (!isNoSources) {
+            // Hero and source chips live outside the list (always composed, no pinning needed) and
+            // follow its scroll through the placement-phase offset below.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = if (isMorePanelVisible) 0.dp else TvDimens.ScrollbarGutter)
+                    // Measured before the offset, so it is the content height.
+                    .onSizeChanged { topSectionHeightPx = it.height }
+                    .offset {
+                        // Read the scroll offset only while the spacer item is the first visible one, so scrolling
+                        // deeper in the list does not re-place the top section on every frame.
+                        val y = if (listState.firstVisibleItemIndex == 0) {
+                            listState.firstVisibleItemScrollOffset
+                        } else {
+                            topSectionHeightPx
                         }
-                ) {
-                    if (!showContinueWatchingHero) {
-                        Spacer(Modifier.height(DashboardContentTopInset + TopBarToContentSpacing))
+                        IntOffset(0, -y)
                     }
+                    // Hero and chips are not list items, so the list does not scroll to them by itself.
+                    .onFocusChanged { if (it.hasFocus) restoreContinueWatchingToTop() }
+            ) {
+                if (!showContinueWatchingHero) {
+                    Spacer(Modifier.height(DashboardContentTopInset + TopBarToContentSpacing))
+                }
 
-                    if (showContinueWatchingHero) {
-                        ContinueWatchingHeroSection(
-                            state = continueWatchingUiState.state,
-                            resumeFocusRequester = resumeFocusRequester,
-                            cardsFocusRequester = continueWatchingCardsFocusRequester,
-                            upFocusRequester = FocusRequester.Cancel,
-                            sourceButtonFocusRequester = continueWatchingDownFocusRequester,
-                            isInteractive = !isMorePanelVisible,
-                            pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
-                            restoreFocusToken = continueWatchingRestoreFocusToken,
-                            onResumeClick = { item ->
-                                HomeFocusStore.scheduleRestoreToLastFocused()
-                                onContinueWatchingPlay(item)
-                            },
-                            onDetailsClick = { item ->
-                                HomeFocusStore.scheduleRestoreToLastFocused()
-                                onMediaClick(item)
-                            },
-                            onRemoveClick = onRemoveContinueWatching,
-                            onCardClick = { item ->
-                                HomeFocusStore.scheduleRestoreToLastFocused()
-                                onMediaClick(item)
-                            },
-                            onHeroContentFocused = {
-                                restoreContinueWatchingToTop()
-                            },
-                            onFocusTargetFocused = HomeFocusStore::onTargetFocused,
-                            onRestoreFocusConsumed = ::consumeArmedRestore,
-                        )
-                    }
+                if (showContinueWatchingHero) {
+                    ContinueWatchingHeroSection(
+                        state = continueWatchingUiState.state,
+                        resumeFocusRequester = resumeFocusRequester,
+                        cardsFocusRequester = continueWatchingCardsFocusRequester,
+                        upFocusRequester = FocusRequester.Cancel,
+                        sourceButtonFocusRequester = continueWatchingDownFocusRequester,
+                        isInteractive = !isMorePanelVisible,
+                        pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
+                        restoreFocusToken = continueWatchingRestoreFocusToken,
+                        onResumeClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onContinueWatchingPlay(item)
+                        },
+                        onDetailsClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onMediaClick(item)
+                        },
+                        onRemoveClick = onRemoveContinueWatching,
+                        onCardClick = { item ->
+                            HomeFocusStore.scheduleRestoreToLastFocused()
+                            onMediaClick(item)
+                        },
+                        onFocusTargetFocused = HomeFocusStore::onTargetFocused,
+                        onRestoreFocusConsumed = ::consumeArmedRestore,
+                    )
+                }
 
-                    if (!sourcesUiState.isBootstrapped) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(TvDimens.SourceChipGap),
-                            modifier = Modifier.padding(start = HomeContentHorizontalPadding)
-                        ) {
-                            SourceChipSkeletonWidths.forEach { width ->
-                                Spacer(
-                                    Modifier
-                                        .width(width)
-                                        .height(TvDimens.ChipHeight)
-                                        .tvSkeleton(CircleShape)
-                                )
-                            }
-                        }
-                    }
-
-                    if (showQuickSourcesRow) {
-                        Box(
-                            modifier = Modifier
-                                .padding(start = HomeContentHorizontalPadding)
-                                // The first feed is below the hero page and may not be composed yet.
-                                .onPreviewKeyEvent { event ->
-                                    if (
-                                        event.type == KeyEventType.KeyDown &&
-                                        event.key == Key.DirectionDown &&
-                                        !isMorePanelVisible &&
-                                        feedsUiState.feedSections.isNotEmpty()
-                                    ) {
-                                        focusFeedRow(FeedSectionsStartIndex, firstFeedCardFocusRequester)
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                                // Chips sit at the bottom of the hero page: bring it back into view.
-                                .onFocusChanged { focusState ->
-                                    if (focusState.hasFocus) HomeFocusStore.onTargetFocused(HomeFocusStore.Sources)
-                                    if (focusState.hasFocus && !listState.isScrolledToTop()) {
-                                        coroutineScope.launch {
-                                            listState.animateScrollToItem(HomeContinueWatchingListIndex)
-                                        }
-                                    }
-                                }
-                        ) {
-                            QuickSourcesRow(
-                                quickSources = sourcesUiState.quickSources,
-                                allSourcesCount = sourcesUiState.allSources.size,
-                                selectedSource = sourcesUiState.selectedSource,
-                                rowEntryFocusRequester = quickSourcesEntryFocusRequester,
-                                moreButtonFocusRequester = moreButtonFocusRequester,
-                                isInteractive = !isMorePanelVisible,
-                                upFocusRequester = if (hasContinueWatchingItems) {
-                                    continueWatchingCardsFocusRequester
-                                } else {
-                                    FocusRequester.Cancel
-                                },
-                                downFocusRequester = if (feedsUiState.feedSections.isNotEmpty()) {
-                                    firstFeedCardFocusRequester
-                                } else {
-                                    null
-                                },
-                                onSourceSelected = onSourceSelected,
-                                onMoreClick = {
-                                    morePanelCloseTarget = MorePanelCloseTarget.MoreButton
-                                    onMorePanelOpenChange(true)
-                                }
+                if (!sourcesUiState.isBootstrapped) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(TvDimens.SourceChipGap),
+                        modifier = Modifier.padding(start = HomeContentHorizontalPadding)
+                    ) {
+                        SourceChipSkeletonWidths.forEach { width ->
+                            Spacer(
+                                Modifier
+                                    .width(width)
+                                    .height(TvDimens.ChipHeight)
+                                    .tvSkeleton(CircleShape)
                             )
                         }
                     }
                 }
-            }
 
-            CompositionLocalProvider(LocalBringIntoViewSpec provides HomeBringIntoViewSpec) {
+                if (showQuickSourcesRow) {
+                    Box(
+                        modifier = Modifier
+                            .padding(start = HomeContentHorizontalPadding)
+                            // The first feed is below the hero page and may not be composed yet.
+                            .onPreviewKeyEvent { event ->
+                                if (
+                                    event.type == KeyEventType.KeyDown &&
+                                    event.key == Key.DirectionDown &&
+                                    !isMorePanelVisible &&
+                                    feedsUiState.feedSections.isNotEmpty()
+                                ) {
+                                    focusFeedRow(FeedSectionsStartIndex, firstFeedCardFocusRequester)
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            .onFocusChanged { if (it.hasFocus) HomeFocusStore.onTargetFocused(HomeFocusStore.Sources) }
+                    ) {
+                        QuickSourcesRow(
+                            quickSources = sourcesUiState.quickSources,
+                            allSourcesCount = sourcesUiState.allSources.size,
+                            selectedSource = sourcesUiState.selectedSource,
+                            rowEntryFocusRequester = quickSourcesEntryFocusRequester,
+                            moreButtonFocusRequester = moreButtonFocusRequester,
+                            isInteractive = !isMorePanelVisible,
+                            upFocusRequester = if (hasContinueWatchingItems) {
+                                continueWatchingCardsFocusRequester
+                            } else {
+                                FocusRequester.Cancel
+                            },
+                            onSourceSelected = onSourceSelected,
+                            onMoreClick = {
+                                morePanelCloseTarget = MorePanelCloseTarget.MoreButton
+                                onMorePanelOpenChange(true)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        CompositionLocalProvider(LocalBringIntoViewSpec provides HomeBringIntoViewSpec) {
             LazyColumn(
                 state = listState,
                 // No top padding: the first item is a spacer the height of the top section (the hero bleeds
@@ -605,28 +569,27 @@ fun HomeScreenV2Content(
                     item { Spacer(Modifier.height(FeedPinBottomPadding)) }
                 }
             }
-            }
-
-            SourcesMorePanel(
-                visible = isMorePanelVisible,
-                sources = sourcesUiState.morePanelSources,
-                selectedSource = sourcesUiState.selectedSource,
-                pinnedSourceIds = sourcesUiState.pinnedSourceIds,
-                onSourceSelected = { source ->
-                    onSourceSelected(source)
-                    onMorePanelOpenChange(false)
-                },
-                onTogglePin = onTogglePin,
-                onCloseRequested = {
-                    morePanelCloseTarget = MorePanelCloseTarget.MoreButton
-                    onMorePanelOpenChange(false)
-                },
-                onExitUpRequested = {
-                    morePanelCloseTarget = MorePanelCloseTarget.ContinueWatching
-                    onMorePanelOpenChange(false)
-                }
-            )
         }
+
+        SourcesMorePanel(
+            visible = isMorePanelVisible,
+            sources = sourcesUiState.morePanelSources,
+            selectedSource = sourcesUiState.selectedSource,
+            pinnedSourceIds = sourcesUiState.pinnedSourceIds,
+            onSourceSelected = { source ->
+                onSourceSelected(source)
+                onMorePanelOpenChange(false)
+            },
+            onTogglePin = onTogglePin,
+            onCloseRequested = {
+                morePanelCloseTarget = MorePanelCloseTarget.MoreButton
+                onMorePanelOpenChange(false)
+            },
+            onExitUpRequested = {
+                morePanelCloseTarget = MorePanelCloseTarget.ContinueWatching
+                onMorePanelOpenChange(false)
+            }
+        )
     }
 }
 

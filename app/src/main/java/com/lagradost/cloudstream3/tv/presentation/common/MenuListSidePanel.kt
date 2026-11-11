@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.shape.RoundedCornerShape
-import android.util.Log
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -197,7 +196,6 @@ fun MenuListSidePanel(
     /** Group headers as small uppercase labels (details panels), else the generic meta style. */
     uppercaseSectionHeaders: Boolean = false,
 ) {
-    val shouldLogDownloadPanel = panelTestTag?.contains("download") == true
     val resolvedContentKey = contentAnimationKey ?: Unit
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
 
@@ -255,23 +253,6 @@ fun MenuListSidePanel(
         focusedItemId = null
     }
 
-    LaunchedEffect(
-        visible,
-        resolvedContentKey,
-        requestFocusItemId,
-        focusedItemId,
-        focusableItemIds,
-        panelTestTag,
-    ) {
-        if (!shouldLogDownloadPanel) return@LaunchedEffect
-
-        Log.d(
-            "MenuListSidePanel",
-            "panel=$panelTestTag visible=$visible requestFocusItemId=$requestFocusItemId focusedItemId=$focusedItemId " +
-                "focusable=${focusableItemIds.size}"
-        )
-    }
-
     LaunchedEffect(requestFocusItemId, items) {
         val targetItemId = requestFocusItemId ?: return@LaunchedEffect
         val focusItemListIndex = items.indexOfFirst { menuItem ->
@@ -289,15 +270,7 @@ fun MenuListSidePanel(
         enabled = visible && requestFocusItemId != null,
         attempts = 40,
         retryDelayMs = 50,
-        onFocused = {
-            focusedItemId = requestFocusItemId
-            if (shouldLogDownloadPanel) {
-                Log.d(
-                    "MenuListSidePanel",
-                    "panel=$panelTestTag focus_applied itemId=$requestFocusItemId"
-                )
-            }
-        }
+        onFocused = { focusedItemId = requestFocusItemId }
     )
 
     SlidingSidePanel(
@@ -408,13 +381,6 @@ fun MenuListSidePanel(
                         }
                         .focusProperties {
                             onExit = {
-                                if (shouldLogDownloadPanel) {
-                                    Log.d(
-                                        "MenuListSidePanel",
-                                        "panel=$panelTestTag focus_exit closeOnFocusExit=$closeOnFocusExit focusedItemId=$focusedItemId " +
-                                            "focusable=${focusableItemIds.size}"
-                                    )
-                                }
                                 if (closeOnFocusExit) {
                                     onCloseRequested()
                                     FocusRequester.Default

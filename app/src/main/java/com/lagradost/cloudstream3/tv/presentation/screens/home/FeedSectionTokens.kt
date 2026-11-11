@@ -44,15 +44,6 @@ internal fun gridHeightForRows(rowCount: Int): Dp {
     return (TvDimens.PosterHeight * rowCount) + (TvDimens.MiniGridGap * spacingRows)
 }
 
-/** Whole feed item in the Home list: pinned padding + header + gap + grid + bottom padding. */
-internal fun feedSectionHeight(rowCount: Int): Dp {
-    return TvDimens.FeedPinnedTop +
-        TvDimens.FeedHeaderHeight +
-        TvDimens.FeedHeaderGridGap +
-        gridHeightForRows(rowCount) +
-        TvDimens.FeedSectionBottomPadding
-}
-
 /** Focus-restore id of a mini-grid slot; matches [HomeFocusStore.feedPoster]/[HomeFocusStore.feedShowMore]. */
 internal fun feedSlotTargetId(sectionKey: String, config: FeedMiniGridConfig, slot: Int): String {
     return if (config.showMore && slot == config.totalSlots - 1) {
@@ -61,12 +52,4 @@ internal fun feedSlotTargetId(sectionKey: String, config: FeedMiniGridConfig, sl
         val item = config.displayItems[slot]
         "$sectionKey:item:${item.apiName}|${item.id}|${item.url}"
     }
-}
-
-/** Slot reached when entering a grid from above (first row) or below (last row) in [column]. */
-internal fun feedEntrySlot(config: FeedMiniGridConfig, fromAbove: Boolean, column: Int): Int {
-    val row = if (fromAbove) 0 else config.rowCount - 1
-    val rowStart = row * FEED_GRID_COLUMNS
-    val rowEnd = minOf(rowStart + FEED_GRID_COLUMNS, config.totalSlots)
-    return (rowStart + column).coerceIn(rowStart, (rowEnd - 1).coerceAtLeast(rowStart))
 }

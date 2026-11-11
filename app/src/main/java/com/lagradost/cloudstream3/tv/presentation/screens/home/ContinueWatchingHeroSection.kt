@@ -24,7 +24,6 @@ fun ContinueWatchingHeroSection(
     onDetailsClick: (MediaItemCompat) -> Unit = {},
     onRemoveClick: (MediaItemCompat) -> Unit = {},
     onCardClick: (MediaItemCompat) -> Unit = {},
-    onHeroContentFocused: () -> Unit = {},
     onFocusTargetFocused: (String) -> Unit = {},
     onRestoreFocusConsumed: (String) -> Unit = {},
 ) {
@@ -56,7 +55,6 @@ fun ContinueWatchingHeroSection(
                 onDetailsClick = onDetailsClick,
                 onRemoveClick = onRemoveClick,
                 onCardClick = onCardClick,
-                onHeroContentFocused = onHeroContentFocused,
                 onFocusTargetFocused = onFocusTargetFocused,
                 onRestoreFocusConsumed = onRestoreFocusConsumed,
                 modifier = modifier

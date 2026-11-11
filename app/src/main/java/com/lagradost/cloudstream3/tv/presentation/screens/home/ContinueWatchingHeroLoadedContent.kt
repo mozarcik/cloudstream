@@ -2,6 +2,7 @@ package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
@@ -44,17 +45,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -72,7 +69,7 @@ import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMa
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
 @Composable
 internal fun ContinueWatchingHeroLoadedState(
     items: List<MediaItemCompat>,
@@ -87,7 +84,6 @@ internal fun ContinueWatchingHeroLoadedState(
     onDetailsClick: (MediaItemCompat) -> Unit,
     onRemoveClick: (MediaItemCompat) -> Unit,
     onCardClick: (MediaItemCompat) -> Unit,
-    onHeroContentFocused: () -> Unit,
     onFocusTargetFocused: (String) -> Unit,
     onRestoreFocusConsumed: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -152,7 +148,6 @@ internal fun ContinueWatchingHeroLoadedState(
         pendingRestoreFocusTargetId,
         restoreFocusToken,
         items,
-        lastFocusedCardIndex
     ) {
         when (pendingRestoreFocusTargetId) {
             HomeFocusStore.ContinueWatchingResume -> resumeFocusRequester
@@ -162,13 +157,7 @@ internal fun ContinueWatchingHeroLoadedState(
             else -> items
                 .indexOfFirst { item -> cardTargetId(item) == pendingRestoreFocusTargetId }
                 .takeIf { it >= 0 }
-                ?.let { index ->
-                    if (index == lastFocusedCardIndex) {
-                        cardsFocusRequester
-                    } else {
-                        cardFocusRequesters[cardTargetId(items[index])]
-                    }
-                }
+                ?.let { index -> cardFocusRequesters[cardTargetId(items[index])] }
         }
     }
 
@@ -181,6 +170,7 @@ internal fun ContinueWatchingHeroLoadedState(
         }
     )
 
+    // The row is a focus group that enters on the last focused card; that card must be composed.
     fun requestCardsFocus() {
         if (!isInteractive) return
 
@@ -189,14 +179,7 @@ internal fun ContinueWatchingHeroLoadedState(
             if (rowState.isItemOutsideViewport(targetIndex)) {
                 rowState.scrollToItem(targetIndex)
             }
-            val requester = if (targetIndex == lastFocusedCardIndex) {
-                cardsFocusRequester
-            } else {
-                cardFocusRequesters[cardTargetId(items[targetIndex])]
-            }
-            if (requester != null && requester.requestFocusWithRetry(attempts = 18)) {
-                return@launch
-            }
+            cardsFocusRequester.requestFocusWithRetry(attempts = 18)
         }
     }
 
@@ -225,7 +208,6 @@ internal fun ContinueWatchingHeroLoadedState(
             resumeFocusRequester = resumeFocusRequester,
             detailsFocusRequester = detailsFocusRequester,
             removeFocusRequester = removeFocusRequester,
-            onHeroContentFocused = onHeroContentFocused,
             onResumeClick = onResumeClick,
             onDetailsClick = onDetailsClick,
             onRemoveClick = {
@@ -236,7 +218,6 @@ internal fun ContinueWatchingHeroLoadedState(
                 }
                 onRemoveClick(it)
             },
-            onRequestCardsFocus = ::requestCardsFocus,
             onFocusTargetFocused = onFocusTargetFocused,
             modifier = Modifier
                 .align(Alignment.TopStart)
@@ -276,6 +257,16 @@ internal fun ContinueWatchingHeroLoadedState(
                 .align(Alignment.TopStart)
                 .padding(top = ContinueWatchingCardsTop - ContinueWatchingCardsVerticalInset)
                 .fillMaxWidth()
+                // Entering the row (Down from the buttons, Up from the chips) lands on the last focused card.
+                .focusRequester(cardsFocusRequester)
+                .focusProperties {
+                    enter = {
+                        val index = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
+                        val isComposed = rowState.layoutInfo.visibleItemsInfo.any { it.index == index }
+                        if (isComposed) cardFocusRequesters.getValue(cardTargetIds[index]) else FocusRequester.Default
+                    }
+                }
+                .focusGroup()
         ) {
             itemsIndexed(
                 items = items,
@@ -286,18 +277,13 @@ internal fun ContinueWatchingHeroLoadedState(
                     item = item,
                     colorTokens = colorTokens,
                     isSelected = index == safeSelectedIndex,
-                    focusRequester = if (index == lastFocusedCardIndex) {
-                        cardsFocusRequester
-                    } else {
-                        cardFocusRequester
-                    },
+                    focusRequester = cardFocusRequester,
                     upFocusRequester = resumeFocusRequester,
                     downFocusRequester = sourceButtonFocusRequester,
                     isInteractive = isInteractive,
                     onFocused = {
                         focusedCardIndex = index
                         lastFocusedCardIndex = index
-                        onHeroContentFocused()
                         onFocusTargetFocused(cardTargetId(item))
                     },
                     onClick = { onCardClick(item) },
@@ -318,11 +304,9 @@ private fun ContinueWatchingHeroInfo(
     resumeFocusRequester: FocusRequester,
     detailsFocusRequester: FocusRequester,
     removeFocusRequester: FocusRequester,
-    onHeroContentFocused: () -> Unit,
     onResumeClick: (MediaItemCompat) -> Unit,
     onDetailsClick: (MediaItemCompat) -> Unit,
     onRemoveClick: (MediaItemCompat) -> Unit,
-    onRequestCardsFocus: () -> Unit,
     onFocusTargetFocused: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -360,33 +344,15 @@ private fun ContinueWatchingHeroInfo(
             requester: FocusRequester,
             targetId: String,
             tag: String,
-            left: FocusRequester? = null,
-            right: FocusRequester? = null,
         ): Modifier = this
             .testTag(tag)
             .focusRequester(requester)
             .focusProperties {
                 canFocus = isInteractive
                 up = upFocusRequester
-                if (left != null) this.left = left
-                if (right != null) this.right = right
             }
             .onFocusChanged { focusState ->
-                if (focusState.isFocused) {
-                    onHeroContentFocused()
-                    onFocusTargetFocused(targetId)
-                }
-            }
-            .onPreviewKeyEvent { event ->
-                if (!isInteractive || event.type != KeyEventType.KeyDown) {
-                    return@onPreviewKeyEvent false
-                }
-                if (event.key == Key.DirectionDown) {
-                    onRequestCardsFocus()
-                    true
-                } else {
-                    false
-                }
+                if (focusState.isFocused) onFocusTargetFocused(targetId)
             }
 
         Row(horizontalArrangement = Arrangement.spacedBy(ContinueWatchingButtonSpacing)) {
@@ -400,7 +366,6 @@ private fun ContinueWatchingHeroInfo(
                     requester = resumeFocusRequester,
                     targetId = HomeFocusStore.ContinueWatchingResume,
                     tag = "home_continue_watching_resume_button",
-                    right = detailsFocusRequester,
                 ),
             )
             TvButton(
@@ -413,8 +378,6 @@ private fun ContinueWatchingHeroInfo(
                     requester = detailsFocusRequester,
                     targetId = HomeFocusStore.ContinueWatchingDetails,
                     tag = "home_continue_watching_details_button",
-                    left = resumeFocusRequester,
-                    right = removeFocusRequester,
                 ),
             )
             TvButton(
@@ -427,7 +390,6 @@ private fun ContinueWatchingHeroInfo(
                     requester = removeFocusRequester,
                     targetId = HomeFocusStore.ContinueWatchingRemove,
                     tag = "home_continue_watching_remove_button",
-                    left = detailsFocusRequester,
                 ),
             )
         }

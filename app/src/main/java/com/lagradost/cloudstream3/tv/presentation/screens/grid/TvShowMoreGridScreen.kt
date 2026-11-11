@@ -114,7 +114,6 @@ fun TvShowMoreGridScreen(
 
     var isSortPanelOpen by rememberSaveable(screenKey) { mutableStateOf(false) }
     var focusFirstItemToken by rememberSaveable(screenKey) { mutableIntStateOf(0) }
-    var focusSortButtonToken by rememberSaveable(screenKey) { mutableIntStateOf(0) }
     var initialFocusHandled by rememberSaveable(screenKey) { mutableStateOf(false) }
     // Focus coming back into the grid (from the menu, or Down from Sort) goes to the poster that had it.
     var reenterToken by remember { mutableIntStateOf(0) }
@@ -177,11 +176,6 @@ fun TvShowMoreGridScreen(
         requester = firstItemFocusRequester,
         requestKey = focusFirstItemToken,
         enabled = focusFirstItemToken > 0 && !isSortPanelOpen && itemCount > 0,
-    )
-    FocusRequestEffect(
-        requester = sortButtonFocusRequester,
-        requestKey = focusSortButtonToken,
-        enabled = focusSortButtonToken > 0 && !isSortPanelOpen,
     )
     TvInitialFocusEffect(
         requester = retryFocusRequester,
@@ -314,7 +308,7 @@ fun TvShowMoreGridScreen(
             },
             onCloseRequested = {
                 isSortPanelOpen = false
-                focusSortButtonToken += 1
+                sortButtonFocusRequester.requestFocus()
             },
         )
     }

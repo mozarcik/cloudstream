@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.dashboard
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.focusGroup
@@ -82,7 +81,6 @@ val LocalDashboardBack = compositionLocalOf<() -> Unit> { {} }
 /** Opens the navigation menu; screens call it for "Left from the first column". */
 val LocalDashboardOpenMenu = compositionLocalOf<() -> Unit> { {} }
 
-private const val SearchNavLogTag = "TvSearchNav"
 private const val ProgrammaticSearchNavigationGuardMs = 450L
 private const val EnterContentRetryMs = 60L
 // The old screen keeps focus until its fade-out (MaxAnimationMs) has finished.
@@ -228,15 +226,10 @@ internal fun DashboardScaffold(
         if (query.isBlank()) return@LaunchedEffect
 
         isProgrammaticSearchNavigationPending = true
-        Log.d(
-            SearchNavLogTag,
-            "dashboard received search prefill query=$query currentDestination=${navController.currentDestination?.route}"
-        )
         SearchPrefillStore.setPendingQuery(query)
         navController.navigate(Screens.Search()) {
             launchSingleTop = true
         }
-        Log.d(SearchNavLogTag, "dashboard navigated to search query=$query")
         onSearchPrefillConsumed()
     }
 

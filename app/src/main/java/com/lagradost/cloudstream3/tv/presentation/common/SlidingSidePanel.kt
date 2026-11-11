@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -109,7 +110,10 @@ fun SlidingSidePanel(
                         }
                     )
                     .graphicsLayer { translationX = direction * (1f - progress.value) * size.width }
-                    .tvFocusTrap()
+                    // A closing panel (slide-out still running) neither traps nor takes focus, so callers can
+                    // move focus back to the opener right when `visible` turns false.
+                    .focusProperties { canFocus = visible }
+                    .tvFocusTrap(enabled = visible)
                     .background(color = panelBackgroundColor, shape = panelShape ?: RectangleShape)
                     .padding(panelPadding),
                 content = content,

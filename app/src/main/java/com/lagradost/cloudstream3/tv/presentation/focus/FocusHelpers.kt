@@ -10,13 +10,6 @@ private const val DefaultFocusRequestAttempts = 120
 private const val DefaultFocusRequestDelayMs = 16L
 
 @Composable
-fun rememberFocusRequesters(count: Int): List<FocusRequester> {
-    return remember(count) {
-        List(size = count) { FocusRequester() }
-    }
-}
-
-@Composable
 fun <K> rememberFocusRequesterMap(keys: List<K>): Map<K, FocusRequester> {
     val cachedRequesters = remember { LinkedHashMap<K, FocusRequester>() }
 

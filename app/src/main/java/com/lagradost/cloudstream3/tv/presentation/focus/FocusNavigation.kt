@@ -94,10 +94,13 @@ fun rememberTvFocusMemory(initialKey: String? = null): TvFocusMemory {
     return memory
 }
 
-/** Keeps D-pad focus inside this subtree (side panels, dialogs). Combine with [TvBackHandler]. */
+/**
+ * Keeps D-pad focus inside this subtree (side panels, dialogs). Combine with [TvBackHandler].
+ * While [enabled] is false (a panel sliding out) focus may leave, also by [FocusRequester.requestFocus].
+ */
 @OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.tvFocusTrap(): Modifier = this
-    .focusProperties { exit = { FocusRequester.Cancel } }
+fun Modifier.tvFocusTrap(enabled: Boolean = true): Modifier = this
+    .focusProperties { exit = { if (enabled) FocusRequester.Cancel else FocusRequester.Default } }
     .focusGroup()
 
 /** Single place for Back handling so overlays close the same way everywhere. */

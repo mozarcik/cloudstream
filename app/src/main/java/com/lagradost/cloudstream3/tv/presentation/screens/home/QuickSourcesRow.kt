@@ -52,7 +52,6 @@ fun QuickSourcesRow(
     moreButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
     upFocusRequester: FocusRequester? = null,
-    downFocusRequester: FocusRequester? = null,
     modifier: Modifier = Modifier,
     onSourceSelected: (MainAPI) -> Unit,
     onMoreClick: () -> Unit,
@@ -100,7 +99,6 @@ fun QuickSourcesRow(
                         .focusProperties {
                             canFocus = isInteractive
                             up = upFocusRequester ?: FocusRequester.Default
-                            down = downFocusRequester ?: FocusRequester.Default
                         }
                         .testTag("source_chip_$sourceId"),
                 )
@@ -119,7 +117,6 @@ fun QuickSourcesRow(
                             // End of the row: nothing to the right.
                             right = FocusRequester.Cancel
                             up = upFocusRequester ?: FocusRequester.Default
-                            down = downFocusRequester ?: FocusRequester.Default
                         }
                         .testTag("all_sources_chip"),
                 )
