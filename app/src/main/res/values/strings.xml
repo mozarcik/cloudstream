@@ -1038,4 +1038,29 @@
     <string name="tv_feed_empty_title">No items in this feed</string>
     <string name="tv_feed_empty_hint">↓ next feed  •  OK — refresh</string>
     <string name="tv_feed_error_title">Failed to load this feed</string>
+    <plurals name="tv_library_lists_count">
+        <item quantity="one">%d list</item>
+        <item quantity="other">%d lists</item>
+    </plurals>
+    <plurals name="tv_library_items_count">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <string name="tv_library_title">All lists</string>
+    <string name="tv_library_summary">%1$s · %2$d in menu</string>
+    <string name="tv_library_in_menu_column">In menu</string>
+    <string name="tv_library_state_pinned">in menu</string>
+    <string name="tv_library_state_unpinned">not in menu</string>
+    <string name="tv_library_preview_meta">%1$s · %2$s</string>
+    <string name="tv_library_hint_row_pinned">OK opens the list · → remove from menu</string>
+    <string name="tv_library_hint_row_unpinned">OK opens the list · → pin to menu</string>
+    <string name="tv_library_hint_row_empty_pinned">→ remove from menu</string>
+    <string name="tv_library_hint_row_empty_unpinned">→ pin to menu</string>
+    <string name="tv_library_hint_pin_pinned">OK unpins from menu · ← back to list</string>
+    <string name="tv_library_hint_pin_unpinned">OK pins to menu · ← back to list</string>
+    <string name="tv_library_pinned_toast">Pinned to menu: %1$s</string>
+    <string name="tv_library_unpinned_toast">Removed from menu: %1$s</string>
+    <string name="tv_library_empty_list_title">This list is empty</string>
+    <string name="tv_library_empty_list_message">Add titles from a movie or series details screen.</string>
+    <string name="tv_library_no_lists_message">Sign in to a library account to see its lists.</string>
 </resources>

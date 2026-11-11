@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Home
@@ -38,8 +39,9 @@ private val AvatarTop = 18.dp
 private val HomeTop = 98.dp
 private val SearchTop = 150.dp
 private val DownloadsTop = 202.dp
-private val UpperSeparatorTop = 260.dp
-private val ListsTop = 274.dp
+private val LibraryTop = 254.dp
+private val UpperSeparatorTop = 312.dp
+private val ListsTop = 326.dp
 private val LowerSeparatorTop = 464.dp
 private val SettingsTop = 480.dp
 private val SeparatorWidth = 20.dp
@@ -52,6 +54,7 @@ private val SeparatorWidth = 20.dp
 internal fun TvNavRail(
     selection: TvNavSelection,
     accountRefreshToken: Int,
+    hasPinnedLists: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val account = remember(accountRefreshToken) { DataStoreHelper.getCurrentAccount() }
@@ -78,8 +81,11 @@ internal fun TvNavRail(
         RailItem(Icons.Outlined.Home, HomeTop, selectedTarget == TvNavTarget.Home)
         RailItem(Icons.Outlined.Search, SearchTop, selectedTarget == TvNavTarget.Search)
         RailItem(Icons.Outlined.FileDownload, DownloadsTop, selectedTarget == TvNavTarget.Downloads)
-        RailSeparator(UpperSeparatorTop)
-        RailItem(Icons.Outlined.BookmarkBorder, ListsTop, isLibrarySelected)
+        RailItem(Icons.AutoMirrored.Outlined.FormatListBulleted, LibraryTop, selectedTarget == TvNavTarget.Library)
+        if (hasPinnedLists) {
+            RailSeparator(UpperSeparatorTop)
+            RailItem(Icons.Outlined.BookmarkBorder, ListsTop, isLibrarySelected)
+        }
         RailSeparator(LowerSeparatorTop)
         RailItem(Icons.Outlined.Settings, SettingsTop, selectedTarget == TvNavTarget.Settings)
     }

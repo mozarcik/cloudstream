@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +39,9 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -56,13 +58,16 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
-import com.lagradost.cloudstream3.tv.presentation.common.TvFocusedItemTitle
+import com.lagradost.cloudstream3.tv.presentation.common.focusedItemMeta
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.focus.tvCardFocus
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
@@ -107,11 +112,26 @@ internal fun FeedRow(
     onShowAllFocused: (() -> Unit)? = null,
     onRestoreFocusConsumed: ((String) -> Unit)? = null,
     onSectionFocusChanged: ((Boolean) -> Unit)? = null,
-    /** Up/Down pressed in the row; returns true when the Dashboard moved focus to another feed. */
-    onVerticalExit: ((up: Boolean) -> Boolean)? = null,
+    /** Up/Down pressed in the row; true consumes the key (a loading neighbour has nothing to focus). */
+    shouldBlockVerticalMove: ((up: Boolean) -> Boolean)? = null,
 ) {
     val focusedItem = remember { mutableStateOf<MediaItemCompat?>(null) }
     val isShowAllFocused = remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    // Never read during composition, so a plain holder avoids recomposition.
+    val pendingUpdate = remember { arrayOfNulls<Job>(1) }
+    // Recomposing the description text costs ~10 ms, so it must not share a frame with the focus
+    // change. The coroutine starts during key handling: the first frame resumes inside the frame
+    // that already renders the focus change, the second one is the following frame.
+    val updateFocusDescription = { item: MediaItemCompat?, showAll: Boolean ->
+        pendingUpdate[0]?.cancel()
+        pendingUpdate[0] = scope.launch {
+            withFrameNanos { }
+            withFrameNanos { }
+            focusedItem.value = item
+            isShowAllFocused.value = showAll
+        }
+    }
     val isEmptyFeed = state is HomeFeedLoadState.Error ||
         (state is HomeFeedLoadState.Success && state.items.isEmpty())
 
@@ -122,8 +142,7 @@ internal fun FeedRow(
             .padding(top = TvDimens.FeedRowTop)
             .onFocusChanged { focusState ->
                 if (!focusState.hasFocus) {
-                    focusedItem.value = null
-                    isShowAllFocused.value = false
+                    updateFocusDescription(null, false)
                 }
                 onSectionFocusChanged?.invoke(focusState.hasFocus)
             }
@@ -145,7 +164,7 @@ internal fun FeedRow(
                 isInteractive = isInteractive,
                 focusRequester = rowFocusRequester,
                 upFocusRequester = upFocusRequester,
-                onVerticalExit = onVerticalExit,
+                shouldBlockVerticalMove = shouldBlockVerticalMove,
                 onClick = onRefreshClick,
             )
 
@@ -157,7 +176,7 @@ internal fun FeedRow(
                         isInteractive = isInteractive,
                         focusRequester = rowFocusRequester,
                         upFocusRequester = upFocusRequester,
-                        onVerticalExit = onVerticalExit,
+                        shouldBlockVerticalMove = shouldBlockVerticalMove,
                         onClick = onRefreshClick,
                     )
                 } else {
@@ -172,14 +191,13 @@ internal fun FeedRow(
                         isInteractive = isInteractive,
                         pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
                         restoreFocusToken = restoreFocusToken,
-                        focusedItem = focusedItem,
-                        isShowAllFocused = isShowAllFocused,
+                        onFocusDescriptionChange = updateFocusDescription,
                         onMediaClick = onMediaClick,
                         onShowAllClick = onShowAllClick,
                         onItemFocused = onItemFocused,
                         onShowAllFocused = onShowAllFocused,
                         onRestoreFocusConsumed = onRestoreFocusConsumed,
-                        onVerticalExit = onVerticalExit,
+                        shouldBlockVerticalMove = shouldBlockVerticalMove,
                     )
                 }
             }
@@ -200,14 +218,13 @@ private fun FeedPosterRow(
     isInteractive: Boolean,
     pendingRestoreFocusTargetId: String?,
     restoreFocusToken: Int,
-    focusedItem: androidx.compose.runtime.MutableState<MediaItemCompat?>,
-    isShowAllFocused: androidx.compose.runtime.MutableState<Boolean>,
+    onFocusDescriptionChange: (item: MediaItemCompat?, showAll: Boolean) -> Unit,
     onMediaClick: (MediaItemCompat) -> Unit,
     onShowAllClick: () -> Unit,
     onItemFocused: ((MediaItemCompat) -> Unit)?,
     onShowAllFocused: (() -> Unit)?,
     onRestoreFocusConsumed: ((String) -> Unit)?,
-    onVerticalExit: ((up: Boolean) -> Boolean)?,
+    shouldBlockVerticalMove: ((up: Boolean) -> Boolean)?,
 ) {
     val showAllIndex = posters.size
     val requesters = remember(posters.size) { List(posters.size + 1) { FocusRequester() } }
@@ -252,8 +269,8 @@ private fun FeedPosterRow(
     fun verticalKeys(): Modifier = Modifier.onPreviewKeyEvent { event ->
         if (!isInteractive || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         when (event.key) {
-            Key.DirectionUp -> onVerticalExit?.invoke(true) ?: false
-            Key.DirectionDown -> onVerticalExit?.invoke(false) ?: false
+            Key.DirectionUp -> shouldBlockVerticalMove?.invoke(true) ?: false
+            Key.DirectionDown -> shouldBlockVerticalMove?.invoke(false) ?: false
             else -> false
         }
     }
@@ -294,8 +311,7 @@ private fun FeedPosterRow(
                     onClick = { onMediaClick(item) },
                     onFocused = {
                         HomeFocusStore.setRowIndex(rowKey, index)
-                        focusedItem.value = item
-                        isShowAllFocused.value = false
+                        onFocusDescriptionChange(item, false)
                         onItemFocused?.invoke(item)
                     },
                     modifier = Modifier
@@ -314,8 +330,7 @@ private fun FeedPosterRow(
                     onClick = onShowAllClick,
                     onFocused = {
                         HomeFocusStore.setRowIndex(rowKey, showAllIndex)
-                        focusedItem.value = null
-                        isShowAllFocused.value = true
+                        onFocusDescriptionChange(null, true)
                         onShowAllFocused?.invoke()
                     },
                     modifier = Modifier
@@ -357,6 +372,16 @@ private fun Modifier.horizontalClip(): Modifier = this.drawWithContent {
     }
 }
 
+/** Feed title + source: one text, two colours (set once per feed; the focus never touches it). */
+private val FeedRowSourceSpan = TvTextStyles.Meta.toSpanStyle().copy(color = TvColors.Label)
+
+/** Focused poster's "year • type": second colour of the description text. */
+private val FeedRowDescriptionMetaSpan = TvTextStyles.FeedFocusedMeta.toSpanStyle().copy(color = TvColors.Text2)
+
+/**
+ * One box, two fixed-width texts (title + source on the left, the focused poster on the right),
+ * so changing the description never re-measures a sibling or the header itself.
+ */
 @Composable
 private fun FeedRowHeader(
     title: String,
@@ -365,37 +390,77 @@ private fun FeedRowHeader(
     focusedItem: State<MediaItemCompat?>,
     isShowAllFocused: State<Boolean>,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+    val headline = remember(title, sourceName) {
+        buildAnnotatedString {
+            append(title)
+            if (!sourceName.isNullOrBlank()) {
+                append("  ")
+                withStyle(FeedRowSourceSpan) { append(sourceName) }
+            }
+        }
+    }
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(TvDimens.FeedHeaderHeight)
             .padding(start = TvDimens.HomeContentPadding, end = TvDimens.ScreenHorizontalPadding)
     ) {
         Text(
-            text = title,
+            text = headline,
             style = TvTextStyles.Section,
             color = TvColors.Text,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = TvDimens.FeedFocusedTitleMaxWidth),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(end = TvDimens.FeedRowDescriptionWidth)
+                .fillMaxWidth(),
         )
-        if (!sourceName.isNullOrBlank()) {
-            Text(
-                text = sourceName,
-                style = TvTextStyles.Meta,
-                color = TvColors.Label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(start = TvDimens.FeedHeaderTitleGap)
-                    .widthIn(max = TvDimens.FeedSourceMaxWidth),
-            )
-        }
-        Spacer(Modifier.weight(1f))
-        // Fixed width, so what the focus shows never moves the title.
-        FeedRowFocusDescription(feedName, focusedItem, isShowAllFocused)
+        FeedRowFocusDescription(
+            feedName = feedName,
+            focusedItem = focusedItem,
+            isShowAllFocused = isShowAllFocused,
+            modifier = Modifier.align(Alignment.CenterEnd),
+        )
     }
+}
+
+/** Own scope: moving focus between posters recomposes only this, not the whole header. */
+@Composable
+private fun FeedRowFocusDescription(
+    feedName: String,
+    focusedItem: State<MediaItemCompat?>,
+    isShowAllFocused: State<Boolean>,
+    modifier: Modifier = Modifier,
+) {
+    val item = focusedItem.value
+    val showAllHint = if (isShowAllFocused.value) {
+        stringResource(R.string.tv_feed_show_all_hint, feedName)
+    } else {
+        null
+    }
+    val meta = if (showAllHint == null && item != null) focusedItemMeta(item) else null
+    val line = remember(showAllHint, item, meta) {
+        buildAnnotatedString {
+            when {
+                showAllHint != null -> append(showAllHint)
+                item != null && meta != null -> {
+                    append(item.name)
+                    append("  ")
+                    withStyle(FeedRowDescriptionMetaSpan) { append(meta) }
+                }
+            }
+        }
+    }
+    Text(
+        text = line,
+        style = TvTextStyles.FeedFocusedTitle,
+        color = TvColors.Text,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.End,
+        modifier = modifier.width(TvDimens.FeedRowDescriptionWidth),
+    )
 }
 
 /** Closes a feed row: same size as a poster, ring + scale focus like the posters. */
@@ -468,14 +533,14 @@ private fun FeedRowPlaceholder() {
     }
 }
 
-/** Empty / failed feed: dashed box that takes focus; Up / Down move to the neighbouring feeds, OK reloads. */
+/** Empty / failed feed: dashed box that takes focus; OK reloads. */
 @Composable
 private fun FeedEmptyBox(
     title: String,
     isInteractive: Boolean,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester?,
-    onVerticalExit: ((up: Boolean) -> Boolean)?,
+    shouldBlockVerticalMove: ((up: Boolean) -> Boolean)?,
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -497,8 +562,8 @@ private fun FeedEmptyBox(
             .onPreviewKeyEvent { event ->
                 if (!isInteractive || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionUp -> onVerticalExit?.invoke(true) ?: false
-                    Key.DirectionDown -> onVerticalExit?.invoke(false) ?: false
+                    Key.DirectionUp -> shouldBlockVerticalMove?.invoke(true) ?: false
+                    Key.DirectionDown -> shouldBlockVerticalMove?.invoke(false) ?: false
                     else -> false
                 }
             }
@@ -536,28 +601,6 @@ private fun FeedEmptyBox(
             color = TvColors.Label,
             maxLines = 1,
         )
-    }
-}
-
-/** Own scope: moving focus between posters recomposes only this, not the whole header. */
-@Composable
-private fun FeedRowFocusDescription(
-    feedName: String,
-    focusedItem: State<MediaItemCompat?>,
-    isShowAllFocused: State<Boolean>,
-) {
-    Box(Modifier.width(TvDimens.FeedRowDescriptionWidth), contentAlignment = Alignment.CenterEnd) {
-        if (isShowAllFocused.value) {
-            Text(
-                text = stringResource(R.string.tv_feed_show_all_hint, feedName),
-                style = TvTextStyles.FeedFocusedTitle,
-                color = TvColors.Text,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        } else {
-            TvFocusedItemTitle(focusedItem)
-        }
     }
 }
 

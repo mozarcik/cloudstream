@@ -98,7 +98,7 @@ internal fun shouldRestoreDashboardFocusAfterReturn(
 }
 
 /** Parts of the Dashboard a screen can act on. */
-data class DashboardBodyContext(
+internal data class DashboardBodyContext(
     val homeRestoreFocusToken: Int,
     val homeFeedGridRestoreFocusToken: Int,
     val libraryFeedGridRestoreFocusToken: Int,
@@ -106,9 +106,13 @@ data class DashboardBodyContext(
     val accountRefreshToken: Int,
     /** Settings left to Home: switch there and put focus into Home. */
     val goHomeAndEnterContent: () -> Unit,
+    /** Shared with the menu: the Library screen lists and pins through it. */
+    val libraryMenu: TvLibraryMenuViewModel,
+    /** A list opened from the Library screen (not from a pinned menu row). */
+    val openLibraryListGrid: (providerName: String, listKey: String) -> Unit,
 )
 
-typealias DashboardBodyContent = @Composable (
+internal typealias DashboardBodyContent = @Composable (
     navController: NavHostController,
     modifier: Modifier,
     context: DashboardBodyContext,
@@ -129,7 +133,7 @@ fun NavHostController.navigateToDashboardTab(screen: Screens) {
 }
 
 @Composable
-fun DashboardScaffold(
+internal fun DashboardScaffold(
     isComingBackFromDifferentScreen: Boolean,
     resetIsComingBackFromDifferentScreen: () -> Unit,
     searchPrefillQuery: String?,
@@ -164,23 +168,7 @@ fun DashboardScaffold(
     val fallbackFocusRequester = remember { FocusRequester() }
 
     val libraryMenu: TvLibraryMenuViewModel = viewModel()
-    val libraryProviders by libraryMenu.providers.collectAsState()
-    val listGroups = remember(libraryProviders) {
-        libraryProviders.map { provider ->
-            TvNavListGroup(
-                providerName = provider.providerName,
-                lists = provider.sections.map { section ->
-                    TvNavList(
-                        key = libraryMenuListKey(provider.providerName, section.id),
-                        title = section.title,
-                        count = section.gridItems.size,
-                    )
-                },
-                isLoading = provider.isLoading,
-                hasError = provider.hasError,
-            )
-        }
-    }
+    val listGroups by libraryMenu.menuGroups.collectAsState()
     var openedListKey by remember { mutableStateOf<String?>(null) }
     val selection by remember {
         derivedStateOf { navSelectionForRoute(currentDestination, openedListKey) }
@@ -225,6 +213,10 @@ fun DashboardScaffold(
 
             previousDestination == Screens.HomeFeedGrid.name &&
                 currentDestination == Screens.Home.name -> homeRestoreFocusToken += 1
+
+            // Back from a list opened on the Library screen: focus returns to the row it was opened from.
+            previousDestination == Screens.LibraryFeedGrid.name &&
+                currentDestination == Screens.Library.name -> enterContentToken += 1
         }
         if (currentDestination != null) {
             previousDestination = currentDestination
@@ -348,6 +340,14 @@ fun DashboardScaffold(
         enterContentToken += 1
     }
 
+    fun openLibraryListGrid(providerName: String, listKey: String) {
+        val section = libraryMenu.section(listKey) ?: return
+        LibraryFeedGridSelectionStore.setAccountName(providerName)
+        LibraryFeedGridSelectionStore.setSelectedSection(section)
+        openedListKey = null
+        navController.navigate(Screens.LibraryFeedGrid())
+    }
+
     fun navigateFromMenu(target: TvNavTarget) {
         // OK on the section that is already active: just hand focus back to the remembered card.
         if (selection == TvNavSelection.Screen(target) && currentDestination == target.screen.name) {
@@ -379,6 +379,7 @@ fun DashboardScaffold(
         val isOnTopLevelScreen = route == Screens.Home.name ||
             route == Screens.Search.name ||
             route == Screens.Downloads.name ||
+            route == Screens.Library.name ||
             route == Screens.Settings.name
         val contentHandledBack = !isMenuOpen && isOnTopLevelScreen &&
             contentEntry.backHandler?.invoke() == true
@@ -460,6 +461,8 @@ fun DashboardScaffold(
                             navController.navigateToDashboardTab(Screens.Home)
                             enterContentToken += 1
                         },
+                        libraryMenu = libraryMenu,
+                        openLibraryListGrid = ::openLibraryListGrid,
                     )
                 )
             }
@@ -473,7 +476,11 @@ fun DashboardScaffold(
 
         // The collapsed menu is the rail itself, focusable: the passive rail is only drawn while it is closed.
         // Settings use the full width (panels start at x = 0): the menu is drawn over them only when opened.
-        if (!isMenuOpen && currentDestination != Screens.Settings.name) TvNavRail(selection = selection, accountRefreshToken = accountRefreshToken)
+        if (!isMenuOpen && currentDestination != Screens.Settings.name) TvNavRail(
+            selection = selection,
+            accountRefreshToken = accountRefreshToken,
+            hasPinnedLists = listGroups.isNotEmpty(),
+        )
         TvNavDrawer(
             open = isMenuOpen,
             expanded = isMenuExpanded,

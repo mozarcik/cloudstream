@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.res.stringResource
@@ -36,9 +37,7 @@ internal fun LazyListScope.homeFeedSections(
     onShowAllFocused: ((FeedCategory) -> Unit)? = null,
     onRestoreFocusConsumed: ((String) -> Unit)? = null,
     onSectionFocusChanged: ((feedId: String, hasFocus: Boolean) -> Unit)? = null,
-    onVerticalExit: ((feedIndex: Int, up: Boolean) -> Boolean)? = null,
-    /** Focus target of a feed row (the first element, or its empty / error box), for feeds below the first. */
-    feedFocusRequester: (feedId: String) -> FocusRequester,
+    shouldBlockVerticalMove: ((feedIndex: Int, up: Boolean) -> Boolean)? = null,
 ) {
     if (feedsUiState.feedSections.isEmpty() && feedsUiState.isFeedListLoading) {
         items(count = 2) {
@@ -60,13 +59,14 @@ internal fun LazyListScope.homeFeedSections(
             items = feedsUiState.feedSections,
             key = { _, section -> section.feed.id }
         ) { index, section ->
+            val rowRequester = remember { FocusRequester() }
             FeedRow(
                 title = section.feed.name,
                 sourceName = sourceName,
                 state = section.state,
                 rowKey = "$sourceId|${section.feed.id}",
                 feedId = section.feed.id,
-                rowFocusRequester = if (index == 0) firstFeedRowFocusRequester else feedFocusRequester(section.feed.id),
+                rowFocusRequester = if (index == 0) firstFeedRowFocusRequester else rowRequester,
                 onMediaClick = onMediaClick,
                 onShowAllClick = { onOpenFeedGrid(section.feed) },
                 onRefreshClick = { onRefreshFeed(section.feed) },
@@ -78,7 +78,7 @@ internal fun LazyListScope.homeFeedSections(
                 onShowAllFocused = { onShowAllFocused?.invoke(section.feed) },
                 onRestoreFocusConsumed = onRestoreFocusConsumed,
                 onSectionFocusChanged = { hasFocus -> onSectionFocusChanged?.invoke(section.feed.id, hasFocus) },
-                onVerticalExit = onVerticalExit?.let { exit -> { up -> exit(index, up) } },
+                shouldBlockVerticalMove = shouldBlockVerticalMove?.let { block -> { up -> block(index, up) } },
             )
         }
     }

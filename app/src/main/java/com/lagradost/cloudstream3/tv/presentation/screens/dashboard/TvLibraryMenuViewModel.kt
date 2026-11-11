@@ -6,11 +6,18 @@ import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.MainActivity
 import com.lagradost.cloudstream3.syncproviders.AccountManager
 import com.lagradost.cloudstream3.syncproviders.SyncRepo
+import com.lagradost.cloudstream3.tv.compat.home.PinnedLibraryLists
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryListGroup
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryListRow
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryListsUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibrarySectionUiState
 import com.lagradost.cloudstream3.tv.presentation.screens.library.toSectionUiStates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -25,10 +32,14 @@ internal data class ProviderLists(
     val hasError: Boolean = false,
 )
 
-internal fun libraryMenuListKey(providerName: String, sectionId: String) = "$providerName/$sectionId"
+/** Stable across reloads (a section id carries its position), so a pinned list stays pinned. */
+internal fun libraryMenuListKey(providerName: String, title: String) = "$providerName/$title"
+
+private const val PreviewItemCount = 6
 
 /**
- * Lists of every signed-in library account at once, for the navigation menu. Loaded in the
+ * Lists of every signed-in library account at once, for the Library screen and (the pinned ones)
+ * the navigation menu. Loaded in the
  * background when the Dashboard starts (accounts in parallel) and again on library / account
  * reloads; moving around the menu never triggers a load.
  */
@@ -36,10 +47,54 @@ internal class TvLibraryMenuViewModel : ViewModel() {
     private val _providers = MutableStateFlow<List<ProviderLists>>(emptyList())
     val providers: StateFlow<List<ProviderLists>> = _providers.asStateFlow()
 
+    private val pinnedKeys = MutableStateFlow(PinnedLibraryLists.read())
+
+    /** The menu shows only pinned lists; a provider without one has no group. */
+    val menuGroups: StateFlow<List<TvNavListGroup>> = combine(_providers, pinnedKeys) { providers, pinned ->
+        providers.mapNotNull { provider ->
+            val lists = provider.sections
+                .map { libraryMenuListKey(provider.providerName, it.title) to it }
+                .filter { (key, _) -> key in pinned }
+                .map { (key, section) -> TvNavList(key, section.title, section.gridItems.size) }
+            if (lists.isEmpty()) null
+            else TvNavListGroup(provider.providerName, lists, provider.isLoading, provider.hasError)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val listsUiState: StateFlow<LibraryListsUiState> = combine(_providers, pinnedKeys) { providers, pinned ->
+        val groups = providers.map { provider ->
+            LibraryListGroup(
+                providerName = provider.providerName,
+                rows = provider.sections.map { section ->
+                    val key = libraryMenuListKey(provider.providerName, section.title)
+                    LibraryListRow(
+                        key = key,
+                        title = section.title,
+                        count = section.gridItems.size,
+                        pinned = key in pinned,
+                        previewItems = section.previewItems.take(PreviewItemCount),
+                    )
+                },
+            )
+        }.filter { it.rows.isNotEmpty() }
+        LibraryListsUiState(
+            groups = groups,
+            listCount = groups.sumOf { it.rows.size },
+            pinnedCount = groups.sumOf { group -> group.rows.count { it.pinned } },
+            isLoading = providers.any { it.isLoading },
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryListsUiState())
+
+    /** Last focused row of the Library screen, so coming back from a list lands on it. */
+    var lastFocusedListKey: String? = null
+
     private var loadJob: Job? = null
 
     private val reloadObserver: (Boolean) -> Unit = { force -> load(force) }
-    private val accountObserver: (Boolean) -> Unit = { load(force = true) }
+    private val accountObserver: (Boolean) -> Unit = {
+        pinnedKeys.value = PinnedLibraryLists.read()
+        load(force = true)
+    }
 
     init {
         MainActivity.reloadLibraryEvent += reloadObserver
@@ -49,8 +104,17 @@ internal class TvLibraryMenuViewModel : ViewModel() {
 
     fun section(listKey: String): LibrarySectionUiState? {
         return _providers.value.firstNotNullOfOrNull { provider ->
-            provider.sections.firstOrNull { libraryMenuListKey(provider.providerName, it.id) == listKey }
+            provider.sections.firstOrNull { libraryMenuListKey(provider.providerName, it.title) == listKey }
         }
+    }
+
+    /** Pins / unpins a list; returns true when it is pinned afterwards. */
+    fun togglePin(listKey: String): Boolean {
+        val pinned = listKey !in pinnedKeys.value
+        val updated = if (pinned) pinnedKeys.value + listKey else pinnedKeys.value - listKey
+        pinnedKeys.value = updated
+        PinnedLibraryLists.write(updated)
+        return pinned
     }
 
     private fun load(force: Boolean) {

@@ -1003,4 +1003,33 @@
     <string name="tv_feed_empty_title">Brak pozycji w tym feedzie</string>
     <string name="tv_feed_empty_hint">↓ przejdź do kolejnego feedu  •  OK — odśwież</string>
     <string name="tv_feed_error_title">Nie udało się wczytać feedu</string>
+    <plurals name="tv_library_lists_count">
+        <item quantity="one">%d lista</item>
+        <item quantity="few">%d listy</item>
+        <item quantity="many">%d list</item>
+        <item quantity="other">%d listy</item>
+    </plurals>
+    <plurals name="tv_library_items_count">
+        <item quantity="one">%d pozycja</item>
+        <item quantity="few">%d pozycje</item>
+        <item quantity="many">%d pozycji</item>
+        <item quantity="other">%d pozycji</item>
+    </plurals>
+    <string name="tv_library_title">Wszystkie listy</string>
+    <string name="tv_library_summary">%1$s · %2$d w menu</string>
+    <string name="tv_library_in_menu_column">W menu</string>
+    <string name="tv_library_state_pinned">w menu</string>
+    <string name="tv_library_state_unpinned">nie w menu</string>
+    <string name="tv_library_preview_meta">%1$s · %2$s</string>
+    <string name="tv_library_hint_row_pinned">OK otwiera listę · → odepnij z menu</string>
+    <string name="tv_library_hint_row_unpinned">OK otwiera listę · → przypnij do menu</string>
+    <string name="tv_library_hint_row_empty_pinned">→ odepnij z menu</string>
+    <string name="tv_library_hint_row_empty_unpinned">→ przypnij do menu</string>
+    <string name="tv_library_hint_pin_pinned">OK odpina z menu · ← wróć do listy</string>
+    <string name="tv_library_hint_pin_unpinned">OK przypina do menu · ← wróć do listy</string>
+    <string name="tv_library_pinned_toast">Przypięto do menu: %1$s</string>
+    <string name="tv_library_unpinned_toast">Odpięto z menu: %1$s</string>
+    <string name="tv_library_empty_list_title">Ta lista jest pusta</string>
+    <string name="tv_library_empty_list_message">Dodaj tytuły ze szczegółów filmu lub serialu.</string>
+    <string name="tv_library_no_lists_message">Zaloguj się do konta biblioteki, aby zobaczyć jego listy.</string>
 </resources>

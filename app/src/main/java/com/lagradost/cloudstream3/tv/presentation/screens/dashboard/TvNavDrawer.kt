@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Home
@@ -189,7 +190,7 @@ private fun DrawerContent(
 
     val selectedRowKey = when (selection) {
         is TvNavSelection.Screen -> targetKey(selection.target)
-        is TvNavSelection.Library -> selection.listKey?.let(::listKey) ?: targetKey(TvNavTarget.Home)
+        is TvNavSelection.Library -> listKey(selection.listKey)
         TvNavSelection.None -> targetKey(TvNavTarget.Home)
     }
     val selectedKeyState by rememberUpdatedState(selectedRowKey)
@@ -260,16 +261,26 @@ private fun DrawerContent(
                     ScreenRow(Icons.Outlined.Home, R.string.title_home, TvNavTarget.Home, selection, requesterFor(targetKey(TvNavTarget.Home)), onNavigate)
                     ScreenRow(Icons.Outlined.Search, R.string.search, TvNavTarget.Search, selection, requesterFor(targetKey(TvNavTarget.Search)), onNavigate)
                     ScreenRow(Icons.Outlined.FileDownload, R.string.title_downloads, TvNavTarget.Downloads, selection, requesterFor(targetKey(TvNavTarget.Downloads)), onNavigate)
+                    ScreenRow(
+                        Icons.AutoMirrored.Outlined.FormatListBulleted, R.string.library, TvNavTarget.Library, selection,
+                        requesterFor(targetKey(TvNavTarget.Library)), onNavigate,
+                        // The lazy list does not hand focus on to the pinned Settings row by itself.
+                        extraModifier = if (listItems.isEmpty()) {
+                            Modifier.focusProperties { down = requesterFor(targetKey(TvNavTarget.Settings)) }
+                        } else {
+                            Modifier
+                        },
+                    )
                 }
             }
-            item(key = "separator") { Separator(Modifier.padding(vertical = 6.dp)) }
+            // Nothing is pinned at first: the menu is just the screens and Settings.
+            if (listItems.isNotEmpty()) item(key = "separator") { Separator(Modifier.padding(vertical = 6.dp)) }
             items(listItems, key = { it.key }) { item ->
                 when (item) {
                     is MenuListItem.Header -> GroupHeader(item.title)
-                    is MenuListItem.Empty -> EmptyListsRow(item.text)
                     is MenuListItem.Row -> ListRow(
                         list = item.list,
-                        selected = selection is TvNavSelection.Library && selection.listKey == item.list.key,
+                        selected = (selection as? TvNavSelection.Library)?.listKey == item.list.key,
                         onClick = { onOpenList(item.providerName, item.list.key) },
                         modifier = Modifier
                             .focusRequester(requesterFor(listKey(item.list.key)))
@@ -300,23 +311,16 @@ private fun DrawerContent(
 
 private sealed class MenuListItem(val key: String) {
     class Header(val title: String) : MenuListItem("h:$title")
-    class Empty(val providerName: String, val text: String) : MenuListItem("e:$providerName")
     class Row(val providerName: String, val list: TvNavList) : MenuListItem("l:$providerName:${list.key}")
 }
 
 @Composable
 private fun buildListItems(groups: List<TvNavListGroup>): List<MenuListItem> {
-    val noLists = stringResource(R.string.tv_menu_no_lists)
-    val loading = stringResource(R.string.loading)
-    return remember(groups, noLists, loading) {
+    return remember(groups) {
         buildList {
             groups.forEach { group ->
                 add(MenuListItem.Header(group.providerName))
-                when {
-                    group.lists.isNotEmpty() -> group.lists.forEach { add(MenuListItem.Row(group.providerName, it)) }
-                    group.isLoading -> add(MenuListItem.Empty(group.providerName, loading))
-                    else -> add(MenuListItem.Empty(group.providerName, noLists))
-                }
+                group.lists.forEach { add(MenuListItem.Row(group.providerName, it)) }
             }
         }
     }
@@ -351,17 +355,6 @@ private fun GroupHeader(title: String) {
             top = TvDimens.PanelGroupHeaderTop,
             bottom = TvDimens.PanelGroupHeaderBottom,
         ),
-    )
-}
-
-@Composable
-private fun EmptyListsRow(text: String) {
-    val expansion = LocalNavExpansion.current
-    Text(
-        text = text,
-        style = TvTextStyles.Row,
-        color = TvColors.Label,
-        modifier = Modifier.graphicsLayer { alpha = expansion() }.padding(start = 14.dp, top = 6.dp, bottom = 6.dp),
     )
 }
 

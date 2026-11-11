@@ -2,14 +2,15 @@ package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.MainAPI
@@ -59,18 +63,19 @@ import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardContentTopInset
-import com.lagradost.cloudstream3.tv.presentation.utils.bringIntoViewIfChildrenAreFocused
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 /** Gap between the top bar and the first row when there is no hero. */
 private val TopBarToContentSpacing = TvDimens.TopBarToContentGap
 /** Lets the last feed scroll to the top edge (screen 540 dp - feed item 476 dp). */
 private val FeedPinBottomPadding = TvDimens.FeedPinBottomPadding
 private val SourceChipSkeletonWidths = listOf(TvDimens.SkeletonChipWidthA, TvDimens.SkeletonChipWidthB, TvDimens.SkeletonChipWidthC)
+/** List index 0 is the spacer under the top section (hero + source chips), i.e. the top of Home. */
 private const val HomeContinueWatchingListIndex = 0
+/** Feed rows follow the top-section spacer. */
+private const val FeedSectionsStartIndex = 1
 private const val HomeFocusDebugTag = "TvHomeFocus"
 
 /**
@@ -111,6 +116,7 @@ fun HomeScreenV2Content(
     val firstFeedCardFocusRequester = remember { FocusRequester() }
     val listState = rememberLazyListState(prefetchStrategy = remember { NeighbourRowsPrefetchStrategy() })
     val coroutineScope = rememberCoroutineScope()
+    var topSectionHeightPx by remember { mutableIntStateOf(0) }
 
     var hasInitialFocusBeenRequested by rememberSaveable { mutableStateOf(false) }
     var moreButtonFocusRequestToken by remember { mutableIntStateOf(0) }
@@ -121,6 +127,9 @@ fun HomeScreenV2Content(
     var feedNavTargetId by remember { mutableStateOf<String?>(null) }
     var feedNavToken by remember { mutableIntStateOf(0) }
     var feedPinJob by remember { mutableStateOf<Job?>(null) }
+    var feedNavJob by remember { mutableStateOf<Job?>(null) }
+    // True only while a feed-change slide runs; a pin during that would cancel and restart it.
+    var isFeedSliding by remember { mutableStateOf(false) }
     var wasMorePanelOpen by rememberSaveable { mutableStateOf(false) }
     var morePanelCloseTarget by rememberSaveable { mutableStateOf(MorePanelCloseTarget.MoreButton) }
 
@@ -156,20 +165,16 @@ fun HomeScreenV2Content(
         hasContinueWatchingItems -> continueWatchingCardsFocusRequester
         else -> FocusRequester.Cancel
     }
-    val feedSectionsStartIndex = remember(showQuickSourcesRow) {
-        homeFeedSectionsStartIndex(showQuickSourcesRow = showQuickSourcesRow)
-    }
     val homeFeedRestoreListIndex = remember(
         armedRestoreTargetId,
-        feedsUiState.feedSections,
-        feedSectionsStartIndex
+        feedsUiState.feedSections
     ) {
         val feedId = HomeFocusStore.feedIdFromTarget(armedRestoreTargetId) ?: return@remember null
         val sectionIndex = feedsUiState.feedSections.indexOfFirst { section ->
             section.feed.id == feedId
         }.takeIf { it >= 0 } ?: return@remember null
 
-        feedSectionsStartIndex + sectionIndex
+        FeedSectionsStartIndex + sectionIndex
     }
 
     fun restoreContinueWatchingToTop() {
@@ -286,55 +291,46 @@ fun HomeScreenV2Content(
     fun pinFeedToTop(feedId: String) {
         val sectionIndex = feedsUiState.feedSections.indexOfFirst { it.feed.id == feedId }
         if (sectionIndex < 0) return
-        val itemIndex = feedSectionsStartIndex + sectionIndex
+        val itemIndex = FeedSectionsStartIndex + sectionIndex
+        if (isFeedSliding) return
         feedPinJob?.cancel()
         feedPinJob = coroutineScope.launch {
-            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == itemIndex }
-                ?: return@launch
-            val delta = (item.offset - listState.layoutInfo.viewportStartOffset).toFloat()
-            if (abs(delta) > 1f) {
-                listState.animateScrollBy(delta, tween(durationMillis = TvDimens.MaxAnimationMs))
-            }
+            listState.slideToItem(itemIndex)
         }
     }
 
-    // Up/Down out of a mini-grid. Neighbouring feeds may not be composed (the list is pinned), so
-    // the list is scrolled first and the focus is restored to the same column.
-    val feedRequesters = remember { HashMap<String, FocusRequester>() }
-    fun feedRequester(feedId: String) = feedRequesters.getOrPut(feedId) { FocusRequester() }
-
-    fun navigateFromFeed(feedIndex: Int, up: Boolean): Boolean {
-        val sections = feedsUiState.feedSections
-        val targetIndex = if (up) feedIndex - 1 else feedIndex + 1
-        val target = sections.getOrNull(targetIndex)
-        if (target == null) {
-            if (!up || feedIndex != 0) return false
-            val scrollIndex = when {
-                hasQuickSourceTargets -> HomeContinueWatchingListIndex + 1
-                hasContinueWatchingItems -> HomeContinueWatchingListIndex
-                else -> return false
+    // Used only for Down from the source chips: the first feed may not be composed yet, so slide the
+    // list to it while the focus request waits.
+    fun focusFeedRow(listIndex: Int, requester: FocusRequester) {
+        feedNavJob?.cancel()
+        feedPinJob?.cancel()
+        val isComposed = listState.layoutInfo.visibleItemsInfo.any { it.index == listIndex }
+        feedNavJob = coroutineScope.launch {
+            if (!isComposed) {
+                launch {
+                    isFeedSliding = true
+                    try {
+                        listState.slideToItem(listIndex)
+                    } finally {
+                        isFeedSliding = false
+                    }
+                }
             }
-            coroutineScope.launch {
-                listState.animateScrollToItem(scrollIndex)
-                firstFeedUpFocusRequester.requestFocusWithRetry(attempts = 18)
-            }
-            return true
-        }
-        // A feed that is still loading has nothing to focus: stay in the row instead of jumping past it.
-        if (target.state is HomeFeedLoadState.Loading) return true
-        // The row enters at the position it was left at.
-        val requester = if (targetIndex == 0) firstFeedCardFocusRequester else feedRequester(target.feed.id)
-        coroutineScope.launch {
-            listState.slideToItem(feedSectionsStartIndex + targetIndex)
             requester.requestFocusWithRetry(attempts = 18)
         }
-        return true
+    }
+
+    // Up/Down between feeds is the default focus search. The only exception: a neighbour that is still
+    // loading has nothing focusable, so the key is consumed instead of jumping past it.
+    fun shouldBlockVerticalMove(feedIndex: Int, up: Boolean): Boolean {
+        val neighbour = feedsUiState.feedSections.getOrNull(if (up) feedIndex - 1 else feedIndex + 1)
+        return neighbour?.state is HomeFeedLoadState.Loading
     }
 
     // The feed rows are not recomposed when the feeds finish loading, so they must call the latest version
     // (an old one would still see every feed as loading).
     // (A lambda, not a function reference: references compare equal and the state would never update.)
-    val latestNavigateFromFeed by rememberUpdatedState { feedIndex: Int, up: Boolean -> navigateFromFeed(feedIndex, up) }
+    val latestShouldBlockVerticalMove by rememberUpdatedState { feedIndex: Int, up: Boolean -> shouldBlockVerticalMove(feedIndex, up) }
 
     // Entering Home from the menu: Resume while the hero is on screen, otherwise back to where the
     // focus was (feed item / Source), otherwise the first visible section.
@@ -351,8 +347,8 @@ fun HomeScreenV2Content(
         }
         val (index, requester) = when {
             hasContinueWatchingItems -> HomeContinueWatchingListIndex to resumeFocusRequester
-            hasQuickSourceTargets -> (HomeContinueWatchingListIndex + 1) to quickSourcesEntryFocusRequester
-            feedsUiState.feedSections.isNotEmpty() -> feedSectionsStartIndex to firstFeedCardFocusRequester
+            hasQuickSourceTargets -> HomeContinueWatchingListIndex to quickSourcesEntryFocusRequester
+            feedsUiState.feedSections.isNotEmpty() -> FeedSectionsStartIndex to firstFeedCardFocusRequester
             else -> return false
         }
         coroutineScope.launch {
@@ -365,7 +361,7 @@ fun HomeScreenV2Content(
     // Re-registered whenever what it reads changes (a stale closure would see the loading state).
     DisposableEffect(
         contentEntry, hasContinueWatchingItems, hasQuickSourceTargets,
-        feedsUiState.feedSections, feedSectionsStartIndex,
+        feedsUiState.feedSections,
     ) {
         val handler: () -> Boolean = { enterContent() }
         contentEntry.handler = handler
@@ -377,7 +373,7 @@ fun HomeScreenV2Content(
         val feedId = HomeFocusStore.feedIdFromTarget(feedNavTargetId) ?: return@LaunchedEffect
         val sectionIndex = feedsUiState.feedSections.indexOfFirst { it.feed.id == feedId }
         if (sectionIndex < 0) return@LaunchedEffect
-        listState.slideToItem(feedSectionsStartIndex + sectionIndex)
+        listState.slideToItem(FeedSectionsStartIndex + sectionIndex)
         feedSectionsRestoreFocusToken += 1
     }
 
@@ -413,65 +409,62 @@ fun HomeScreenV2Content(
         Box(
             modifier = modifier.fillMaxSize()
         ) {
-            CompositionLocalProvider(LocalBringIntoViewSpec provides HomeBringIntoViewSpec) {
-            LazyColumn(
-                state = listState,
-                // No top padding: the first item is the hero (bleeds under the transparent top bar)
-                // or a spacer, so a pinned feed sits exactly at the top edge.
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = if (isMorePanelVisible) 0.dp else TvDimens.ScrollbarGutter)
-            ) {
-                if (isNoSources) {
-                    item {
-                        TvEmptyState(
-                            illustration = R.drawable.tv_empty_no_sources,
-                            title = stringResource(R.string.tv_home_no_sources_found),
-                            message = stringResource(R.string.tv_home_no_sources_message),
-                            modifier = Modifier.fillParentMaxSize(),
+            if (!isNoSources) {
+                // Hero and source chips live outside the list (always composed, no pinning needed) and
+                // follow its scroll through the placement-phase offset below.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = if (isMorePanelVisible) 0.dp else TvDimens.ScrollbarGutter)
+                        // Measured before the offset, so it is the content height.
+                        .onSizeChanged { topSectionHeightPx = it.height }
+                        .offset {
+                            // Read the scroll offset only while the spacer item is the first visible one, so scrolling
+                            // deeper in the list does not re-place the top section on every frame.
+                            val y = if (listState.firstVisibleItemIndex == 0) {
+                                listState.firstVisibleItemScrollOffset
+                            } else {
+                                topSectionHeightPx
+                            }
+                            IntOffset(0, -y)
+                        }
+                ) {
+                    if (!showContinueWatchingHero) {
+                        Spacer(Modifier.height(DashboardContentTopInset + TopBarToContentSpacing))
+                    }
+
+                    if (showContinueWatchingHero) {
+                        ContinueWatchingHeroSection(
+                            state = continueWatchingUiState.state,
+                            resumeFocusRequester = resumeFocusRequester,
+                            cardsFocusRequester = continueWatchingCardsFocusRequester,
+                            upFocusRequester = FocusRequester.Cancel,
+                            sourceButtonFocusRequester = continueWatchingDownFocusRequester,
+                            isInteractive = !isMorePanelVisible,
+                            pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
+                            restoreFocusToken = continueWatchingRestoreFocusToken,
+                            onResumeClick = { item ->
+                                HomeFocusStore.scheduleRestoreToLastFocused()
+                                onContinueWatchingPlay(item)
+                            },
+                            onDetailsClick = { item ->
+                                HomeFocusStore.scheduleRestoreToLastFocused()
+                                onMediaClick(item)
+                            },
+                            onRemoveClick = onRemoveContinueWatching,
+                            onCardClick = { item ->
+                                HomeFocusStore.scheduleRestoreToLastFocused()
+                                onMediaClick(item)
+                            },
+                            onHeroContentFocused = {
+                                restoreContinueWatchingToTop()
+                            },
+                            onFocusTargetFocused = HomeFocusStore::onTargetFocused,
+                            onRestoreFocusConsumed = ::consumeArmedRestore,
                         )
                     }
-                    return@LazyColumn
-                }
 
-                if (!showContinueWatchingHero) {
-                    item { Spacer(Modifier.height(DashboardContentTopInset + TopBarToContentSpacing)) }
-                }
-
-                if (showContinueWatchingHero) item {
-                    ContinueWatchingHeroSection(
-                        state = continueWatchingUiState.state,
-                        resumeFocusRequester = resumeFocusRequester,
-                        cardsFocusRequester = continueWatchingCardsFocusRequester,
-                        upFocusRequester = FocusRequester.Cancel,
-                        sourceButtonFocusRequester = continueWatchingDownFocusRequester,
-                        isInteractive = !isMorePanelVisible,
-                        pendingRestoreFocusTargetId = continueWatchingRestoreTargetId,
-                        restoreFocusToken = continueWatchingRestoreFocusToken,
-                        modifier = Modifier.bringIntoViewIfChildrenAreFocused(),
-                        onResumeClick = { item ->
-                            HomeFocusStore.scheduleRestoreToLastFocused()
-                            onContinueWatchingPlay(item)
-                        },
-                        onDetailsClick = { item ->
-                            HomeFocusStore.scheduleRestoreToLastFocused()
-                            onMediaClick(item)
-                        },
-                        onRemoveClick = onRemoveContinueWatching,
-                        onCardClick = { item ->
-                            HomeFocusStore.scheduleRestoreToLastFocused()
-                            onMediaClick(item)
-                        },
-                        onHeroContentFocused = {
-                            restoreContinueWatchingToTop()
-                        },
-                        onFocusTargetFocused = HomeFocusStore::onTargetFocused,
-                        onRestoreFocusConsumed = ::consumeArmedRestore,
-                    )
-                }
-
-                if (!sourcesUiState.isBootstrapped) {
-                    item {
+                    if (!sourcesUiState.isBootstrapped) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(TvDimens.SourceChipGap),
@@ -487,14 +480,12 @@ fun HomeScreenV2Content(
                             }
                         }
                     }
-                }
 
-                if (showQuickSourcesRow) {
-                    item {
+                    if (showQuickSourcesRow) {
                         Box(
                             modifier = Modifier
                                 .padding(start = HomeContentHorizontalPadding)
-                                // The first feed is below the hero page and not composed yet: scroll to it first.
+                                // The first feed is below the hero page and may not be composed yet.
                                 .onPreviewKeyEvent { event ->
                                     if (
                                         event.type == KeyEventType.KeyDown &&
@@ -502,10 +493,7 @@ fun HomeScreenV2Content(
                                         !isMorePanelVisible &&
                                         feedsUiState.feedSections.isNotEmpty()
                                     ) {
-                                        coroutineScope.launch {
-                                            listState.slideToItem(feedSectionsStartIndex)
-                                            firstFeedCardFocusRequester.requestFocusWithRetry(attempts = 18)
-                                        }
+                                        focusFeedRow(FeedSectionsStartIndex, firstFeedCardFocusRequester)
                                         true
                                     } else {
                                         false
@@ -547,6 +535,32 @@ fun HomeScreenV2Content(
                         }
                     }
                 }
+            }
+
+            CompositionLocalProvider(LocalBringIntoViewSpec provides HomeBringIntoViewSpec) {
+            LazyColumn(
+                state = listState,
+                // No top padding: the first item is a spacer the height of the top section (the hero bleeds
+                // under the transparent top bar), so a pinned feed sits exactly at the top edge.
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = if (isMorePanelVisible) 0.dp else TvDimens.ScrollbarGutter)
+            ) {
+                if (isNoSources) {
+                    item {
+                        TvEmptyState(
+                            illustration = R.drawable.tv_empty_no_sources,
+                            title = stringResource(R.string.tv_home_no_sources_found),
+                            message = stringResource(R.string.tv_home_no_sources_message),
+                            modifier = Modifier.fillParentMaxSize(),
+                        )
+                    }
+                    return@LazyColumn
+                }
+
+                item(key = "top_section_space") {
+                    Spacer(Modifier.height(with(LocalDensity.current) { topSectionHeightPx.toDp() }))
+                }
 
                 homeFeedSections(
                     feedsUiState = feedsUiState,
@@ -568,8 +582,7 @@ fun HomeScreenV2Content(
                     onSectionFocusChanged = { feedId, hasFocus ->
                         if (hasFocus) pinFeedToTop(feedId)
                     },
-                    onVerticalExit = { feedIndex, up -> latestNavigateFromFeed(feedIndex, up) },
-                    feedFocusRequester = ::feedRequester,
+                    shouldBlockVerticalMove = { feedIndex, up -> latestShouldBlockVerticalMove(feedIndex, up) },
                     onItemFocused = { feed, item ->
                         HomeFocusStore.onTargetFocused(
                             HomeFocusStore.feedPoster(feed.id, item)
@@ -619,12 +632,6 @@ fun HomeScreenV2Content(
 
 private fun LazyListState.isScrolledToTop(): Boolean {
     return firstVisibleItemIndex == 0 && firstVisibleItemScrollOffset == 0
-}
-
-private fun homeFeedSectionsStartIndex(
-    showQuickSourcesRow: Boolean,
-): Int {
-    return HomeContinueWatchingListIndex + 1 + if (showQuickSourcesRow) 1 else 0
 }
 
 private fun FocusRequester.tryRequestFocus(): Boolean = runCatching { requestFocus() }.getOrDefault(false)

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -14,6 +15,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
@@ -28,6 +30,7 @@ import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedGridSelec
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeScreenV2
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
+import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryListsScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlayerStartTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.profile.ProfileScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchFeedGridScreen
@@ -53,7 +56,7 @@ fun rememberChildPadding(direction: LayoutDirection = LocalLayoutDirection.curre
 }
 
 @Composable
-fun DashboardScreen(
+internal fun DashboardScreen(
     openCategoryMovieList: (categoryId: String) -> Unit,
     openMovieDetailsScreen: (movie: MediaItemCompat.Movie) -> Unit,
     openTvSeriesDetailsScreen: (series: MediaItemCompat.TvSeries) -> Unit,
@@ -87,6 +90,8 @@ fun DashboardScreen(
             libraryFeedGridRestoreFocusToken = bodyContext.libraryFeedGridRestoreFocusToken,
             homeContentRefreshToken = bodyContext.homeContentRefreshToken,
             goHomeAndEnterContent = bodyContext.goHomeAndEnterContent,
+            libraryMenu = bodyContext.libraryMenu,
+            openLibraryListGrid = bodyContext.openLibraryListGrid,
             navController = controller,
             modifier = bodyModifier,
         )
@@ -105,6 +110,8 @@ private fun Body(
     libraryFeedGridRestoreFocusToken: Int,
     homeContentRefreshToken: Int,
     goHomeAndEnterContent: () -> Unit,
+    libraryMenu: TvLibraryMenuViewModel,
+    openLibraryListGrid: (providerName: String, listKey: String) -> Unit,
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController()
 ) {
@@ -182,6 +189,16 @@ private fun Body(
                     navController.popBackStack()
                 },
                 restoreFocusToken = homeFeedGridRestoreFocusToken
+            )
+        }
+        dashboardComposable(Screens.Library()) {
+            val state by libraryMenu.listsUiState.collectAsStateWithLifecycle()
+            LibraryListsScreen(
+                state = state,
+                lastFocusedKey = { libraryMenu.lastFocusedListKey },
+                onFocusedKey = { libraryMenu.lastFocusedListKey = it },
+                onOpenList = openLibraryListGrid,
+                onTogglePin = libraryMenu::togglePin,
             )
         }
         dashboardComposable(Screens.LibraryFeedGrid()) {

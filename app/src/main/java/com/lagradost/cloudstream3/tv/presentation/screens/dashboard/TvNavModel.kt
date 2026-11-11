@@ -8,6 +8,7 @@ internal enum class TvNavTarget(val screen: Screens) {
     Home(Screens.Home),
     Search(Screens.Search),
     Downloads(Screens.Downloads),
+    Library(Screens.Library),
     Settings(Screens.Settings),
 }
 
@@ -16,8 +17,8 @@ internal enum class TvNavTarget(val screen: Screens) {
 internal sealed interface TvNavSelection {
     data class Screen(val target: TvNavTarget) : TvNavSelection
 
-    /** A library list is open; [listKey] is null when none is picked yet. */
-    data class Library(val listKey: String?) : TvNavSelection
+    /** A list pinned to the menu is open. */
+    data class Library(val listKey: String) : TvNavSelection
 
     data object None : TvNavSelection
 }
@@ -40,7 +41,10 @@ internal fun navSelectionForRoute(route: String?, openedListKey: String?): TvNav
         Screens.Search.name, Screens.SearchFeedGrid.name -> TvNavSelection.Screen(TvNavTarget.Search)
         Screens.Downloads.name -> TvNavSelection.Screen(TvNavTarget.Downloads)
         Screens.Settings.name -> TvNavSelection.Screen(TvNavTarget.Settings)
-        Screens.Library.name, Screens.LibraryFeedGrid.name -> TvNavSelection.Library(openedListKey)
+        Screens.Library.name -> TvNavSelection.Screen(TvNavTarget.Library)
+        // A list opened from the Library screen (no pinned row to mark) keeps the Library item marked.
+        Screens.LibraryFeedGrid.name -> openedListKey?.let { TvNavSelection.Library(it) }
+            ?: TvNavSelection.Screen(TvNavTarget.Library)
         null -> TvNavSelection.Screen(TvNavTarget.Home)
         else -> TvNavSelection.None
     }

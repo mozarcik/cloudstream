@@ -31,20 +31,7 @@ fun TvFocusedItemTitle(
     horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(TvDimens.FeedFocusedTitleGap),
 ) {
     val item = focusedItem.value ?: return
-    val typeLabel = if (item is MediaItemCompat.TvSeries || item.type?.isEpisodeBased() == true) {
-        stringResource(R.string.tv_series_singular)
-    } else {
-        stringResource(R.string.movies_singular)
-    }
-    val year = when (item) {
-        is MediaItemCompat.Movie -> item.year
-        is MediaItemCompat.TvSeries -> item.year
-        else -> null // MediaItemCompat.Other carries no year
-    }
-    val meta = listOfNotNull(
-        year?.toString(),
-        if (showRating) item.ratingLabelOrNull()?.let { "★ $it" } else typeLabel,
-    ).joinToString(separator = " • ")
+    val meta = focusedItemMeta(item, showRating)
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -68,4 +55,23 @@ fun TvFocusedItemTitle(
             maxLines = 1,
         )
     }
+}
+
+/** "year • type" of a poster (or "year • ★ rating" when [showRating]). */
+@Composable
+fun focusedItemMeta(item: MediaItemCompat, showRating: Boolean = false): String {
+    val typeLabel = if (item is MediaItemCompat.TvSeries || item.type?.isEpisodeBased() == true) {
+        stringResource(R.string.tv_series_singular)
+    } else {
+        stringResource(R.string.movies_singular)
+    }
+    val year = when (item) {
+        is MediaItemCompat.Movie -> item.year
+        is MediaItemCompat.TvSeries -> item.year
+        else -> null // MediaItemCompat.Other carries no year
+    }
+    return listOfNotNull(
+        year?.toString(),
+        if (showRating) item.ratingLabelOrNull()?.let { "★ $it" } else typeLabel,
+    ).joinToString(separator = " • ")
 }
