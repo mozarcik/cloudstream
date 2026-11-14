@@ -764,7 +764,7 @@ object TvTextStyles {
     )
 
     /** Mockup: line-height 1, letter-spacing -0.01em. */
-    val Hero = style(48f, FontWeight.ExtraBold, lineHeight = 48f).copy(
+    val Hero = style(48f, FontWeight.Medium, lineHeight = 48f).copy(
         letterSpacing = (-0.01).em,
         // Without this Compose adds the font's top/bottom padding to the first/last line (+19 px).
         platformStyle = PlatformTextStyle(includeFontPadding = false),
@@ -832,8 +832,8 @@ object TvTextStyles {
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
     )
-    val HeroPlayer = style(26f, FontWeight.ExtraBold)
-    val HeroSeries = style(22f, FontWeight.ExtraBold)
+    val HeroPlayer = style(26f, FontWeight.Medium)
+    val HeroSeries = style(22f, FontWeight.Medium)
     val EpisodeTitle = style(15f, FontWeight.Bold)
     val DownloadTitle = style(14f, FontWeight.Bold)
     val DownloadMeta = style(10.5f, FontWeight.Medium)
@@ -864,7 +864,7 @@ object TvTextStyles {
 
     /** Details hero: eyebrow 22 px/600 uppercase +.06em, title 104 px/800 -.015em, meta 26 px/500. */
     val DetailsEyebrow = style(11f, FontWeight.SemiBold).copy(letterSpacing = 0.06.em)
-    val DetailsTitle = style(42f, FontWeight.ExtraBold, lineHeight = 42f).copy(
+    val DetailsTitle = style(42f, FontWeight.Medium, lineHeight = 42f).copy(
         letterSpacing = (-0.015).em,
         platformStyle = PlatformTextStyle(includeFontPadding = false),
         lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both),
