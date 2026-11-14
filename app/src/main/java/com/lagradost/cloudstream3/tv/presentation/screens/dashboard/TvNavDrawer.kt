@@ -373,14 +373,15 @@ private fun ProfileRow(
             .width(TvDimens.NavMenuRowWidth)
             .height(TvDimens.NavMenuProfileHeight)
             .clip(CircleShape)
-            .drawPill(expansion, collapsedInset = 8.dp, collapsedWidth = TvDimens.NavMenuAvatarSize) {
+            .drawPill(expansion, collapsedInset = 8.dp, collapsedWidth = TvDimens.NavMenuProfileHeight) {
                 if (focused) TvColors.Focus else Color.Transparent
             }
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = null, indication = null, onClick = onClick)
-            .padding(start = 9.dp),
+            // The avatar is smaller than the row, so the focus pill shows around it; the name stays where it was.
+            .padding(start = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(17.dp),
     ) {
         Box(Modifier.size(TvDimens.NavMenuAvatarSize).clip(CircleShape)) {
             AvatarImage(customImageUrl = customImage, fallbackDrawableRes = fallbackDrawable)

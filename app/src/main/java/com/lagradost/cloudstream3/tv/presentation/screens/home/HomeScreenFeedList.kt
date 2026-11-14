@@ -26,16 +26,13 @@ internal fun LazyListScope.homeFeedSections(
     sourceName: String?,
     sourceId: String?,
     isMorePanelOpen: Boolean,
-    firstFeedRowFocusRequester: FocusRequester,
+    feedRowFocusRequester: (feedIndex: Int, feedId: String) -> FocusRequester,
     firstSectionUpFocusRequester: FocusRequester? = null,
     onMediaClick: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
     onRefreshFeed: (FeedCategory) -> Unit,
-    pendingRestoreFocusTargetId: String? = null,
-    restoreFocusToken: Int = 0,
     onItemFocused: ((FeedCategory, MediaItemCompat) -> Unit)? = null,
     onShowAllFocused: ((FeedCategory) -> Unit)? = null,
-    onRestoreFocusConsumed: ((String) -> Unit)? = null,
     onSectionFocusChanged: ((feedId: String, hasFocus: Boolean) -> Unit)? = null,
     shouldBlockVerticalMove: ((feedIndex: Int, up: Boolean) -> Boolean)? = null,
 ) {
@@ -59,24 +56,19 @@ internal fun LazyListScope.homeFeedSections(
             items = feedsUiState.feedSections,
             key = { _, section -> section.feed.id }
         ) { index, section ->
-            val rowRequester = remember { FocusRequester() }
             FeedRow(
                 title = section.feed.name,
                 sourceName = sourceName,
                 state = section.state,
-                rowKey = "$sourceId|${section.feed.id}",
-                feedId = section.feed.id,
-                rowFocusRequester = if (index == 0) firstFeedRowFocusRequester else rowRequester,
+                rowKey = feedRowKey(sourceId, section.feed.id),
+                rowFocusRequester = feedRowFocusRequester(index, section.feed.id),
                 onMediaClick = onMediaClick,
                 onShowAllClick = { onOpenFeedGrid(section.feed) },
                 onRefreshClick = { onRefreshFeed(section.feed) },
                 isInteractive = !isMorePanelOpen,
                 upFocusRequester = if (index == 0) firstSectionUpFocusRequester else null,
-                pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
-                restoreFocusToken = restoreFocusToken,
                 onItemFocused = { item -> onItemFocused?.invoke(section.feed, item) },
                 onShowAllFocused = { onShowAllFocused?.invoke(section.feed) },
-                onRestoreFocusConsumed = onRestoreFocusConsumed,
                 onSectionFocusChanged = { hasFocus -> onSectionFocusChanged?.invoke(section.feed.id, hasFocus) },
                 shouldBlockVerticalMove = shouldBlockVerticalMove?.let { block -> { up -> block(index, up) } },
             )
@@ -90,10 +82,12 @@ private fun FeedRowPlaceholderSection() {
         title = stringResource(R.string.loading),
         state = HomeFeedLoadState.Loading,
         rowKey = "loading",
-        feedId = "loading",
         rowFocusRequester = FocusRequester(),
         onMediaClick = {},
         onShowAllClick = {},
         isInteractive = false,
     )
 }
+
+/** Key of a feed row's focus memory; the same feed of another source remembers its own poster. */
+internal fun feedRowKey(sourceId: String?, feedId: String): String = "$sourceId|$feedId"

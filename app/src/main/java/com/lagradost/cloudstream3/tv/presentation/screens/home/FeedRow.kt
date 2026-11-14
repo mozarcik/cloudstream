@@ -8,7 +8,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +65,7 @@ import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.focusedItemMeta
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.focus.tvCardFocus
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
@@ -95,7 +95,6 @@ internal fun FeedRow(
     title: String,
     state: HomeFeedLoadState,
     rowKey: String,
-    feedId: String,
     rowFocusRequester: FocusRequester,
     onMediaClick: (MediaItemCompat) -> Unit,
     onShowAllClick: () -> Unit,
@@ -104,11 +103,8 @@ internal fun FeedRow(
     onRefreshClick: () -> Unit = {},
     sourceName: String? = null,
     upFocusRequester: FocusRequester? = null,
-    pendingRestoreFocusTargetId: String? = null,
-    restoreFocusToken: Int = 0,
     onItemFocused: ((MediaItemCompat) -> Unit)? = null,
     onShowAllFocused: (() -> Unit)? = null,
-    onRestoreFocusConsumed: ((String) -> Unit)? = null,
     onSectionFocusChanged: ((Boolean) -> Unit)? = null,
     /** Up/Down pressed in the row; true consumes the key (a loading neighbour has nothing to focus). */
     shouldBlockVerticalMove: ((up: Boolean) -> Boolean)? = null,
@@ -183,18 +179,14 @@ internal fun FeedRow(
                         totalCount = state.items.size,
                         feedName = title,
                         rowKey = rowKey,
-                        feedId = feedId,
                         rowFocusRequester = rowFocusRequester,
                         upFocusRequester = upFocusRequester,
                         isInteractive = isInteractive,
-                        pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
-                        restoreFocusToken = restoreFocusToken,
                         onFocusDescriptionChange = updateFocusDescription,
                         onMediaClick = onMediaClick,
                         onShowAllClick = onShowAllClick,
                         onItemFocused = onItemFocused,
                         onShowAllFocused = onShowAllFocused,
-                        onRestoreFocusConsumed = onRestoreFocusConsumed,
                         shouldBlockVerticalMove = shouldBlockVerticalMove,
                     )
                 }
@@ -210,34 +202,28 @@ private fun FeedPosterRow(
     totalCount: Int,
     feedName: String,
     rowKey: String,
-    feedId: String,
     rowFocusRequester: FocusRequester,
     upFocusRequester: FocusRequester?,
     isInteractive: Boolean,
-    pendingRestoreFocusTargetId: String?,
-    restoreFocusToken: Int,
     onFocusDescriptionChange: (item: MediaItemCompat?, showAll: Boolean) -> Unit,
     onMediaClick: (MediaItemCompat) -> Unit,
     onShowAllClick: () -> Unit,
     onItemFocused: ((MediaItemCompat) -> Unit)?,
     onShowAllFocused: (() -> Unit)?,
-    onRestoreFocusConsumed: ((String) -> Unit)?,
     shouldBlockVerticalMove: ((up: Boolean) -> Boolean)?,
 ) {
     val showAllIndex = posters.size
-    val requesters = remember(posters.size) { List(posters.size + 1) { FocusRequester() } }
+    val group = remember(rowKey) { HomeFocusStore.rowGroup(rowKey) }
     // Test tag of the row's cards: "home:feed:<feedId>:slot:<index>" (rowKey is "<sourceId>|<feedId>").
     val slotTagPrefix = remember(rowKey) { "home:feed:${rowKey.substringAfterLast('|')}:slot" }
     val listState = rememberLazyListState(
-        initialFirstVisibleItemIndex = HomeFocusStore.rowIndex(rowKey).coerceIn(0, showAllIndex),
+        initialFirstVisibleItemIndex = group.lastIndex.coerceIn(0, showAllIndex),
     )
 
     // A new row composes its posters in two steps (the first few now, the rest two frames later),
-    // so entering a feed does not stall one frame. A row that is restored (back from details / the
-    // grid) or was left scrolled composes everything at once: its target may be further along.
-    val isRestoringThisFeed = restoreFocusToken > 0 &&
-        HomeFocusStore.feedIdFromTarget(pendingRestoreFocusTargetId) == feedId
-    val composeInSteps = HomeFocusStore.rowIndex(rowKey) == 0 && !isRestoringThisFeed
+    // so entering a feed does not stall one frame. A row that was left scrolled (or is restored) composes
+    // everything at once: its remembered poster may be further along.
+    val composeInSteps = group.lastIndex == 0
     var composedCount by remember(rowKey) {
         mutableIntStateOf(if (composeInSteps) FeedRowFirstStepPosters else Int.MAX_VALUE)
     }
@@ -249,20 +235,6 @@ private fun FeedPosterRow(
         }
     }
     val shownPosters = if (composedCount >= posters.size) posters else posters.subList(0, composedCount)
-
-    // Back from details / the full grid: scroll to the remembered poster and focus it.
-    LaunchedEffect(restoreFocusToken, pendingRestoreFocusTargetId, posters) {
-        val target = pendingRestoreFocusTargetId ?: return@LaunchedEffect
-        if (restoreFocusToken <= 0 || HomeFocusStore.feedIdFromTarget(target) != feedId) return@LaunchedEffect
-        val index = if (target == HomeFocusStore.feedShowMore(feedId)) {
-            showAllIndex
-        } else {
-            posters.indexOfFirst { HomeFocusStore.feedPoster(feedId, it) == target }
-        }
-        if (index < 0) return@LaunchedEffect
-        listState.scrollToItem(index)
-        if (requesters[index].requestFocusWithRetry(attempts = 18)) onRestoreFocusConsumed?.invoke(target)
-    }
 
     fun verticalKeys(): Modifier = Modifier.onPreviewKeyEvent { event ->
         if (!isInteractive || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -281,6 +253,19 @@ private fun FeedPosterRow(
         )
     }
 
+    val rowModifier = with(group) {
+        Modifier
+            // Up / Down from any poster (one handler for the row, not one per poster).
+            .then(verticalKeys())
+            .focusRequester(rowFocusRequester)
+            // Entering the row from above / below lands on the position it was left at.
+            .tvFocusGroup(isItemComposed = { index ->
+                // With two-step composition the remembered index may not be there yet.
+                val shown = if (index == showAllIndex) shownPosters.size == posters.size else index < shownPosters.size
+                shown && listState.isItemComposed(index)
+            })
+    }
+
     // Posters scroll under the nav rail (like the hero cards); the first one sits at 88 dp.
     CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoViewSpec) {
         LazyRow(
@@ -290,15 +275,7 @@ private fun FeedPosterRow(
                 start = TvDimens.ContentStartWithRail,
                 end = TvDimens.ScreenHorizontalPadding,
             ),
-            modifier = Modifier
-                // Up / Down from any poster (one handler for the row, not one per poster).
-                .then(verticalKeys())
-                .focusRequester(rowFocusRequester)
-                // Entering the row from above / below lands on the position it was left at.
-                .focusProperties {
-                    enter = { requesters[HomeFocusStore.rowIndex(rowKey).coerceIn(0, showAllIndex)] }
-                }
-                .focusGroup()
+            modifier = rowModifier
         ) {
             itemsIndexed(shownPosters, key = { index, item -> "$index:${item.url}" }) { index, item ->
                 FeedPosterCard(
@@ -306,14 +283,14 @@ private fun FeedPosterRow(
                     focusableTestTag = "$slotTagPrefix:$index",
                     onClick = { onMediaClick(item) },
                     onFocused = {
-                        HomeFocusStore.setRowIndex(rowKey, index)
+                        group.onItemFocused(index)
                         onFocusDescriptionChange(item, false)
                         onItemFocused?.invoke(item)
                     },
                     modifier = Modifier
                         // Height comes from the poster's 2:3 aspect ratio.
                         .width(TvDimens.FeedRowPosterWidth)
-                        .focusRequester(requesters[index])
+                        .focusRequester(group.itemRequester(index))
                         .focusProperties {
                             canFocus = isInteractive
                             up = upFocusRequester ?: FocusRequester.Default
@@ -325,14 +302,14 @@ private fun FeedPosterRow(
                     subtitle = stringResource(R.string.tv_feed_show_all_subtitle, feedName, "$totalCount+"),
                     onClick = onShowAllClick,
                     onFocused = {
-                        HomeFocusStore.setRowIndex(rowKey, showAllIndex)
+                        group.onItemFocused(showAllIndex)
                         onFocusDescriptionChange(null, true)
                         onShowAllFocused?.invoke()
                     },
                     modifier = Modifier
                         .width(TvDimens.FeedRowPosterWidth)
                         .height(TvDimens.FeedRowPosterHeight)
-                        .focusRequester(requesters[showAllIndex])
+                        .focusRequester(group.itemRequester(showAllIndex))
                         .focusProperties {
                             canFocus = isInteractive
                             up = upFocusRequester ?: FocusRequester.Default

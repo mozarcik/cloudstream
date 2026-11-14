@@ -80,7 +80,7 @@ internal fun ActiveSettingsPanelList(
     description: String?,
     entries: List<SettingsEntry>,
     listState: LazyListState,
-    restoreFocusToken: Long,
+    restoreFocusToken: Any,
     autoRequestFocus: Boolean = true,
     modifier: Modifier = Modifier,
     resolveFocusedKey: () -> String?,

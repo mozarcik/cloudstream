@@ -11,6 +11,8 @@ data class SearchSectionUiState(
     val id: String,
     val title: String,
     val state: HomeFeedLoadState = HomeFeedLoadState.Loading,
+    /** The source has more results after the loaded ones (shown page by page in "Show more"). */
+    val hasNext: Boolean = false,
 ) {
     val items: PersistentList<MediaItemCompat>
         get() = (state as? HomeFeedLoadState.Success)?.items ?: persistentListOf()
@@ -27,8 +29,5 @@ data class SearchScreenUiState(
     val hasSearched: Boolean = false,
     val sections: PersistentList<SearchSectionUiState> = persistentListOf(),
 )
-
-/** Slot of a result row that had focus when the user left the screen: [itemKey] or [SHOW_MORE_KEY]. */
-data class SearchRestoreTarget(val sectionId: String, val itemKey: String)
 
 internal const val SHOW_MORE_KEY = "show_more"

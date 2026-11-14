@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -78,6 +79,13 @@ import org.junit.runner.RunWith
 class HomeScreenV2ContinueWatchingRefreshTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    /** Home remembers what had focus for the whole process; every test starts like a fresh app start. */
+    @Before
+    fun forgetHomeFocus() {
+        HomeFocusStore.resetLastFocused()
+        HomeFocusStore.cardsGroup.lastIndex = 0
+    }
 
     @Test
     fun resumedHome_refreshesContinueWatchingContent() {

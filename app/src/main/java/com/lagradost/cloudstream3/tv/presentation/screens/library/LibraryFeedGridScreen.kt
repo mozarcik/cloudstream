@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.flowOf
 fun LibraryFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
     onBack: () -> Unit,
-    restoreFocusToken: Int = 0,
 ) {
     val selectedSection by LibraryFeedGridSelectionStore.selectedSection.collectAsState()
     val section = selectedSection
@@ -77,7 +76,6 @@ fun LibraryFeedGridScreen(
         onMediaClick = onMediaClick,
         screenKey = section.id,
         sort = sort,
-        restoreFocusToken = restoreFocusToken,
     )
 }
 

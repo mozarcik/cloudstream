@@ -9,23 +9,27 @@ import androidx.compose.ui.res.stringResource
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 
+/** Focus targets of the hero's buttons, created by Home so it can focus the exact one it left. */
+internal class ContinueWatchingHeroFocus(
+    val resume: FocusRequester = FocusRequester(),
+    val details: FocusRequester = FocusRequester(),
+    val remove: FocusRequester = FocusRequester(),
+)
+
 @Composable
-fun ContinueWatchingHeroSection(
+internal fun ContinueWatchingHeroSection(
     state: HomeFeedLoadState,
-    resumeFocusRequester: FocusRequester,
+    heroFocus: ContinueWatchingHeroFocus,
     cardsFocusRequester: FocusRequester,
     upFocusRequester: FocusRequester,
     sourceButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
-    pendingRestoreFocusTargetId: String? = null,
-    restoreFocusToken: Int = 0,
     modifier: Modifier = Modifier,
     onResumeClick: (MediaItemCompat) -> Unit = {},
     onDetailsClick: (MediaItemCompat) -> Unit = {},
     onRemoveClick: (MediaItemCompat) -> Unit = {},
     onCardClick: (MediaItemCompat) -> Unit = {},
     onFocusTargetFocused: (String) -> Unit = {},
-    onRestoreFocusConsumed: (String) -> Unit = {},
 ) {
     when (state) {
         HomeFeedLoadState.Loading -> {
@@ -44,19 +48,16 @@ fun ContinueWatchingHeroSection(
 
             ContinueWatchingHeroLoadedState(
                 items = state.items,
-                resumeFocusRequester = resumeFocusRequester,
+                heroFocus = heroFocus,
                 cardsFocusRequester = cardsFocusRequester,
                 upFocusRequester = upFocusRequester,
                 sourceButtonFocusRequester = sourceButtonFocusRequester,
                 isInteractive = isInteractive,
-                pendingRestoreFocusTargetId = pendingRestoreFocusTargetId,
-                restoreFocusToken = restoreFocusToken,
                 onResumeClick = onResumeClick,
                 onDetailsClick = onDetailsClick,
                 onRemoveClick = onRemoveClick,
                 onCardClick = onCardClick,
                 onFocusTargetFocused = onFocusTargetFocused,
-                onRestoreFocusConsumed = onRestoreFocusConsumed,
                 modifier = modifier
                     .fillMaxWidth()
                     .height(ContinueWatchingHeroHeight)

@@ -439,6 +439,8 @@ private fun ProfileAccountsList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(profileAccountFocusKey(account.keyIndex))
+                    // Up stops at the first row; between rows it moves normally.
+                    .focusProperties { if (account.keyIndex == accounts.first().keyIndex) up = FocusRequester.Cancel }
             )
         }
 
@@ -451,6 +453,7 @@ private fun ProfileAccountsList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(ProfileAddAccountFocusKey)
+                    .focusProperties { if (accounts.isEmpty()) up = FocusRequester.Cancel }
             )
         }
     }
@@ -471,7 +474,6 @@ private fun ProfileAccountListItem(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
-                up = FocusRequester.Cancel
                 right = rightPanelFocusRequester
             },
         shape = SelectableSurfaceDefaults.shape(shape = ProfileScreenTokens.ListItemShape),
@@ -541,7 +543,6 @@ private fun ProfileAddAccountItem(
         modifier = modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .focusProperties {
-                up = FocusRequester.Cancel
                 right = rightPanelFocusRequester
             },
         shape = SelectableSurfaceDefaults.shape(shape = ProfileScreenTokens.ListItemShape),

@@ -22,7 +22,6 @@ fun HomeScreenV2(
     onMediaClick: (MediaItemCompat) -> Unit,
     onContinueWatchingPlay: (MediaItemCompat) -> Unit,
     onOpenFeedGrid: (FeedCategory) -> Unit,
-    restoreFocusToken: Int = 0,
     sourcesViewModelFactory: HomeSourcesViewModelFactory = HomeSourcesViewModelFactory(),
     continueWatchingViewModelFactory: HomeContinueWatchingViewModelFactory =
         HomeContinueWatchingViewModelFactory(),
@@ -86,7 +85,6 @@ fun HomeScreenV2(
         onMediaClick = onMediaClick,
         onContinueWatchingPlay = onContinueWatchingPlay,
         onOpenFeedGrid = onOpenFeedGrid,
-        restoreFocusToken = restoreFocusToken,
         onSourceSelected = sourcesViewModel::selectSource,
         onMorePanelOpenChange = sourcesViewModel::setMorePanelOpen,
         onTogglePin = sourcesViewModel::togglePinned,

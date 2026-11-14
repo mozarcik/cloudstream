@@ -22,6 +22,7 @@ import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.compat.resume.ContinueWatchingState
 import com.lagradost.cloudstream3.tv.compat.resume.ResumePlaybackContext
 import kotlinx.collections.immutable.persistentListOf
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,6 +32,13 @@ import org.junit.runner.RunWith
 class HomeScreenV2ContentNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    /** Home remembers what had focus for the whole process; every test starts like a fresh app start. */
+    @Before
+    fun forgetHomeFocus() {
+        HomeFocusStore.resetLastFocused()
+        HomeFocusStore.cardsGroup.lastIndex = 0
+    }
 
     @Test
     fun hiddenSourcesRow_continueWatchingCardsReachFirstFeedAndBack() {

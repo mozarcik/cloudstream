@@ -44,7 +44,8 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.TvFocusedItemTitle
 import com.lagradost.cloudstream3.tv.presentation.common.TvPosterSkeletonRow
-import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
+import com.lagradost.cloudstream3.tv.presentation.focus.TvFocusGroup
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedPosterCard
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.screens.home.ShowMoreCard
@@ -77,11 +78,11 @@ internal fun SearchSection(
     section: SearchSectionUiState,
     onMediaClick: (MediaItemCompat) -> Unit,
     onShowMoreClick: () -> Unit,
+    group: TvFocusGroup,
     modifier: Modifier = Modifier,
-    firstItemFocusRequester: FocusRequester? = null,
+    entryRequester: FocusRequester? = null,
     upFocusRequester: FocusRequester? = null,
-    restoreItemKey: String? = null,
-    onRestoreConsumed: () -> Unit = {},
+    onRowFocused: () -> Unit = {},
 ) {
     val focusedItem = remember { mutableStateOf<MediaItemCompat?>(null) }
     val state = section.state
@@ -116,8 +117,10 @@ internal fun SearchSection(
             )
 
             HomeFeedLoadState.Error -> SearchErrorRow(
-                focusRequester = firstItemFocusRequester,
+                group = group,
+                entryRequester = entryRequester,
                 upFocusRequester = upFocusRequester,
+                onFocused = onRowFocused,
                 modifier = Modifier
                     .padding(start = inset)
                     .padding(top = TvDimens.SearchRowVerticalPadding),
@@ -128,10 +131,10 @@ internal fun SearchSection(
                 focusedItem = focusedItem,
                 onMediaClick = onMediaClick,
                 onShowMoreClick = onShowMoreClick,
-                firstItemFocusRequester = firstItemFocusRequester,
+                group = group,
+                entryRequester = entryRequester,
                 upFocusRequester = upFocusRequester,
-                restoreItemKey = restoreItemKey,
-                onRestoreConsumed = onRestoreConsumed,
+                onRowFocused = onRowFocused,
             )
         }
     }
@@ -184,34 +187,17 @@ private fun SearchPosterRow(
     focusedItem: androidx.compose.runtime.MutableState<MediaItemCompat?>,
     onMediaClick: (MediaItemCompat) -> Unit,
     onShowMoreClick: () -> Unit,
-    firstItemFocusRequester: FocusRequester?,
+    group: TvFocusGroup,
+    entryRequester: FocusRequester?,
     upFocusRequester: FocusRequester?,
-    restoreItemKey: String?,
-    onRestoreConsumed: () -> Unit,
+    onRowFocused: () -> Unit,
 ) {
     val config = remember(items) { resolveFeedMiniGridConfig(items) }
-    val rowState = rememberLazyListState()
-    val requesters = remember(config.totalSlots) { List(config.totalSlots) { FocusRequester() } }
-    fun requesterFor(index: Int) =
-        if (index == 0 && firstItemFocusRequester != null) firstItemFocusRequester else requesters[index]
-
-    val restoreIndex = remember(restoreItemKey, config) {
-        restoreItemKey?.let { key ->
-            (0 until config.totalSlots).firstOrNull { slot ->
-                if (config.showMore && slot == config.totalSlots - 1) {
-                    key == SHOW_MORE_KEY
-                } else {
-                    searchItemKey(config.displayItems[slot]) == key
-                }
-            }
-        }
-    }
-    LaunchedEffect(restoreIndex) {
-        if (restoreIndex == null) return@LaunchedEffect
-        rowState.scrollToItem(restoreIndex)
-        requesterFor(restoreIndex).requestFocusWithRetry()
-        onRestoreConsumed()
-    }
+    // A row that is created again (Back from a title, Up / Down between sources) starts at its remembered slot.
+    group.lastIndex = group.lastIndex.coerceIn(0, maxOf(0, config.totalSlots - 1))
+    val rowState = rememberLazyListState(
+        initialFirstVisibleItemIndex = group.lastIndex.coerceIn(0, maxOf(0, config.totalSlots - 1)),
+    )
 
     LazyRow(
         state = rowState,
@@ -222,7 +208,12 @@ private fun SearchPosterRow(
             top = TvDimens.SearchRowVerticalPadding,
             bottom = TvDimens.SearchRowVerticalPadding,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = with(group) {
+            Modifier
+                .fillMaxWidth()
+                .then(if (entryRequester != null) Modifier.focusRequester(entryRequester) else Modifier)
+                .tvFocusGroup(isItemComposed = rowState::isItemComposed)
+        },
     ) {
         itemsIndexed(
             items = List(config.totalSlots) { it },
@@ -237,12 +228,16 @@ private fun SearchPosterRow(
             val focusModifier = Modifier
                 .width(TvDimens.PosterWidth)
                 .height(TvDimens.PosterHeight)
-                .focusRequester(requesterFor(slot))
+                .focusRequester(group.itemRequester(slot))
                 .focusProperties { if (upFocusRequester != null) up = upFocusRequester }
             if (config.showMore && slot == config.totalSlots - 1) {
                 ShowMoreCard(
                     onClick = onShowMoreClick,
-                    onFocused = { focusedItem.value = null },
+                    onFocused = {
+                        focusedItem.value = null
+                        group.onItemFocused(slot)
+                        onRowFocused()
+                    },
                     modifier = focusModifier,
                 )
             } else {
@@ -250,7 +245,11 @@ private fun SearchPosterRow(
                 FeedPosterCard(
                     item = item,
                     onClick = { onMediaClick(item) },
-                    onFocused = { focusedItem.value = item },
+                    onFocused = {
+                        focusedItem.value = item
+                        group.onItemFocused(slot)
+                        onRowFocused()
+                    },
                     modifier = focusModifier,
                 )
             }
@@ -261,8 +260,10 @@ private fun SearchPosterRow(
 /** Source that failed: message row instead of posters. Focusable (white row fill, no scale); OK does nothing. */
 @Composable
 private fun SearchErrorRow(
-    focusRequester: FocusRequester?,
+    group: TvFocusGroup,
+    entryRequester: FocusRequester?,
     upFocusRequester: FocusRequester?,
+    onFocused: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -274,8 +275,10 @@ private fun SearchErrorRow(
         modifier = modifier
             .width(TvDimens.SearchErrorRowWidth)
             .height(TvDimens.SearchErrorRowHeight)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+            .focusRequester(group.requester)
+            .then(if (entryRequester != null) Modifier.focusRequester(entryRequester) else Modifier)
             .focusProperties { if (upFocusRequester != null) up = upFocusRequester }
+            .onFocusChanged { if (it.isFocused) onFocused() }
             .tvFocusFill(focused = focused, shape = TvShapes.Row, container = TvColors.Card)
             .clickable(interactionSource = interactionSource, indication = null, role = Role.Button) {}
             .padding(horizontal = TvDimens.SearchErrorRowHorizontalPadding),

@@ -50,6 +50,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +66,13 @@ private const val SecondContinueWatchingCardTag = "continue_watching_card_cw-2"
 class HomeScreenV2ContinueWatchingRemoveFocusTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    /** Home remembers what had focus for the whole process; every test starts like a fresh app start. */
+    @Before
+    fun forgetHomeFocus() {
+        HomeFocusStore.resetLastFocused()
+        HomeFocusStore.cardsGroup.lastIndex = 0
+    }
 
     @Test
     fun removingFirstContinueWatchingItem_movesFocusToNextCard() {

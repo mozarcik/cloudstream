@@ -88,6 +88,12 @@ internal class TvLibraryMenuViewModel : ViewModel() {
     /** Last focused row of the Library screen, so coming back from a list lands on it. */
     var lastFocusedListKey: String? = null
 
+    /**
+     * Row whose list was opened from the Library screen. Focus lands on the first row by itself when the
+     * screen comes back, which would overwrite [lastFocusedListKey]; the opened row wins until it has focus again.
+     */
+    var openedListKey: String? = null
+
     private var loadJob: Job? = null
 
     private val reloadObserver: (Boolean) -> Unit = { force -> load(force) }

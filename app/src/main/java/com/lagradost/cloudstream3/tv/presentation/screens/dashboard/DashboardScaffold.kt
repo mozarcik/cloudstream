@@ -49,25 +49,20 @@ import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.screens.library.LibraryFeedGridSelectionStore
 import com.lagradost.cloudstream3.tv.presentation.screens.search.SearchPrefillStore
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
+import androidx.compose.runtime.snapshotFlow
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocus
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
-/**
- * What the screen under the menu lends to the Dashboard: how to move focus into it after a
- * screen change ([handler]) and what Back does inside it before the Dashboard takes over.
- */
+/** What the screen under the menu lends to the Dashboard: how focus moves into it and what Back does inside it. */
 class DashboardContentEntry {
-    /** Moves focus to the right element (Resume, last focused feed item, ...) and returns true when it did. */
-    var handler: (() -> Boolean)? = null
-
-    /**
-     * Back inside the screen (Home: rows scroll back to the hero). Returns true when it did
-     * something, false when the screen is already at its start and Back belongs to the Dashboard.
-     */
-    var backHandler: (() -> Boolean)? = null
-
-    /** Focus back to where it was after the menu closed; returns true when the screen did it itself. */
-    var restoreFocus: (() -> Boolean)? = null
+    /** Registered by the screen through [TvScreenFocusEffect]; null for screens that have nothing to say. */
+    var screen: TvScreenFocus? = null
 }
 
 val LocalDashboardContentEntry = compositionLocalOf { DashboardContentEntry() }
@@ -87,6 +82,21 @@ private const val EnterContentRetryMs = 60L
 private const val EnterContentSettleMs = TvDimens.MaxAnimationMs + 30L
 private const val EnterContentMaxAttempts = 50
 private const val EnterContentFallbackAttempt = 12
+/** A restoring screen may wait for pages to load; after this long the Dashboard gives up and enters instead. */
+private const val RestoreContentTimeoutMs = 8_000L
+/** A screen that never registers (Profile) has nothing to restore: do not wait the whole timeout for it. */
+private const val RestoreNoScreenAttempts = 20
+
+/** Enter: a fresh entry to the screen (starting element). Restore: back to where focus was. */
+private enum class ContentFocusKind { Enter, Restore }
+
+/** One request to put focus into the content; a new [nonce] restarts the Dashboard's focus loop. */
+private data class ContentFocusRequest(
+    val kind: ContentFocusKind,
+    /** Wait for the screen change to finish first (the old screen still holds focus until it has faded out). */
+    val settle: Boolean,
+    val nonce: Int,
+)
 
 internal fun shouldRestoreDashboardFocusAfterReturn(
     isComingBackFromDifferentScreen: Boolean,
@@ -97,9 +107,6 @@ internal fun shouldRestoreDashboardFocusAfterReturn(
 
 /** Parts of the Dashboard a screen can act on. */
 internal data class DashboardBodyContext(
-    val homeRestoreFocusToken: Int,
-    val homeFeedGridRestoreFocusToken: Int,
-    val libraryFeedGridRestoreFocusToken: Int,
     val homeContentRefreshToken: Int,
     val accountRefreshToken: Int,
     /** Settings left to Home: switch there and put focus into Home. */
@@ -155,12 +162,11 @@ internal fun DashboardScaffold(
     var currentDestination: String? by remember { mutableStateOf(null) }
     var previousDestination: String? by remember { mutableStateOf(null) }
     var isProgrammaticSearchNavigationPending by rememberSaveable { mutableStateOf(false) }
-    var homeRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var homeFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
-    var libraryFeedGridRestoreFocusToken by rememberSaveable { mutableIntStateOf(0) }
     var homeContentRefreshToken by rememberSaveable { mutableIntStateOf(0) }
     var accountRefreshToken by rememberSaveable { mutableIntStateOf(0) }
-    var enterContentToken by remember { mutableIntStateOf(0) }
+    var focusRequest by remember { mutableStateOf<ContentFocusRequest?>(null) }
+    // Focus work started outside the request loop (the menu closing); opening the menu cancels it.
+    var menuFocusJob by remember { mutableStateOf<Job?>(null) }
     var isFallbackFocusable by remember { mutableStateOf(false) }
     var fallbackHasFocus by remember { mutableStateOf(false) }
     val fallbackFocusRequester = remember { FocusRequester() }
@@ -202,19 +208,24 @@ internal fun DashboardScaffold(
         }
     }
 
+    fun requestContentFocus(kind: ContentFocusKind, settle: Boolean = true) {
+        focusRequest = ContentFocusRequest(kind, settle, (focusRequest?.nonce ?: 0) + 1)
+    }
+
     LaunchedEffect(currentDestination) {
-        when {
-            // Back from Search / Downloads / Settings / a list: the NavHost popped to Home on its own.
-            currentDestination == Screens.Home.name &&
-                previousDestination != null &&
-                previousDestination != Screens.HomeFeedGrid.name -> enterContentToken += 1
+        val from = previousDestination
+        val to = currentDestination
+        if (from != null && to != null) {
+            when {
+                // Back from a grid: the screen under it puts focus back on the item the grid was opened from.
+                from == Screens.HomeFeedGrid.name && to == Screens.Home.name ||
+                    from == Screens.LibraryFeedGrid.name && to == Screens.Library.name ||
+                    from == Screens.SearchFeedGrid.name && to == Screens.Search.name ->
+                    requestContentFocus(ContentFocusKind.Restore)
 
-            previousDestination == Screens.HomeFeedGrid.name &&
-                currentDestination == Screens.Home.name -> homeRestoreFocusToken += 1
-
-            // Back from a list opened on the Library screen: focus returns to the row it was opened from.
-            previousDestination == Screens.LibraryFeedGrid.name &&
-                currentDestination == Screens.Library.name -> enterContentToken += 1
+                // Back from Search / Downloads / Settings / a list: the NavHost popped to Home on its own.
+                to == Screens.Home.name -> requestContentFocus(ContentFocusKind.Enter)
+            }
         }
         if (currentDestination != null) {
             previousDestination = currentDestination
@@ -257,60 +268,88 @@ internal fun DashboardScaffold(
             return@LaunchedEffect
         }
 
-        when (currentDestination) {
-            Screens.Home.name -> {
-                homeRestoreFocusToken += 1
-            }
-
-            Screens.HomeFeedGrid.name -> {
-                homeFeedGridRestoreFocusToken += 1
-            }
-
-            Screens.LibraryFeedGrid.name -> {
-                libraryFeedGridRestoreFocusToken += 1
-            }
-        }
+        // Back from a title / the player: the screen puts focus back where it was.
+        if (currentDestination == null) return@LaunchedEffect
+        requestContentFocus(ContentFocusKind.Restore, settle = false)
         resetIsComingBackFromDifferentScreen()
     }
 
-    // After a screen change from the menu the new screen composes (and may load) asynchronously:
-    // keep asking it for focus until it has it.
-    LaunchedEffect(enterContentToken) {
-        if (enterContentToken == 0) return@LaunchedEffect
+    // The old screen may still be answering for itself, the new one composes (and may load) asynchronously:
+    // keep asking the current one until it has put focus where it belongs.
+    LaunchedEffect(focusRequest) {
+        val request = focusRequest ?: return@LaunchedEffect
         isFallbackFocusable = false
-        // The old screen is still composed (and answers for itself) until the screen change has settled.
-        delay(EnterContentSettleMs)
-        repeat(EnterContentMaxAttempts) { attempt ->
-            if (contentHasFocus && !fallbackHasFocus) return@LaunchedEffect
-            // The user already opened the menu: never pull focus out of it.
-            if (isMenuOpen) return@LaunchedEffect
-            val entered = contentEntry.handler?.invoke() == true
-            if (!entered) runCatching { contentFocusRequester.requestFocus() }
-            delay(EnterContentRetryMs)
-            // A screen with nothing to focus (empty Downloads) still has to hear Left, or the menu is unreachable.
-            if (attempt == EnterContentFallbackAttempt && !contentHasFocus) {
-                isFallbackFocusable = true
+
+        suspend fun enterContent() {
+            repeat(EnterContentMaxAttempts) { attempt ->
+                if (contentHasFocus && !fallbackHasFocus) return
+                val entered = contentEntry.screen?.enter() == true
+                if (!entered) runCatching { contentFocusRequester.requestFocus() }
                 delay(EnterContentRetryMs)
-                runCatching { fallbackFocusRequester.requestFocus() }
+                // A screen with nothing to focus (empty Downloads) still has to hear Left, or the menu is unreachable.
+                if (attempt == EnterContentFallbackAttempt && !contentHasFocus) {
+                    isFallbackFocusable = true
+                    delay(EnterContentRetryMs)
+                    runCatching { fallbackFocusRequester.requestFocus() }
+                }
             }
+        }
+
+        // Nothing else may take focus meanwhile: the screen's own memory is what the user expects.
+        suspend fun restoreContent(): Boolean = withTimeoutOrNull(RestoreContentTimeoutMs) {
+            var attemptsWithoutScreen = 0
+            while (true) {
+                val screen = contentEntry.screen
+                if (screen?.restore() == true) return@withTimeoutOrNull true
+                if (screen == null && ++attemptsWithoutScreen >= RestoreNoScreenAttempts) return@withTimeoutOrNull false
+                delay(EnterContentRetryMs)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            false
+        } == true
+
+        coroutineScope {
+            val work = launch {
+                if (request.settle) delay(EnterContentSettleMs)
+                when (request.kind) {
+                    ContentFocusKind.Enter -> enterContent()
+                    ContentFocusKind.Restore -> if (!restoreContent()) enterContent()
+                }
+            }
+            // The user already opened the menu: never pull focus out of it.
+            val guard = launch {
+                snapshotFlow { isMenuOpen }.first { it }
+                work.cancel()
+            }
+            work.join()
+            guard.cancel()
         }
     }
 
-    // Nothing else gives the first screen its focus now that the top bar is gone.
-    LaunchedEffect(Unit) { enterContentToken += 1 }
+    // Nothing else gives the first screen its focus now that the top bar is gone. A Dashboard that is created
+    // again after Back from a title restores instead (the effect above).
+    LaunchedEffect(Unit) {
+        if (!shouldRestoreDashboardFocusAfterReturn(isComingBackFromDifferentScreen, isProgrammaticSearchNavigationPending)) {
+            requestContentFocus(ContentFocusKind.Enter)
+        }
+    }
 
     fun openMenu() {
-        isMenuExpanded = false
+        // The menu opens expanded (labels visible) as soon as it takes focus.
+        isMenuExpanded = true
         isMenuOpen = true
+        menuFocusJob?.cancel()
     }
 
     fun closeMenuAndRestoreFocus() {
         isMenuOpen = false
         isMenuExpanded = false
-        coroutineScope.launch {
-            contentFocusRequester.requestFocusWithRetry(attempts = 18)
-            // A screen whose own position is lost with its items (scrolled grid) puts focus back itself.
-            contentEntry.restoreFocus?.invoke()
+        // The screen puts focus back where it was, right away. Compose's own focus restoring cannot do it
+        // for lazy lists: their rows look the same to it, so it would pick the first one.
+        menuFocusJob?.cancel()
+        menuFocusJob = coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val restored = contentEntry.screen?.restore() == true
+            if (!restored) contentFocusRequester.requestFocusWithRetry(attempts = 18)
         }
     }
 
@@ -330,7 +369,7 @@ internal fun DashboardScaffold(
             popUpTo(Screens.Home()) { saveState = false }
             launchSingleTop = true
         }
-        enterContentToken += 1
+        requestContentFocus(ContentFocusKind.Enter)
     }
 
     fun openLibraryListGrid(providerName: String, listKey: String) {
@@ -350,7 +389,7 @@ internal fun DashboardScaffold(
         isMenuOpen = false
         isMenuExpanded = false
         navController.navigateToDashboardTab(target.screen)
-        enterContentToken += 1
+        requestContentFocus(ContentFocusKind.Enter)
     }
 
     /** Left at the content's edge: opens the menu unless the press was part of a quick / held burst. */
@@ -375,7 +414,7 @@ internal fun DashboardScaffold(
             route == Screens.Library.name ||
             route == Screens.Settings.name
         val contentHandledBack = !isMenuOpen && isOnTopLevelScreen &&
-            contentEntry.backHandler?.invoke() == true
+            contentEntry.screen?.back() == true
         val action = resolveDashboardBackAction(
             isMenuFocused = isMenuOpen,
             isOnHome = route == Screens.Home.name,
@@ -445,14 +484,11 @@ internal fun DashboardScaffold(
                     navController,
                     Modifier,
                     DashboardBodyContext(
-                        homeRestoreFocusToken = homeRestoreFocusToken,
-                        homeFeedGridRestoreFocusToken = homeFeedGridRestoreFocusToken,
-                        libraryFeedGridRestoreFocusToken = libraryFeedGridRestoreFocusToken,
                         homeContentRefreshToken = homeContentRefreshToken,
                         accountRefreshToken = accountRefreshToken,
                         goHomeAndEnterContent = {
                             navController.navigateToDashboardTab(Screens.Home)
-                            enterContentToken += 1
+                            requestContentFocus(ContentFocusKind.Enter)
                         },
                         libraryMenu = libraryMenu,
                         openLibraryListGrid = ::openLibraryListGrid,
@@ -468,8 +504,7 @@ internal fun DashboardScaffold(
         }
 
         // The collapsed menu is the rail itself, focusable: the passive rail is only drawn while it is closed.
-        // Settings use the full width (panels start at x = 0): the menu is drawn over them only when opened.
-        if (!isMenuOpen && currentDestination != Screens.Settings.name) TvNavRail(
+        if (!isMenuOpen) TvNavRail(
             selection = selection,
             accountRefreshToken = accountRefreshToken,
             hasPinnedLists = listGroups.isNotEmpty(),
@@ -485,7 +520,7 @@ internal fun DashboardScaffold(
                 isMenuOpen = false
                 isMenuExpanded = false
                 navController.navigate(Screens.Profile()) { launchSingleTop = true }
-                enterContentToken += 1
+                requestContentFocus(ContentFocusKind.Enter)
             },
             onNavigate = ::navigateFromMenu,
             onOpenList = ::openLibraryList,

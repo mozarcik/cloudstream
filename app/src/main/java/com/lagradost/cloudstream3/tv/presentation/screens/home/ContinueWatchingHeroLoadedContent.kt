@@ -65,7 +65,7 @@ import com.lagradost.cloudstream3.isEpisodeBased
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.compat.home.preferredBackdropUriOrNull
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
-import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import kotlinx.coroutines.launch
 
@@ -73,22 +73,23 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun ContinueWatchingHeroLoadedState(
     items: List<MediaItemCompat>,
-    resumeFocusRequester: FocusRequester,
+    heroFocus: ContinueWatchingHeroFocus,
     cardsFocusRequester: FocusRequester,
     upFocusRequester: FocusRequester,
     sourceButtonFocusRequester: FocusRequester,
     isInteractive: Boolean,
-    pendingRestoreFocusTargetId: String? = null,
-    restoreFocusToken: Int = 0,
     onResumeClick: (MediaItemCompat) -> Unit,
     onDetailsClick: (MediaItemCompat) -> Unit,
     onRemoveClick: (MediaItemCompat) -> Unit,
     onCardClick: (MediaItemCompat) -> Unit,
     onFocusTargetFocused: (String) -> Unit,
-    onRestoreFocusConsumed: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val rowState = rememberLazyListState()
+    val cardsGroup = HomeFocusStore.cardsGroup
+    // A row that is created again (Back from a title) starts with the remembered card in view.
+    val rowState = rememberLazyListState(
+        initialFirstVisibleItemIndex = (cardsGroup.lastIndex.coerceIn(0, items.lastIndex) - 2).coerceAtLeast(0),
+    )
     // Home's list disables Compose's focus scrolling; this row needs it: the focused card stays
     // fully visible with a 48 dp margin (ring included) on both sides.
     val density = LocalDensity.current
@@ -105,12 +106,9 @@ internal fun ContinueWatchingHeroLoadedState(
             }
         }
     }
-    val detailsFocusRequester = remember { FocusRequester() }
-    val removeFocusRequester = remember { FocusRequester() }
     val coroutineScope = rememberCoroutineScope()
 
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
-    var lastFocusedCardIndex by rememberSaveable { mutableIntStateOf(0) }
     var pendingRemoveFocus by rememberSaveable { mutableStateOf(false) }
     val remainingSuffix = stringResource(R.string.continue_watching_remaining_suffix)
 
@@ -134,48 +132,19 @@ internal fun ContinueWatchingHeroLoadedState(
     LaunchedEffect(items.size) {
         selectedIndex = selectedIndex.coerceIn(0, items.lastIndex)
         focusedCardIndex = focusedCardIndex.coerceIn(0, items.lastIndex)
-        lastFocusedCardIndex = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
+        cardsGroup.lastIndex = cardsGroup.lastIndex.coerceIn(0, items.lastIndex)
     }
 
     fun cardTargetId(item: MediaItemCompat): String {
         return HomeFocusStore.continueWatchingCard(item)
     }
 
-    val cardTargetIds = remember(items) { items.map(::cardTargetId) }
-    val cardFocusRequesters = rememberFocusRequesterMap(cardTargetIds)
-
-    val restoreFocusRequester = remember(
-        pendingRestoreFocusTargetId,
-        restoreFocusToken,
-        items,
-    ) {
-        when (pendingRestoreFocusTargetId) {
-            HomeFocusStore.ContinueWatchingResume -> resumeFocusRequester
-            HomeFocusStore.ContinueWatchingDetails -> detailsFocusRequester
-            HomeFocusStore.ContinueWatchingRemove -> removeFocusRequester
-            null -> null
-            else -> items
-                .indexOfFirst { item -> cardTargetId(item) == pendingRestoreFocusTargetId }
-                .takeIf { it >= 0 }
-                ?.let { index -> cardFocusRequesters[cardTargetId(items[index])] }
-        }
-    }
-
-    FocusRequestEffect(
-        requester = restoreFocusRequester,
-        requestKey = restoreFocusToken to pendingRestoreFocusTargetId,
-        enabled = restoreFocusRequester != null && restoreFocusToken > 0,
-        onFocused = {
-            pendingRestoreFocusTargetId?.let(onRestoreFocusConsumed)
-        }
-    )
-
     // The row is a focus group that enters on the last focused card; that card must be composed.
     fun requestCardsFocus() {
         if (!isInteractive) return
 
         coroutineScope.launch {
-            val targetIndex = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
+            val targetIndex = cardsGroup.lastIndex.coerceIn(0, items.lastIndex)
             if (rowState.isItemOutsideViewport(targetIndex)) {
                 rowState.scrollToItem(targetIndex)
             }
@@ -187,7 +156,7 @@ internal fun ContinueWatchingHeroLoadedState(
     LaunchedEffect(items.size) {
         if (pendingRemoveFocus) {
             pendingRemoveFocus = false
-            selectedIndex = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
+            selectedIndex = cardsGroup.lastIndex.coerceIn(0, items.lastIndex)
             focusedCardIndex = selectedIndex
             requestCardsFocus()
         }
@@ -205,9 +174,9 @@ internal fun ContinueWatchingHeroLoadedState(
             remainingSuffix = remainingSuffix,
             isInteractive = isInteractive,
             upFocusRequester = upFocusRequester,
-            resumeFocusRequester = resumeFocusRequester,
-            detailsFocusRequester = detailsFocusRequester,
-            removeFocusRequester = removeFocusRequester,
+            resumeFocusRequester = heroFocus.resume,
+            detailsFocusRequester = heroFocus.details,
+            removeFocusRequester = heroFocus.remove,
             onResumeClick = onResumeClick,
             onDetailsClick = onDetailsClick,
             onRemoveClick = {
@@ -259,31 +228,23 @@ internal fun ContinueWatchingHeroLoadedState(
                 .fillMaxWidth()
                 // Entering the row (Down from the buttons, Up from the chips) lands on the last focused card.
                 .focusRequester(cardsFocusRequester)
-                .focusProperties {
-                    enter = {
-                        val index = lastFocusedCardIndex.coerceIn(0, items.lastIndex)
-                        val isComposed = rowState.layoutInfo.visibleItemsInfo.any { it.index == index }
-                        if (isComposed) cardFocusRequesters.getValue(cardTargetIds[index]) else FocusRequester.Default
-                    }
-                }
-                .focusGroup()
+                .let { base -> with(cardsGroup) { base.tvFocusGroup(isItemComposed = rowState::isItemComposed) } }
         ) {
             itemsIndexed(
                 items = items,
                 key = { index, item -> "${item.id}_${item.apiName}_${item.url}_$index" }
             ) { index, item ->
-                val cardFocusRequester = cardFocusRequesters[cardTargetId(item)] ?: return@itemsIndexed
                 ContinueWatchingHeroCard(
                     item = item,
                     colorTokens = colorTokens,
                     isSelected = index == safeSelectedIndex,
-                    focusRequester = cardFocusRequester,
-                    upFocusRequester = resumeFocusRequester,
+                    focusRequester = cardsGroup.itemRequester(index),
+                    upFocusRequester = heroFocus.resume,
                     downFocusRequester = sourceButtonFocusRequester,
                     isInteractive = isInteractive,
                     onFocused = {
                         focusedCardIndex = index
-                        lastFocusedCardIndex = index
+                        cardsGroup.onItemFocused(index)
                         onFocusTargetFocused(cardTargetId(item))
                     },
                     onClick = { onCardClick(item) },

@@ -1,10 +1,8 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import android.util.Log
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.focus.TvFocusGroup
 
 internal object HomeFocusStore {
     private const val FocusDebugTag = "TvHomeFocus"
@@ -12,9 +10,6 @@ internal object HomeFocusStore {
     const val ContinueWatchingDetails = "home:continue_watching:details"
     const val ContinueWatchingRemove = "home:continue_watching:remove"
     const val Sources = "home:sources"
-
-    var pendingRestoreTargetId by mutableStateOf<String?>(null)
-        private set
 
     private var lastFocusedTargetId: String? = null
     val lastTargetId: String? get() = lastFocusedTargetId
@@ -26,38 +21,19 @@ internal object HomeFocusStore {
 
     fun resetLastFocused() {
         lastFocusedTargetId = null
-        pendingRestoreTargetId = null
-    }
-
-    fun scheduleRestoreToLastFocused() {
-        pendingRestoreTargetId = lastFocusedTargetId
-        Log.d(FocusDebugTag, "scheduleRestoreToLastFocused target=$pendingRestoreTargetId")
-    }
-
-    fun scheduleRestoreTo(targetId: String) {
-        pendingRestoreTargetId = targetId
-        Log.d(FocusDebugTag, "scheduleRestoreTo target=$targetId")
-    }
-
-    fun clearPendingRestore(targetId: String? = pendingRestoreTargetId) {
-        if (pendingRestoreTargetId == targetId) {
-            Log.d(FocusDebugTag, "clearPendingRestore target=$targetId")
-            pendingRestoreTargetId = null
-        }
     }
 
     fun continueWatchingCard(item: MediaItemCompat): String {
         return "home:continue_watching:card:${mediaIdentity(item)}"
     }
 
-    private val rowIndexes = HashMap<String, Int>()
+    private val rowGroups = HashMap<String, TvFocusGroup>()
 
-    /** Position last focused in a feed row (poster index, or the "Show all" tile after the last one). */
-    fun rowIndex(rowKey: String): Int = rowIndexes[rowKey] ?: 0
+    /** Focus memory of a feed row: the poster index last focused (the "Show all" tile comes after the last poster). */
+    fun rowGroup(rowKey: String): TvFocusGroup = rowGroups.getOrPut(rowKey) { TvFocusGroup() }
 
-    fun setRowIndex(rowKey: String, index: Int) {
-        rowIndexes[rowKey] = index
-    }
+    /** Focus memory of the hero's Continue watching cards. */
+    val cardsGroup = TvFocusGroup()
 
     fun feedPoster(feedId: String, item: MediaItemCompat): String {
         return "home:feed:$feedId:item:${mediaIdentity(item)}"

@@ -151,7 +151,7 @@ object TvDimens {
     val NavMenuFadeWidth = 500.dp
     val NavMenuPanelWidth = 280.dp
     val NavMenuProfileHeight = 40.dp
-    val NavMenuAvatarSize = 40.dp
+    val NavMenuAvatarSize = 32.dp
     val NavMenuRowHeight = 48.dp
     val NavMenuRowGap = 4.dp
     val NavMenuListRowHeight = 31.dp
@@ -160,7 +160,7 @@ object TvDimens {
     val NavRailDotSize = 4.dp
     val NavRailTileSize = 48.dp
     val NavRailIconSize = 16.dp
-    val NavRailAvatarSize = 40.dp
+    val NavRailAvatarSize = 32.dp
     val NavRailScrimWidth = 88.dp
     // Top bar (mockup Main: logo 52 px + 28 px gap, tab padding 26 px, search icon 28 px + 10 px)
     val TopBarLogoSize = 26.dp
@@ -263,9 +263,6 @@ object TvDimens {
     // (title y=44 px, grid y=124 px); the 32 dp header row also fits the Sort button.
     const val GridColumns = 7
     const val PosterAspectRatio = 2f / 3f
-    /** Focus restore after Back waits for the poster to be composed: 40 tries, 50 ms apart. */
-    const val FocusRestoreAttempts = 40
-    const val FocusRestoreRetryMs = 50L
     const val GridSkeletonCount = 18
     val GridColumnGap = 14.dp
     val GridRowGap = MiniGridGap

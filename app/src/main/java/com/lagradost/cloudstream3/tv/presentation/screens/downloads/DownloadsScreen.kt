@@ -4,7 +4,8 @@ import android.util.Log
 import androidx.compose.foundation.background
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.DashboardContentTopInset
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardContentEntry
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.tryRequestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardOpenMenu
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
@@ -90,20 +91,9 @@ fun DownloadsScreen(
     }
 
     // Entering the list after a screen change from the menu: its first / last focused item.
-    val contentEntry = LocalDashboardContentEntry.current
-    val coroutineScope = rememberCoroutineScope()
     val entryRequester = (focusedItemId?.let(itemFocusRequesters::get)
         ?: allItems.firstOrNull()?.let { itemFocusRequesters[it.id] })
-    DisposableEffect(contentEntry, entryRequester) {
-        val handler: () -> Boolean = {
-            entryRequester?.let { requester ->
-                coroutineScope.launch { requester.requestFocusWithRetry(attempts = 18) }
-                true
-            } ?: false
-        }
-        contentEntry.handler = handler
-        onDispose { if (contentEntry.handler === handler) contentEntry.handler = null }
-    }
+    TvScreenFocusEffect(enter = { entryRequester?.tryRequestFocusWithRetry() == true })
 
     LaunchedEffect(itemIds, restoreFocusTargetId) {
         if (restoreFocusTargetId != null && restoreFocusTargetId !in itemFocusRequesters) {

@@ -55,7 +55,8 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.presentation.common.TvEmptyState
 import com.lagradost.cloudstream3.tv.presentation.focus.rememberFocusRequesterMap
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardContentEntry
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.tryRequestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.theme.TvShapes
@@ -132,19 +133,10 @@ internal fun LibraryListsScreen(
     val listState = rememberLazyListState()
 
     // Entering the screen from the menu (or back from a list): the last focused row, else the first.
-    val contentEntry = LocalDashboardContentEntry.current
-    val scope = rememberCoroutineScope()
-    DisposableEffect(contentEntry, rowRequesters) {
-        val handler: () -> Boolean = {
-            val requester = lastFocusedKey()?.let(rowRequesters::get) ?: rowRequesters.values.firstOrNull()
-            requester?.let {
-                scope.launch { it.requestFocusWithRetry(attempts = EntryFocusAttempts) }
-                true
-            } ?: false
-        }
-        contentEntry.handler = handler
-        onDispose { if (contentEntry.handler === handler) contentEntry.handler = null }
-    }
+    TvScreenFocusEffect(enter = {
+        val requester = lastFocusedKey()?.let(rowRequesters::get) ?: rowRequesters.values.firstOrNull()
+        requester?.tryRequestFocusWithRetry(attempts = EntryFocusAttempts) == true
+    })
 
     val toastTemplatePinned = stringResource(R.string.tv_library_pinned_toast)
     val toastTemplateUnpinned = stringResource(R.string.tv_library_unpinned_toast)

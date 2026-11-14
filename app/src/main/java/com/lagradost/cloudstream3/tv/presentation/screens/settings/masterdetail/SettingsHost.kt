@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocusEffect
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -79,6 +81,16 @@ fun SettingsHost(
         scope.launch { if (!hostState.navigateBackQueued()) onExitSettingsState() }
     }
 
+    // The menu was closed: focus returns to the row it left (the rows of a lazy list all look the same
+    // to Compose's own focus restoring).
+    // Entering: the Dashboard's own content focus does it here.
+    TvScreenFocusEffect(
+        enter = { false },
+        restore = {
+            hostState.focusRestoreRequests += 1
+            true
+        },
+    )
     // Back goes up a level; from the first level it belongs to the Dashboard (it opens the menu).
     BackHandler(enabled = depth > 1) { goBack() }
 
@@ -281,7 +293,7 @@ private fun PanelContent(
             description = screen.description,
             entries = currentData.entries,
             listState = instance.listState,
-            restoreFocusToken = instance.instanceId,
+            restoreFocusToken = instance.instanceId to hostState.focusRestoreRequests,
             autoRequestFocus = isActive && (instance.focusKey != null || hostDepth > 1),
             modifier = modifier,
             resolveFocusedKey = { instance.focusKey },

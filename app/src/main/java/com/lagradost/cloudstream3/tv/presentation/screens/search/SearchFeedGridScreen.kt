@@ -5,13 +5,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.screens.grid.TvShowMoreGridScreen
-import kotlinx.coroutines.flow.flowOf
 
-/** Search "Show more": the shared grid showing the results one source already returned. */
+/** Search "Show more": the shared grid with one source's results, loaded page by page. */
 @Composable
 fun SearchFeedGridScreen(
     onMediaClick: (MediaItemCompat) -> Unit,
@@ -24,9 +22,7 @@ fun SearchFeedGridScreen(
         return
     }
 
-    val pagingItems = remember(section.items) {
-        flowOf(PagingData.from(section.items))
-    }.collectAsLazyPagingItems()
+    val pagingItems = remember(section) { SearchFeedGridSelectionStore.pagingData }.collectAsLazyPagingItems()
 
     TvShowMoreGridScreen(
         title = section.title,
@@ -35,8 +31,5 @@ fun SearchFeedGridScreen(
         focusStore = SearchFeedGridSelectionStore.focus,
         onMediaClick = onMediaClick,
         screenKey = section.id,
-        // The search tab has no restore token of its own; a pending target only exists after
-        // the user opened a title from this grid.
-        restoreFocusToken = 1,
     )
 }

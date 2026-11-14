@@ -31,7 +31,9 @@ import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.focus.TvBackHandler
-import com.lagradost.cloudstream3.tv.presentation.focus.TvInitialFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
+import com.lagradost.cloudstream3.tv.presentation.focus.tryRequestFocus
 import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
@@ -62,17 +64,21 @@ fun SearchScreen(
         sections.indexOfFirst { it.isInteractive || it.state is HomeFeedLoadState.Error }
     }
 
-    // Back from a title / "Show more" grid: focus goes back to the poster that was opened.
-    var restoreTarget by remember {
-        mutableStateOf(viewModel.pendingRestore.also { viewModel.pendingRestore = null })
-    }
-    LaunchedEffect(restoreTarget, sections) {
-        val target = restoreTarget ?: return@LaunchedEffect
-        val index = sections.indexOfFirst { it.id == target.sectionId }
-        if (index >= 0) listState.scrollToItem(index + 1)
-    }
-    val isRestoring = remember { restoreTarget != null }
-    TvInitialFocusEffect(requester = pillFocusRequester, enabled = !isRestoring)
+    // Fresh entry: the field. Coming back (menu closed, Back from a title / "Show more" grid): the row that had
+    // focus, on its remembered poster; the field when focus was never in the results.
+    TvScreenFocusEffect(
+        enter = { pillFocusRequester.tryRequestFocus() },
+        restore = {
+            val sectionIndex = sections.indexOfFirst { it.id == viewModel.lastFocusedSectionId }
+            if (sectionIndex < 0) {
+                pillFocusRequester.tryRequestFocus()
+            } else {
+                // Item 0 is the field, the sections follow it.
+                if (!listState.isItemComposed(sectionIndex + 1)) listState.scrollToItem(sectionIndex + 1)
+                viewModel.sectionGroup(sections[sectionIndex].id).requestFocusWithRetry()
+            }
+        },
+    )
 
     // Results arrive after the IME "search" action, so moving focus down right away is a no-op.
     var focusResultsPending by remember { mutableStateOf(false) }
@@ -102,9 +108,6 @@ fun SearchScreen(
     // Back handler (which sends focus to the top bar) and takes precedence over it.
     if (contentHasFocus && !pillHasFocus) {
         TvBackHandler { pillFocusRequester.requestFocus() }
-    }
-    LaunchedEffect(pillHasFocus) {
-        if (pillHasFocus) listState.animateScrollToItem(0)
     }
 
     val summary = when {
@@ -158,19 +161,15 @@ fun SearchScreen(
                 val isFirstFocusable = sections.getOrNull(firstFocusableIndex)?.id == section.id
                 SearchSection(
                     section = section,
-                    onMediaClick = { item ->
-                        viewModel.pendingRestore = SearchRestoreTarget(section.id, searchItemKey(item))
-                        onMediaClick(item)
-                    },
+                    onMediaClick = onMediaClick,
                     onShowMoreClick = {
-                        viewModel.pendingRestore = SearchRestoreTarget(section.id, SHOW_MORE_KEY)
                         SearchFeedGridSelectionStore.setQuery(uiState.submittedQuery)
                         onOpenFeedGrid(section)
                     },
-                    firstItemFocusRequester = if (isFirstFocusable) firstResultFocusRequester else null,
+                    group = viewModel.sectionGroup(section.id),
+                    entryRequester = if (isFirstFocusable) firstResultFocusRequester else null,
+                    onRowFocused = { viewModel.lastFocusedSectionId = section.id },
                     upFocusRequester = if (section.id == sections.firstOrNull()?.id) pillFocusRequester else null,
-                    restoreItemKey = restoreTarget?.takeIf { it.sectionId == section.id }?.itemKey,
-                    onRestoreConsumed = { restoreTarget = null },
                 )
             }
         }

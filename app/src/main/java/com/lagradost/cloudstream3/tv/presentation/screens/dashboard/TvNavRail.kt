@@ -37,7 +37,8 @@ internal val RailScrimBrush = Brush.horizontalGradient(
 )
 
 // y offsets (dp) from the Navigation board; the rail is drawn, not laid out, so they stay exact.
-private val AvatarTop = 18.dp
+// Centred in the 40 dp profile row of the open menu, which starts at 18 dp.
+private val AvatarTop = 18.dp + (TvDimens.NavMenuProfileHeight - TvDimens.NavRailAvatarSize) / 2
 private val HomeTop = 98.dp
 private val SearchTop = 150.dp
 private val DownloadsTop = 202.dp

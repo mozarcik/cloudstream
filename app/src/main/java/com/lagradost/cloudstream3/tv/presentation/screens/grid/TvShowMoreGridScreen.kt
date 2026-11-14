@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Sort
@@ -22,15 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import com.lagradost.cloudstream3.tv.presentation.focus.requestFocusWithRetry
-import com.lagradost.cloudstream3.tv.presentation.screens.dashboard.LocalDashboardContentEntry
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,7 +60,13 @@ import com.lagradost.cloudstream3.tv.presentation.common.TvFocusedItemTitle
 import com.lagradost.cloudstream3.tv.presentation.common.TvListRow
 import com.lagradost.cloudstream3.tv.presentation.common.TvRowLeading
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.TvFocusGroup
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import com.lagradost.cloudstream3.tv.presentation.focus.TvInitialFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.TvScreenFocusEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
+import com.lagradost.cloudstream3.tv.presentation.focus.tryRequestFocus
 import com.lagradost.cloudstream3.tv.presentation.theme.TvColors
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.theme.TvShapes
@@ -105,38 +105,53 @@ fun TvShowMoreGridScreen(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     sort: TvGridSort? = null,
-    restoreFocusToken: Int = 0,
 ) {
     val gridState = rememberLazyGridState()
-    val firstItemFocusRequester = remember { FocusRequester() }
+    val focusGroup = focusStore.group
+    val firstItemFocusRequester = focusGroup.itemRequester(0)
     val sortButtonFocusRequester = remember { FocusRequester() }
     val retryFocusRequester = remember { FocusRequester() }
 
     var isSortPanelOpen by rememberSaveable(screenKey) { mutableStateOf(false) }
-    var focusFirstItemToken by rememberSaveable(screenKey) { mutableIntStateOf(0) }
+    // Not saved: a screen recreated after Back must not pull focus to the first poster again.
+    var focusFirstItemToken by remember(screenKey) { mutableIntStateOf(0) }
     var initialFocusHandled by rememberSaveable(screenKey) { mutableStateOf(false) }
-    // Focus coming back into the grid (from the menu, or Down from Sort) goes to the poster that had it.
-    var reenterToken by remember { mutableIntStateOf(0) }
-    val coroutineScope = rememberCoroutineScope()
-    fun reenterGrid(): Boolean {
-        if (pagingItems.itemCount == 0) return false
-        if (focusStore.lastIndex != null) {
-            focusStore.scheduleRestoreToLastFocused()
-            reenterToken += 1
-        } else {
-            coroutineScope.launch {
-                gridState.scrollToItem(0)
-                firstItemFocusRequester.requestFocusWithRetry(attempts = 18)
-            }
+    // Set when this screen was opened by Back from a title: the poster that was opened gets focus again.
+    // Captured when the screen is created (focus landing elsewhere meanwhile must not overwrite it in the store).
+    var returnIndex by remember { mutableStateOf(focusStore.lastIndex.takeIf { focusStore.restorePending }) }
+    // While a restore waits for its poster to load, entering the grid is held back (nothing else may take focus).
+    var isRestoring by remember { mutableStateOf(returnIndex != null) }
+    // Back from a title: the poster is focused again (or the wait has run out), the grid is free to be entered.
+    fun finishRestore() {
+        isRestoring = false
+        if (returnIndex != null) {
+            returnIndex = null
+            initialFocusHandled = true
+            focusStore.clearPendingRestore()
         }
-        return true
     }
-    val contentEntry = LocalDashboardContentEntry.current
-    DisposableEffect(contentEntry, focusStore) {
-        val restore: () -> Boolean = { focusStore.lastIndex != null && reenterGrid() }
-        contentEntry.restoreFocus = restore
-        onDispose { if (contentEntry.restoreFocus === restore) contentEntry.restoreFocus = null }
+    // The Dashboard may drop a restore half way (and ask again); the hold must not outlive its time limit.
+    LaunchedEffect(Unit) {
+        if (!isRestoring) return@LaunchedEffect
+        delay(RestoreHoldLimitMs)
+        finishRestore()
     }
+
+    TvScreenFocusEffect(
+        enter = {
+            pagingItems.itemCount > 0 && focusGroup.itemRequester(0).tryRequestFocus()
+        },
+        restore = {
+            val target = returnIndex ?: focusStore.lastIndex
+            if (target == null) {
+                pagingItems.itemCount > 0 && focusGroup.itemRequester(0).tryRequestFocus()
+            } else {
+                restoreFocus(pagingItems, gridState, focusGroup, target).also { restored ->
+                    if (restored) finishRestore()
+                }
+            }
+        },
+    )
 
     val focusedItem = remember { mutableStateOf<MediaItemCompat?>(null) }
     val subtitleStyle = SpanStyle(
@@ -158,9 +173,6 @@ fun TvShowMoreGridScreen(
     val refresh = pagingItems.loadState.refresh
     val isRefreshError = itemCount == 0 && refresh is LoadState.Error
     val isEmpty = itemCount == 0 && refresh is LoadState.NotLoading
-    val hasRestoreTarget = restoreFocusToken > 0 && focusStore.pendingRestoreTargetId != null
-
-
     // The sort order changed: start again from the top.
     LaunchedEffect(sort?.selectedId) {
         if (initialFocusHandled) gridState.scrollToItem(0)
@@ -169,7 +181,7 @@ fun TvShowMoreGridScreen(
     TvInitialFocusEffect(
         requester = firstItemFocusRequester,
         key = screenKey,
-        enabled = itemCount > 0 && !hasRestoreTarget && !initialFocusHandled && !isSortPanelOpen,
+        enabled = itemCount > 0 && returnIndex == null && !initialFocusHandled && !isSortPanelOpen,
         onFocused = { initialFocusHandled = true },
     )
     FocusRequestEffect(
@@ -221,11 +233,7 @@ fun TvShowMoreGridScreen(
                     onClick = { isSortPanelOpen = true },
                     modifier = Modifier
                         .focusRequester(sortButtonFocusRequester)
-                        .focusProperties { up = FocusRequester.Cancel }
-                        // The poster below may be scrolled out of the grid: bring it back first.
-                        .onPreviewKeyEvent { event ->
-                            event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown && reenterGrid()
-                        },
+                        .focusProperties { up = FocusRequester.Cancel },
                 )
             }
         }
@@ -257,20 +265,11 @@ fun TvShowMoreGridScreen(
                 },
                 onItemFocused = { item, index ->
                     focusedItem.value = item
-                    focusStore.onItemFocused(item, index)
+                    focusStore.onItemFocused(index)
                 },
-                targetIdOf = focusStore::targetId,
-                firstItemFocusRequester = firstItemFocusRequester,
+                focusGroup = focusGroup,
+                holdEntry = { isRestoring },
                 upFocusRequester = if (sort != null) sortButtonFocusRequester else FocusRequester.Cancel,
-                restore = TvGridRestore(
-                    targetId = focusStore.pendingRestoreTargetId,
-                    index = focusStore.pendingRestoreIndex,
-                    token = restoreFocusToken + reenterToken,
-                    onConsumed = { targetId ->
-                        initialFocusHandled = true
-                        focusStore.clearPendingRestore(targetId)
-                    },
-                ),
                 modifier = Modifier
                     .fillMaxSize()
                     .onFocusChanged { state -> if (!state.hasFocus) focusedItem.value = null },
@@ -303,6 +302,8 @@ fun TvShowMoreGridScreen(
             sort = sort,
             onSelected = { id ->
                 sort.onSelected(id)
+                // The old poster is somewhere else in the new order: focus comes back at the top.
+                focusStore.onItemFocused(0)
                 isSortPanelOpen = false
                 focusFirstItemToken += 1
             },
@@ -358,3 +359,41 @@ private fun TvGridSortPanel(
         }
     }
 }
+
+/**
+ * Focus on the poster at [target]: wait until it is loaded (scrolling to the end loads more pages; the pages
+ * start from zero after Back from a title), scroll to it when it is not on screen, then one request on the
+ * group. The Dashboard limits how long this may take.
+ */
+private suspend fun restoreFocus(
+    pagingItems: LazyPagingItems<MediaItemCompat>,
+    gridState: LazyGridState,
+    focusGroup: TvFocusGroup,
+    target: Int,
+): Boolean {
+    var index = target
+    while (true) {
+        val count = snapshotFlow { pagingItems.itemCount }.first { it > 0 }
+        if (index < count) break
+        if (pagingItems.loadState.append.endOfPaginationReached) {
+            index = count - 1
+            break
+        }
+        gridState.scrollToItem(count - 1)
+        // The next page, or a moment later another try (an append error ends in the Dashboard's time limit).
+        withTimeoutOrNull(LoadMoreWaitMs) { snapshotFlow { pagingItems.itemCount }.first { it > count } }
+    }
+    focusGroup.lastIndex = index
+    if (!gridState.isItemComposed(index)) {
+        gridState.scrollToItem(index)
+        // The group enters on the remembered poster only once it is composed.
+        withTimeoutOrNull(LoadMoreWaitMs) {
+            snapshotFlow { gridState.isItemComposed(index) && pagingItems.peek(index) != null }.first { it }
+        }
+    }
+    return focusGroup.requestFocusWithRetry()
+}
+
+private const val LoadMoreWaitMs = 1_500L
+/** Longer than the Dashboard waits for a restore (8 s), so the hold is never what ends it. */
+private const val RestoreHoldLimitMs = 10_000L

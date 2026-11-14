@@ -9,7 +9,7 @@ object LibraryFeedGridSelectionStore {
     private val _selectedSection = MutableStateFlow<LibrarySectionUiState?>(null)
     val selectedSection: StateFlow<LibrarySectionUiState?> = _selectedSection.asStateFlow()
 
-    val focus = TvGridFocusStore(keyPrefix = "library_feed_grid")
+    val focus = TvGridFocusStore()
 
     /** Account / provider the list belongs to, shown next to the list name. */
     var accountName: String? = null

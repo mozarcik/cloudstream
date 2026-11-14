@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -39,6 +40,9 @@ class SettingsHostState(
 
     /** Content of the right-hand info panel (QR code, ...) set by the active level; null = empty panel. */
     var infoPanel: (@Composable () -> Unit)? by mutableStateOf(null)
+
+    /** Bumped to put focus back on the active panel's remembered row (the menu was closed). */
+    var focusRestoreRequests by mutableIntStateOf(0)
 
     var navigationDirection by mutableStateOf(SettingsNavigationDirection.Forward)
         private set

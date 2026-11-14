@@ -12,8 +12,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -26,21 +24,14 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.common.TvButton
 import com.lagradost.cloudstream3.tv.presentation.common.tvSkeleton
-import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
+import com.lagradost.cloudstream3.tv.presentation.focus.TvFocusGroup
+import com.lagradost.cloudstream3.tv.presentation.focus.isItemComposed
 import com.lagradost.cloudstream3.tv.presentation.screens.home.FeedPosterCard
 import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.theme.TvShapes
 
 private const val PlaceholderKeyBase = Long.MIN_VALUE
 private val GridPosterShape = TvShapes.Card
-
-/** Where focus should return to after Back from a details screen. */
-internal class TvGridRestore(
-    val targetId: String?,
-    val index: Int?,
-    val token: Int,
-    val onConsumed: (String) -> Unit,
-)
 
 /**
  * The 6-column poster grid shared by every "Show more" screen. Content always comes from
@@ -56,40 +47,12 @@ internal fun TvMediaGrid(
     gridState: LazyGridState,
     onMediaClick: (MediaItemCompat) -> Unit,
     onItemFocused: (MediaItemCompat, Int) -> Unit,
-    targetIdOf: (MediaItemCompat) -> String,
-    firstItemFocusRequester: FocusRequester,
-    restore: TvGridRestore,
+    focusGroup: TvFocusGroup,
+    holdEntry: () -> Boolean,
     modifier: Modifier = Modifier,
     upFocusRequester: FocusRequester? = null,
 ) {
     val itemCount = pagingItems.itemCount
-    val restoreRequester = remember { FocusRequester() }
-
-    val restoreIndex = remember(itemCount, restore.targetId, restore.index, restore.token) {
-        val target = restore.targetId
-        if (restore.token <= 0 || target == null) {
-            null
-        } else {
-            restore.index?.takeIf { index ->
-                index < itemCount && pagingItems.peek(index)?.let(targetIdOf) == target
-            } ?: (0 until itemCount).firstOrNull { index ->
-                pagingItems.peek(index)?.let(targetIdOf) == target
-            }
-        }
-    }
-
-    LaunchedEffect(restoreIndex, restore.token) {
-        restoreIndex?.let { index -> gridState.scrollToItem(index) }
-    }
-
-    FocusRequestEffect(
-        requester = if (restoreIndex == 0) firstItemFocusRequester else restoreRequester,
-        requestKey = Triple(restore.token, restore.targetId, restoreIndex),
-        enabled = restoreIndex != null,
-        attempts = TvDimens.FocusRestoreAttempts,
-        retryDelayMs = TvDimens.FocusRestoreRetryMs,
-        onFocused = { restore.targetId?.let(restore.onConsumed) },
-    )
 
     val showSkeleton = itemCount == 0 && pagingItems.loadState.refresh is LoadState.Loading
     val append = pagingItems.loadState.append
@@ -106,7 +69,17 @@ internal fun TvMediaGrid(
         ),
         horizontalArrangement = Arrangement.spacedBy(TvDimens.GridColumnGap),
         verticalArrangement = Arrangement.spacedBy(TvDimens.GridRowGap),
-        modifier = modifier,
+        modifier = modifier
+            .let { base ->
+                with(focusGroup) {
+                    // The remembered poster must be on screen and loaded; otherwise entering is held back
+                    // while a restore waits for its page.
+                    base.tvFocusGroup(
+                        isItemComposed = { index -> gridState.isItemComposed(index) && pagingItems.peek(index) != null },
+                        hold = holdEntry,
+                    )
+                }
+            },
     ) {
         if (showSkeleton) {
             items(count = TvDimens.GridSkeletonCount, contentType = { "skeleton" }) {
@@ -128,11 +101,6 @@ internal fun TvMediaGrid(
             if (item == null) {
                 PosterSkeleton(Modifier.fillMaxWidth())
             } else {
-                val requester = when (index) {
-                    0 -> firstItemFocusRequester
-                    restoreIndex -> restoreRequester
-                    else -> null
-                }
                 FeedPosterCard(
                     item = item,
                     onClick = { onMediaClick(item) },
@@ -146,7 +114,7 @@ internal fun TvMediaGrid(
                                 up = upFocusRequester
                             }
                         }
-                        .then(if (requester != null) Modifier.focusRequester(requester) else Modifier),
+                        .focusRequester(focusGroup.itemRequester(index)),
                 )
             }
         }

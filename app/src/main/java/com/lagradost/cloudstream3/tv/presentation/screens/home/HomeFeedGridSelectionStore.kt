@@ -10,7 +10,7 @@ object HomeFeedGridSelectionStore {
     private val _selectedFeed = MutableStateFlow<FeedCategory?>(null)
     val selectedFeed: StateFlow<FeedCategory?> = _selectedFeed.asStateFlow()
 
-    val focus = TvGridFocusStore(keyPrefix = "home_feed_grid")
+    val focus = TvGridFocusStore()
 
     fun setSelectedFeed(feed: FeedCategory) {
         focus.reset()

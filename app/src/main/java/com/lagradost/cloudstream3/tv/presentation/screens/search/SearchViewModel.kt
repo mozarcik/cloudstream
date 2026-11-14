@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.APIHolder.apis
 import com.lagradost.cloudstream3.mvvm.Resource
 import com.lagradost.cloudstream3.tv.compat.home.SearchResponseMapper.toMediaItemCompat
+import com.lagradost.cloudstream3.tv.presentation.focus.TvFocusGroup
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedLoadState
 import com.lagradost.cloudstream3.ui.APIRepository
 import kotlinx.coroutines.CancellationException
@@ -26,8 +27,18 @@ class SearchViewModel : ViewModel() {
         }
     }
 
-    /** Poster/"Show more" the user opened; the screen puts focus back on it after Back. Read once. */
-    var pendingRestore: SearchRestoreTarget? = null
+    private val sectionGroups = HashMap<String, TvFocusGroup>()
+
+    /** Focus memory of one source's result row (which slot had focus); lives as long as the results. */
+    fun sectionGroup(sectionId: String): TvFocusGroup = sectionGroups.getOrPut(sectionId) { TvFocusGroup() }
+
+    /** Source whose row had focus last, or null when focus has not been in the results since the last search. */
+    var lastFocusedSectionId: String? = null
+
+    private fun forgetFocus() {
+        sectionGroups.clear()
+        lastFocusedSectionId = null
+    }
 
     private val _uiState = MutableStateFlow(SearchScreenUiState())
     val uiState = _uiState.asStateFlow()
@@ -42,6 +53,7 @@ class SearchViewModel : ViewModel() {
         val normalizedQuery = _uiState.value.query.trim()
 
         if (normalizedQuery.isBlank()) {
+            forgetFocus()
             searchJob?.cancel()
             _uiState.update { state ->
                 state.copy(
@@ -59,6 +71,7 @@ class SearchViewModel : ViewModel() {
             return
         }
 
+        forgetFocus()
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             performSearch(normalizedQuery)
@@ -115,13 +128,15 @@ class SearchViewModel : ViewModel() {
             availableRepositories.forEach { repository ->
                 launch(Dispatchers.IO) {
                     try {
+                        val (sectionState, hasNext) = resolveSectionState(
+                            repository = repository,
+                            query = query,
+                        )
                         updateSectionState(
                             query = query,
                             sectionId = repository.name,
-                            sectionState = resolveSectionState(
-                                repository = repository,
-                                query = query,
-                            ),
+                            sectionState = sectionState,
+                            hasNext = hasNext,
                         )
                     } catch (error: CancellationException) {
                         throw error
@@ -150,16 +165,16 @@ class SearchViewModel : ViewModel() {
     private suspend fun resolveSectionState(
         repository: APIRepository,
         query: String,
-    ): HomeFeedLoadState {
+    ): Pair<HomeFeedLoadState, Boolean> {
         return when (val response = repository.search(query = query, page = 1)) {
             is Resource.Success -> HomeFeedLoadState.Success(
                 response.value.items.map { item ->
                     item.toMediaItemCompat()
                 }.toPersistentList()
-            )
+            ) to response.value.hasNext
 
-            is Resource.Failure -> HomeFeedLoadState.Error
-            is Resource.Loading -> HomeFeedLoadState.Loading
+            is Resource.Failure -> HomeFeedLoadState.Error to false
+            is Resource.Loading -> HomeFeedLoadState.Loading to false
         }
     }
 
@@ -167,6 +182,7 @@ class SearchViewModel : ViewModel() {
         query: String,
         sectionId: String,
         sectionState: HomeFeedLoadState,
+        hasNext: Boolean = false,
     ) {
         _uiState.update { state ->
             if (state.submittedQuery != query) {
@@ -187,7 +203,7 @@ class SearchViewModel : ViewModel() {
 
             val updatedSections = state.sections.set(
                 index = sectionIndex,
-                element = currentSection.copy(state = sectionState)
+                element = currentSection.copy(state = sectionState, hasNext = hasNext)
             )
 
             state.copy(

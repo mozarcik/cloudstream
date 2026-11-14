@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -23,6 +24,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
+import com.lagradost.cloudstream3.tv.presentation.theme.TvDimens
 import com.lagradost.cloudstream3.tv.presentation.screens.downloads.DownloadMediaType
 import com.lagradost.cloudstream3.tv.presentation.screens.downloads.DownloadsScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.home.HomeFeedGridScreen
@@ -85,9 +87,6 @@ internal fun DashboardScreen(
             openMediaDetailsScreen = openMediaDetailsScreen,
             openTmdbLibraryDetailsScreen = openTmdbLibraryDetailsScreen,
             openVideoPlayer = openVideoPlayer,
-            homeRestoreFocusToken = bodyContext.homeRestoreFocusToken,
-            homeFeedGridRestoreFocusToken = bodyContext.homeFeedGridRestoreFocusToken,
-            libraryFeedGridRestoreFocusToken = bodyContext.libraryFeedGridRestoreFocusToken,
             homeContentRefreshToken = bodyContext.homeContentRefreshToken,
             goHomeAndEnterContent = bodyContext.goHomeAndEnterContent,
             libraryMenu = bodyContext.libraryMenu,
@@ -105,9 +104,6 @@ private fun Body(
     openMediaDetailsScreen: (media: MediaItemCompat.Other) -> Unit,
     openTmdbLibraryDetailsScreen: (item: MediaItemCompat) -> Boolean,
     openVideoPlayer: (url: String, apiName: String, playbackTarget: PlayerStartTarget) -> Unit,
-    homeRestoreFocusToken: Int,
-    homeFeedGridRestoreFocusToken: Int,
-    libraryFeedGridRestoreFocusToken: Int,
     homeContentRefreshToken: Int,
     goHomeAndEnterContent: () -> Unit,
     libraryMenu: TvLibraryMenuViewModel,
@@ -164,7 +160,6 @@ private fun Body(
                         HomeFeedGridSelectionStore.setSelectedFeed(feed)
                         navController.navigate(Screens.HomeFeedGrid())
                     },
-                    restoreFocusToken = homeRestoreFocusToken
                 )
             }
         }
@@ -188,16 +183,21 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                restoreFocusToken = homeFeedGridRestoreFocusToken
             )
         }
         dashboardComposable(Screens.Library()) {
             val state by libraryMenu.listsUiState.collectAsStateWithLifecycle()
             LibraryListsScreen(
                 state = state,
-                lastFocusedKey = { libraryMenu.lastFocusedListKey },
-                onFocusedKey = { libraryMenu.lastFocusedListKey = it },
-                onOpenList = openLibraryListGrid,
+                lastFocusedKey = { libraryMenu.openedListKey ?: libraryMenu.lastFocusedListKey },
+                onFocusedKey = { key ->
+                    libraryMenu.lastFocusedListKey = key
+                    if (libraryMenu.openedListKey == key) libraryMenu.openedListKey = null
+                },
+                onOpenList = { providerName, listKey ->
+                    libraryMenu.openedListKey = listKey
+                    openLibraryListGrid(providerName, listKey)
+                },
                 onTogglePin = libraryMenu::togglePin,
             )
         }
@@ -222,7 +222,6 @@ private fun Body(
                 onBack = {
                     navController.popBackStack()
                 },
-                restoreFocusToken = libraryFeedGridRestoreFocusToken
             )
         }
         dashboardComposable(Screens.Downloads()) {
@@ -344,6 +343,8 @@ fun DashboardSettingsRouteScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            // The panels start after the nav rail, like the content of every other screen.
+            .padding(start = TvDimens.RailWidth)
     ) {
         MasterDetailSettingsScreen(
             onExitSettings = onExitSettings,
