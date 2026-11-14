@@ -103,6 +103,12 @@ internal fun PlayerPlaybackContent(
                     }
                     return@onPreviewKeyEvent true
                 }
+                // The Back key down is swallowed with the focus while the sync/audio/video panel is open, so
+                // BackHandler never fires (the panel stayed open): close it here, on key up like Up next.
+                if (event.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_BACK && hasRuntimePanelOpen(runtimeTracksState)) {
+                    if (event.type == KeyEventType.KeyUp) closeRuntimePanelOnBack(runtimeTracksState)
+                    return@onPreviewKeyEvent true
+                }
                 handlePlayerPreviewKeyEvent(
                     event = event,
                     previewKeyState = previewKeyState,

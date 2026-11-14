@@ -166,8 +166,6 @@ internal fun PlayerPlaybackLoadEffect(
     var lastLoadedSubtitleDelayMs by remember { mutableStateOf<Long?>(null) }
     var lastLoadedStartPositionMs by remember { mutableStateOf<Long?>(null) }
     var lastLoadedPlayWhenReady by remember { mutableStateOf<Boolean?>(null) }
-    val startPositionMs = playbackRestoreRequest?.positionMs ?: defaultPlayerPositionMs
-    val startPlayWhenReady = playbackRestoreRequest?.playWhenReady ?: defaultPlayerPlayWhenReady
 
     LaunchedEffect(
         state.link.url,
@@ -175,6 +173,14 @@ internal fun PlayerPlaybackLoadEffect(
         playbackRestoreRequestKey,
     ) {
         val isLinkChanged = lastLoadedLinkUrl != state.link.url
+        // Same link, no captured request (auto-selected / loaded subtitles): continue from the player,
+        // not from the resume point the episode was opened with (it can be tens of minutes behind).
+        val player = playerSessionController.player
+        val continueFromPlayer = playbackRestoreRequest == null && !isLinkChanged && player.mediaItemCount > 0
+        val startPositionMs = playbackRestoreRequest?.positionMs
+            ?: if (continueFromPlayer) player.currentPosition.coerceAtLeast(0L) else defaultPlayerPositionMs
+        val startPlayWhenReady = playbackRestoreRequest?.playWhenReady
+            ?: if (continueFromPlayer) player.playWhenReady else defaultPlayerPlayWhenReady
         val isSubtitleChanged = lastLoadedSubtitleId != selectedSubtitleId
         val isSubtitleDelayChanged = lastLoadedSubtitleDelayMs != initialSubtitleDelayMs
         val isStartPositionChanged = lastLoadedStartPositionMs != startPositionMs

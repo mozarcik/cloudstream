@@ -16,9 +16,7 @@ internal fun PlayerPlaybackBackHandler(
     BackHandler {
         when {
             overlayState.sourceErrorDialogEffect != null -> overlayState.sourceErrorDialogEffect = null
-            runtimeTracksState.subtitleSyncPanelVisible -> runtimeTracksState.subtitleSyncPanelVisible = false
-            runtimeTracksState.audioPanelVisible -> runtimeTracksState.audioPanelVisible = false
-            runtimeTracksState.videoPanelVisible -> runtimeTracksState.videoPanelVisible = false
+            closeRuntimePanelOnBack(runtimeTracksState) -> Unit
             activePanel == TvPlayerSidePanel.Subtitles && actions.onSubtitlesSidePanelBackPressed() -> Unit
             activePanel != TvPlayerSidePanel.None -> actions.onClosePanel()
             // Back hides visible controls in every state (playing, paused, buffering).
@@ -30,4 +28,26 @@ internal fun PlayerPlaybackBackHandler(
             else -> actions.onBackPressed()
         }
     }
+}
+
+internal fun hasRuntimePanelOpen(runtimeTracksState: PlayerRuntimeTracksStateHolder): Boolean =
+    runtimeTracksState.subtitleSyncPanelVisible ||
+        runtimeTracksState.audioPanelVisible ||
+        runtimeTracksState.videoPanelVisible
+
+/** Closes the open sync / audio / video panel; false when none is open. */
+internal fun closeRuntimePanelOnBack(runtimeTracksState: PlayerRuntimeTracksStateHolder): Boolean = when {
+    runtimeTracksState.subtitleSyncPanelVisible -> {
+        runtimeTracksState.subtitleSyncPanelVisible = false
+        true
+    }
+    runtimeTracksState.audioPanelVisible -> {
+        runtimeTracksState.audioPanelVisible = false
+        true
+    }
+    runtimeTracksState.videoPanelVisible -> {
+        runtimeTracksState.videoPanelVisible = false
+        true
+    }
+    else -> false
 }
