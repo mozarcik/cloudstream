@@ -1063,4 +1063,5 @@
     <string name="tv_library_empty_list_title">This list is empty</string>
     <string name="tv_library_empty_list_message">Add titles from a movie or series details screen.</string>
     <string name="tv_library_no_lists_message">Sign in to a library account to see its lists.</string>
+    <string name="installed_plugins">Installed plugins</string>
 </resources>
