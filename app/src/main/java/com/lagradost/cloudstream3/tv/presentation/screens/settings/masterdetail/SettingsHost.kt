@@ -166,12 +166,12 @@ fun SettingsHost(
                     )
                 }
             } else {
-                // Nothing to preview: an empty info panel (alpha 1, Preview background).
+                // Nothing to preview: an empty info panel (alpha 1, preview background).
                 Box(
                     Modifier
                         .width(TvDimens.SettingsPaneWidth)
                         .fillMaxHeight()
-                        .background(TvColors.Preview)
+                        .background(TvColors.SettingsPanePreview)
                 ) {
                     hostState.infoPanel?.invoke()
                 }
@@ -208,7 +208,7 @@ private fun SettingsPanel(
     // A new preview fades in; panels that are created active (root) start fully visible.
     val alpha = remember(instance.instanceId) { Animatable(if (isPreview) 0f else 1f) }
     val background = remember(instance.instanceId) {
-        ColorAnimatable(if (isPreview) TvColors.Preview else TvColors.Card)
+        ColorAnimatable(if (isPreview) TvColors.SettingsPanePreview else TvColors.SettingsPaneActive)
     }
     LaunchedEffect(isPreview) {
         if (isPreview) {
@@ -222,7 +222,7 @@ private fun SettingsPanel(
     }
     LaunchedEffect(isPreview) {
         background.animateTo(
-            if (isPreview) TvColors.Preview else TvColors.Card,
+            if (isPreview) TvColors.SettingsPanePreview else TvColors.SettingsPaneActive,
             tween(TvDimens.SettingsPanelColorMs, easing = SettingsHostTokens.SettleEasing)
         )
     }

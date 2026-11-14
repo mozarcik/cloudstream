@@ -23,6 +23,9 @@ object TvColors {
     val Card = CsColors.Card
     val Panel = Color(0xFF171A21)
     val Preview = CsColors.Preview
+    /** Settings master-detail: the active pane is lifted from the Ground, the preview pane is the Ground itself. */
+    val SettingsPaneActive = Panel
+    val SettingsPanePreview = Ground
     val PosterPlaceholder = Color(0xFF1E222B)
     val Skeleton = Color(0xFF1C2028)
     val DialogSurface = Color(0xFF22262F)
