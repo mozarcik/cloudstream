@@ -708,8 +708,8 @@ object TvDimens {
     val PlayerTitleMaxWidth = 530.dp
     /** Top mask behind the title block: 340 px high, black 78% fading to 0. */
     val PlayerTopGradientHeight = 170.dp
-    /** Timeline time labels: reserved width so the bar does not move when the duration appears. */
-    val PlayerTimeLabelMinWidth = 72.dp
+    /** Timeline time labels: the width of the longest label plus this padding; the bar takes the rest. */
+    val PlayerTimeLabelPadding = 8.dp
     /** Custom subtitle-delay dialog (mockup PlayerErrors): 583 dp wide, 96 dp from the top. */
     val PlayerDelayDialogWidth = 583.dp
     val PlayerDelayDialogTop = 96.dp

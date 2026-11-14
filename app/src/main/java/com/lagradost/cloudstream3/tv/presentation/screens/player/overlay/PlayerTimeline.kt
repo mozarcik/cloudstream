@@ -1,6 +1,5 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.player.overlay
 
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.res.stringResource
 import com.lagradost.cloudstream3.R
 import androidx.compose.foundation.focusable
@@ -44,7 +43,9 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.presentation.screens.player.PlaybackTimelineUiState
@@ -73,6 +74,9 @@ internal fun PlaybackTimelineSection(
         updateIntervalMs = 500L,
     )
 
+    // Both labels get the width of the longest text they can show (the full duration), the bar gets the rest.
+    val timeLabelWidth = rememberTimeLabelWidth(timelineState.value.durationMs)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -85,8 +89,9 @@ internal fun PlaybackTimelineSection(
             style = TvTextStyles.PlayerTime,
             color = TvColors.Text,
             maxLines = 1,
-            // Reserved width: the bar must not jump when the total duration becomes known.
-            modifier = Modifier.widthIn(min = TvDimens.PlayerTimeLabelMinWidth),
+            // Reserved width, text next to the bar: no gap between the time and the bar.
+            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+            modifier = Modifier.width(timeLabelWidth),
         )
         PlaybackTimeline(
             state = timelineState,
@@ -103,9 +108,25 @@ internal fun PlaybackTimelineSection(
             style = TvTextStyles.PlayerTime,
             color = TvColors.PlayerValue,
             maxLines = 1,
-            textAlign = androidx.compose.ui.text.style.TextAlign.End,
-            modifier = Modifier.widthIn(min = TvDimens.PlayerTimeLabelMinWidth),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+            modifier = Modifier.width(timeLabelWidth),
         )
+    }
+}
+
+/** Width of the widest time label (the remaining time with the sign) plus a light padding. */
+@Composable
+private fun rememberTimeLabelWidth(durationMs: Long): Dp {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(durationMs, measurer, density) {
+        // Unknown duration: an episode under an hour ("−00:00"); digits are measured as the widest ones.
+        val template = formatRemainingTime(positionMs = 0L, durationMs = durationMs)
+            .ifEmpty { "−00:00" }
+            .map { if (it.isDigit()) '0' else it }
+            .joinToString("")
+        val widthPx = measurer.measure(template, TvTextStyles.PlayerTime, maxLines = 1).size.width
+        with(density) { widthPx.toDp() } + TvDimens.PlayerTimeLabelPadding
     }
 }
 
