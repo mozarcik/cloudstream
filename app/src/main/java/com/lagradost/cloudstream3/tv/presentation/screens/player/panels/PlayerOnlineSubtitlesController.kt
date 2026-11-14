@@ -183,7 +183,8 @@ internal class PlayerOnlineSubtitlesController(
             subtitleLanguageOptions = subtitleLanguageOptions,
             loginRequiredProviders = subtitleProviders
                 .filter { provider -> !provider.isAvailable }
-                .map { provider -> provider.name },
+                .map { provider -> provider.name }
+                .distinct(),
             stringResolver = stringResolver,
         )
         navigationState = consumeOnlineSubtitlesNavigationFocusState(navigationState)

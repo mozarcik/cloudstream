@@ -6,6 +6,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.tv.material3.MaterialTheme
 import com.lagradost.cloudstream3.R
@@ -47,7 +49,10 @@ class PlayerSubtitleSyncPanelBackTest {
         waitForCount(panelTitle, expected = 0)
     }
 
-    /** The "Custom value" dialog is a separate window: the first Back closes it, the second the panel. */
+    /**
+     * The "Custom value" dialog is a separate window: Back closes it first, then the panel. The dialog focuses its
+     * number field, which opens the soft keyboard, and Back hides that keyboard before it reaches the dialog.
+     */
     @Test
     fun backKeyClosesCustomValueDialogFirstThenSyncPanel() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -60,6 +65,12 @@ class PlayerSubtitleSyncPanelBackTest {
         )[0].performClick()
         waitForCount(dialogTitle, expected = 1)
         Thread.sleep(1_000)
+
+        if (isKeyboardVisible()) {
+            pressBack()
+            composeRule.waitUntil(timeoutMillis = 5_000) { !isKeyboardVisible() }
+            assertTrue("Back hiding the keyboard must keep the dialog", count(dialogTitle) == 1)
+        }
 
         pressBack()
         waitForCount(dialogTitle, expected = 0)
@@ -78,6 +89,10 @@ class PlayerSubtitleSyncPanelBackTest {
         composeRule.waitUntil(timeoutMillis = 5_000) { count(text) == expected }
         assertTrue("\"$text\" nodes: expected $expected, was ${count(text)}", count(text) == expected)
     }
+
+    private fun isKeyboardVisible(): Boolean = ViewCompat
+        .getRootWindowInsets(composeRule.activity.window.decorView)
+        ?.isVisible(WindowInsetsCompat.Type.ime()) == true
 
     private fun pressBack() {
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)

@@ -105,6 +105,8 @@ class ProviderAccountScreenNavigationTest {
             }
         }
 
+        // The screen loads its state asynchronously: wait for the action instead of racing the first frame.
+        waitUntilNodeExists(ProviderAccountPrimaryActionTag)
         composeRule.onNodeWithTag(ProviderAccountPrimaryActionTag)
             .performSemanticsAction(SemanticsActions.OnClick)
         waitUntilNodeExists(ProviderAccountUsernameFieldTag)

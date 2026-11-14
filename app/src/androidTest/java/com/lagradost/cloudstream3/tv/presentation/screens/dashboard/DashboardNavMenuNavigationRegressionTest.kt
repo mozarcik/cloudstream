@@ -20,6 +20,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
+import com.lagradost.cloudstream3.ui.settings.appLanguages
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.settingsEntryTestTag
 import org.junit.Rule
 import org.junit.Test
@@ -221,6 +222,7 @@ class DashboardNavMenuNavigationRegressionTest {
         support.waitUntilNodeFocused(settingsEntryTestTag("general_app_language"))
 
         support.pressKeyOn(settingsEntryTestTag("general_app_language"), Key.DirectionRight)
-        support.waitUntilNodeExists(settingsEntryTestTag("general_language_en"))
+        // The list is lazy and opens at the top: wait for its first row, not for a language further down.
+        support.waitUntilNodeExists(settingsEntryTestTag("general_language_${appLanguages.first().second}"))
     }
 }

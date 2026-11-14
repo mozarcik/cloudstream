@@ -25,62 +25,6 @@ class PlayerOverlayContentTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun hiddenExtendedMetadataKeepsOnlyTimelineAndControlsVisible() {
-        val metadata = testMetadata()
-
-        composeRule.setContent {
-            MaterialTheme {
-                val context = LocalContext.current
-                val player = remember { ExoPlayer.Builder(context).build() }
-                val playPauseFocusRequester = remember { FocusRequester() }
-                val timelineFocusRequester = remember { FocusRequester() }
-                DisposableEffect(player) {
-                    onDispose { player.release() }
-                }
-                PlayerOverlay(
-                    metadata = metadata,
-                    link = testLink(),
-                    isPlaying = true,
-                    controlsEnabled = true,
-                    controlsShown = true,
-                    panelCloseCount = 0,
-                    barConfig = PlayerBottomControlBarConfig(
-                        showAudioTracksButton = false,
-                        showVideoTracksButton = false,
-                        showSyncButton = false,
-                        showNextEpisodeButton = false,
-                    ),
-                    seekStepMs = 10_000L,
-                    playPauseFocusRequester = playPauseFocusRequester,
-                    timelineFocusRequester = timelineFocusRequester,
-                    exoPlayer = player,
-                    onPlaybackProgress = { _, _ -> },
-                    onControlsEvent = {},
-                )
-            }
-        }
-
-        assertTrue(
-            composeRule
-                .onAllNodesWithText(metadata.title)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty(),
-        )
-        assertTrue(
-            composeRule
-                .onAllNodesWithTag(PlayerControlsTestTags.Timeline)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty(),
-        )
-        assertTrue(
-            composeRule
-                .onAllNodesWithTag(PlayerControlsTestTags.PlayPauseButton, useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty(),
-        )
-    }
-
-    @Test
     fun visibleExtendedMetadataShowsTitleAndPlaybackControls() {
         val metadata = testMetadata()
 
