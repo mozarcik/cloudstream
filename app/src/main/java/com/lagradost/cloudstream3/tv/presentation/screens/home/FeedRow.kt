@@ -1,6 +1,14 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.Image
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
@@ -27,7 +35,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.outlined.ViewAgenda
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -155,6 +162,7 @@ internal fun FeedRow(
 
             HomeFeedLoadState.Error -> FeedEmptyBox(
                 title = stringResource(R.string.tv_feed_error_title),
+                illustration = R.drawable.tv_empty_error,
                 isInteractive = isInteractive,
                 focusRequester = rowFocusRequester,
                 upFocusRequester = upFocusRequester,
@@ -167,6 +175,7 @@ internal fun FeedRow(
                 if (posters.isEmpty()) {
                     FeedEmptyBox(
                         title = stringResource(R.string.tv_feed_empty_title),
+                        illustration = R.drawable.tv_empty_empty_list,
                         isInteractive = isInteractive,
                         focusRequester = rowFocusRequester,
                         upFocusRequester = upFocusRequester,
@@ -499,10 +508,11 @@ private fun FeedRowPlaceholder() {
     }
 }
 
-/** Empty / failed feed: dashed box that takes focus; OK reloads. */
+/** Empty / failed feed (mockup "16 · Home"): dashed box that takes focus; OK reloads. */
 @Composable
 private fun FeedEmptyBox(
     title: String,
+    @DrawableRes illustration: Int,
     isInteractive: Boolean,
     focusRequester: FocusRequester,
     upFocusRequester: FocusRequester?,
@@ -510,14 +520,11 @@ private fun FeedEmptyBox(
     onClick: () -> Unit,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-    val dashColor = TvColors.BorderChip
-    val density = LocalDensity.current
+    val focused = interactionSource.collectIsFocusedAsState()
     Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .padding(start = TvDimens.HomeContentPadding, end = TvDimens.ScreenHorizontalPadding)
+            .padding(start = TvDimens.HomeContentPadding, end = TvDimens.FeedEmptyEndPadding)
             .fillMaxWidth()
             .height(TvDimens.FeedRowEmptyHeight)
             .focusRequester(focusRequester)
@@ -533,18 +540,30 @@ private fun FeedEmptyBox(
                     else -> false
                 }
             }
-            .tvCardFocus(focused = focused, scale = 1f)
-            .background(TvColors.Panel, TvShapes.Card)
+            .background(TvColors.Panel, TvShapes.FeedEmpty)
             .drawBehind {
-                val stroke = with(density) { 1.dp.toPx() }
+                // Dashes are drawn inside the box edge (inner stroke), the ring outside it; focus is read here, in the draw phase.
+                val stroke = TvDimens.FeedEmptyStroke.toPx()
+                val dash = TvDimens.FeedEmptyDash.toPx()
+                val radius = TvDimens.FeedEmptyRadius.toPx()
                 drawRoundRect(
-                    color = dashColor,
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(with(density) { TvDimens.CardRadius.toPx() }),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(
-                        width = stroke,
-                        pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(stroke * 8, stroke * 6)),
-                    ),
+                    color = TvColors.FeedEmptyBorder,
+                    topLeft = Offset(stroke / 2f, stroke / 2f),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius(radius - stroke / 2f),
+                    style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, dash))),
                 )
+                if (focused.value) {
+                    val ringWidth = TvDimens.FeedEmptyRingWidth.toPx()
+                    val outset = TvDimens.FeedEmptyRingGap.toPx() + ringWidth / 2f
+                    drawRoundRect(
+                        color = TvColors.FeedEmptyRing,
+                        topLeft = Offset(-outset, -outset),
+                        size = Size(size.width + outset * 2f, size.height + outset * 2f),
+                        cornerRadius = CornerRadius(radius + outset),
+                        style = Stroke(width = ringWidth),
+                    )
+                }
             }
             .clickable(
                 interactionSource = interactionSource,
@@ -554,17 +573,19 @@ private fun FeedEmptyBox(
                 onClick = onClick,
             )
     ) {
-        Icon(
-            imageVector = Icons.Outlined.ViewAgenda,
+        Spacer(Modifier.height(TvDimens.FeedEmptyIllustrationTop))
+        Image(
+            painter = painterResource(illustration),
             contentDescription = null,
-            tint = TvColors.Label,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier.size(TvDimens.FeedEmptyIllustrationSize),
         )
-        Text(text = title, style = TvTextStyles.ShowMoreTitle, color = TvColors.Text, maxLines = 1)
+        Spacer(Modifier.height(TvDimens.FeedEmptyTitleGap))
+        Text(text = title, style = TvTextStyles.FeedEmptyTitle, color = TvColors.Text, maxLines = 1)
+        Spacer(Modifier.height(TvDimens.FeedEmptyHintGap))
         Text(
             text = stringResource(R.string.tv_feed_empty_hint),
-            style = TvTextStyles.Meta,
-            color = TvColors.Label,
+            style = TvTextStyles.FeedEmptyHint,
+            color = TvColors.Text2,
             maxLines = 1,
         )
     }

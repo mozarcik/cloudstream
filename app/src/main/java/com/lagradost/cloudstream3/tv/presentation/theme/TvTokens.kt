@@ -109,6 +109,9 @@ object TvColors {
     val FillTabCurrent = Color(0x1AFFFFFF)
     val FillChip = Color(0x12FFFFFF)
     val BorderChip = Color(0x24FFFFFF)
+    /** Empty feed box (mockup "16 · Home"): dashed outline and the focus ring around it. */
+    val FeedEmptyBorder = Color(0x38FFFFFF)
+    val FeedEmptyRing = Color(0xE6F1F3F7)
     val FillIcon = Color(0x1AFFFFFF)
     val ProgressTrack = CsColors.ProgressTrack
     val Scrim = CsColors.Scrim
@@ -243,7 +246,18 @@ object TvDimens {
     val FeedRowPosterHeight = 174.dp
     val FeedRowGap = 12.dp
     val FeedRowMaxItems = 10
-    val FeedRowEmptyHeight = 112.dp
+    // Empty feed box (mockup 1670x248 px, r16, dashes 12/12 px, ring 4 px at 3 px from the box)
+    val FeedRowEmptyHeight = 124.dp
+    val FeedEmptyRadius = 8.dp
+    val FeedEmptyEndPadding = 37.dp
+    val FeedEmptyDash = 6.dp
+    val FeedEmptyStroke = 1.dp
+    val FeedEmptyRingWidth = 2.dp
+    val FeedEmptyRingGap = 1.5.dp
+    val FeedEmptyIllustrationSize = 50.dp
+    val FeedEmptyIllustrationTop = 9.dp
+    val FeedEmptyTitleGap = 3.dp
+    val FeedEmptyHintGap = 5.dp
     val FeedRowDescriptionWidth = 520.dp
     val FeedShowAllCircle = 40.dp
 
@@ -750,6 +764,7 @@ object TvDimens {
 
 object TvShapes {
     val Card = RoundedCornerShape(TvDimens.CardRadius)
+    val FeedEmpty = RoundedCornerShape(TvDimens.FeedEmptyRadius)
     val Row = RoundedCornerShape(TvDimens.RowRadius)
     val PanelRow = RoundedCornerShape(TvDimens.PanelRowRadius)
     val Dialog = RoundedCornerShape(TvDimens.DialogRadius)
@@ -822,6 +837,9 @@ object TvTextStyles {
     /** Rows in Components / side panels (mockup 26 px). */
     val RowPanel = style(13f, FontWeight.SemiBold)
     val ShowMoreTitle = style(14f, FontWeight.Bold)
+    /** Empty feed box (mockup 30 / 24 px, line-height 1.2). */
+    val FeedEmptyTitle = style(15f, FontWeight.Bold, lineHeight = 18f)
+    val FeedEmptyHint = style(12f, FontWeight.Normal, lineHeight = 14.5f)
     val StateTitle = style(22f, FontWeight.ExtraBold)
     val StateMessage = style(15f, FontWeight.Normal, lineHeight = 22.5f)
     val SearchField = style(14f, FontWeight.Medium)

@@ -1001,7 +1001,7 @@
     <string name="tv_sources_group_movies_series">Filmy i seriale</string>
     <string name="tv_sources_group_live">Na żywo</string>
     <string name="tv_feed_empty_title">Brak pozycji w tym feedzie</string>
-    <string name="tv_feed_empty_hint">↓ przejdź do kolejnego feedu  •  OK — odśwież</string>
+    <string name="tv_feed_empty_hint">"↓ przejdź do kolejnego feedu   •   OK — odśwież"</string>
     <string name="tv_feed_error_title">Nie udało się wczytać feedu</string>
     <plurals name="tv_library_lists_count">
         <item quantity="one">%d lista</item>

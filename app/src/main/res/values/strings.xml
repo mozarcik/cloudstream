@@ -1036,7 +1036,7 @@
     <string name="tv_sources_group_movies_series">Movies &amp; series</string>
     <string name="tv_sources_group_live">Live</string>
     <string name="tv_feed_empty_title">No items in this feed</string>
-    <string name="tv_feed_empty_hint">↓ next feed  •  OK — refresh</string>
+    <string name="tv_feed_empty_hint">"↓ go to the next feed   •   OK — refresh"</string>
     <string name="tv_feed_error_title">Failed to load this feed</string>
     <plurals name="tv_library_lists_count">
         <item quantity="one">%d list</item>
