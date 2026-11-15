@@ -16,6 +16,19 @@ class M3u8HelperTest {
     private lateinit var host: String
     private val requestedPaths: MutableList<String> = Collections.synchronizedList(mutableListOf())
     private val segment = ByteArray(256) { (it or 0x80).toByte() }
+    private val initSection = ByteArray(64) { (it + 1).toByte() }
+
+    private fun fmp4Playlist(): String = buildString {
+        appendLine("#EXTM3U")
+        appendLine("#EXT-X-VERSION:7")
+        appendLine("#EXT-X-TARGETDURATION:6")
+        appendLine("#EXT-X-MAP:URI=\"init.mp4\"")
+        appendLine("#EXTINF:6.0,")
+        appendLine("s0.m4s")
+        appendLine("#EXTINF:6.0,")
+        appendLine("s1.m4s")
+        appendLine("#EXT-X-ENDLIST")
+    }
 
     @BeforeTest
     fun setUp() {
@@ -29,6 +42,9 @@ class M3u8HelperTest {
                 "/a/b/encrypted.m3u8" -> playlist(key = "/keys/k.bin").encodeToByteArray()
                 "/a/b/seg0.ts", "/root/seg1.ts", "/proto/seg2.ts" -> segment
                 "/keys/k.bin" -> ByteArray(16)
+                "/f/index.m3u8" -> fmp4Playlist().encodeToByteArray()
+                "/f/init.mp4" -> initSection
+                "/f/s0.m4s", "/f/s1.m4s" -> segment
                 else -> null
             }
             val bytes = body ?: "404 not found".encodeToByteArray()
@@ -84,5 +100,30 @@ class M3u8HelperTest {
         )
 
         assertTrue("/keys/k.bin" in requestedPaths, "requested: $requestedPaths")
+    }
+
+    @Test
+    fun hslLazyPrependsInitSectionOfFmp4Playlists() = runBlocking {
+        val data = M3u8Helper2.hslLazy(
+            M3u8Helper.M3u8Stream("http://$host/f/index.m3u8"),
+            requireAudio = false,
+        )
+
+        // The preview generator indexes media segments only, so the init section stays out of allTsLinks.
+        assertEquals(2, data.size)
+        assertEquals(3, data.partCount)
+        assertContentEquals(initSection, data.resolvePartSafe(0))
+        assertContentEquals(segment, data.resolvePartSafe(1))
+        assertContentEquals(segment, data.resolvePartSafe(2))
+    }
+
+    @Test
+    fun hslLazyWithoutMapKeepsPartsEqualToSegments() = runBlocking {
+        val data = M3u8Helper2.hslLazy(
+            M3u8Helper.M3u8Stream("http://$host/a/b/index.m3u8"),
+            requireAudio = false,
+        )
+        assertEquals(data.size, data.partCount)
+        assertContentEquals(segment, data.resolvePartSafe(0))
     }
 }

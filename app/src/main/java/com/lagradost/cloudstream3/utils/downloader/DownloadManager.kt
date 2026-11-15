@@ -611,7 +611,11 @@ object VideoDownloadManager {
             downloadFileInfoTemplate?.let { template ->
                 /** This looks strange, but fixes an issue where we do an instant retry, and it fails immediately,
                  * eg. by turning off wifi */
-                val totalBytesValue = if (approxTotalBytes <= bytesDownloaded) {
+                // A finished download has exactly the size it was written with. Without this the old estimate
+                // below survives for HLS, so a completed download keeps reading "99%".
+                val totalBytesValue = if (internalType == DownloadType.IsDone) {
+                    bytesDownloaded
+                } else if (approxTotalBytes <= bytesDownloaded) {
                     val prevInfo = getKey<DownloadedFileInfo>(
                         KEY_DOWNLOAD_INFO,
                         id.toString()
@@ -1359,11 +1363,11 @@ object VideoDownloadManager {
 
             val items = M3u8Helper2.hslLazy(m3u8, selectBest = true, requireAudio = true)
 
-            metadata.hlsTotal = items.size
+            metadata.hlsTotal = items.partCount
             metadata.type = DownloadType.IsDownloading
 
             val currentMutex = Mutex()
-            val current = (startAt until items.size).iterator()
+            val current = (startAt until items.partCount).iterator()
 
             val fileMutex = Mutex()
             val pendingData: HashMap<Int, ByteArray> = hashMapOf()
@@ -1416,7 +1420,7 @@ object VideoDownloadManager {
 
                         // in case something has gone wrong set to failed if the fail is not caused by
                         // user cancellation
-                        val bytes = items.resolveLinkSafe(index) ?: run {
+                        val bytes = items.resolvePartSafe(index) ?: run {
                             fileMutex.withLock {
                                 if (metadata.type != DownloadType.IsStopped) {
                                     metadata.type = DownloadType.IsFailed

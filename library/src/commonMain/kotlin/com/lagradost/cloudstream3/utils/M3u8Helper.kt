@@ -77,6 +77,9 @@ object M3u8Helper2 {
         Regex("#EXT-X-KEY:METHOD=([^,]+),URI=\"([^\"]+)\"(?:,IV=(.*))?")
     private val QUALITY_REGEX =
         Regex("""#EXT-X-STREAM-INF:(?:(?:.*?(?:RESOLUTION=\d+x(\d+)).*?\s+(.*))|(?:.*?\s+(.*)))""")
+    private val MAP_REGEX = Regex("""#EXT-X-MAP:(.*)""")
+    private val MAP_URI_REGEX = Regex("""URI="([^"]+)"""")
+    private val MAP_BYTERANGE_REGEX = Regex("""BYTERANGE="(\d+)(?:@(\d+))?"""")
     private val TS_EXTENSION_REGEX =
         Regex("""#EXTINF:(([0-9]*[.])?[0-9]+|).*\n(.+?\n)""") // fuck it we ball, who cares about the type anyways
 
@@ -186,9 +189,49 @@ object M3u8Helper2 {
         val allTsLinks: List<TsLink>,
         val relativeUrl: String,
         val headers: Map<String, String>,
+        /** fMP4/CMAF playlists (`#EXT-X-MAP`) need this init section (ftyp+moov) before the first segment. */
+        val initSegment: InitSegment? = null,
     ) {
 
+        /** [length] bytes starting at [offset], or the whole resource when null. */
+        data class InitSegment(val url: String, val offset: Long? = null, val length: Long? = null)
+
         val size get() = allTsLinks.size
+
+        /** Parts to write to a file in order: the init section (if any) and then every media segment. */
+        val partCount get() = size + if (initSegment != null) 1 else 0
+
+        /** Like [resolveLinkSafe] but over [partCount] parts, where part 0 is the init section when present. */
+        suspend fun resolvePartSafe(
+            index: Int,
+            tries: Int = 3,
+            failDelay: Long = 3000
+        ): ByteArray? {
+            if (initSegment == null) return resolveLinkSafe(index, tries, failDelay)
+            if (index != 0) return resolveLinkSafe(index - 1, tries, failDelay)
+            for (i in 0 until tries) {
+                try {
+                    return resolveInit(initSegment)
+                } catch (e: CancellationException) {
+                    return null
+                } catch (t: Throwable) {
+                    delay(failDelay)
+                }
+            }
+            return null
+        }
+
+        private suspend fun resolveInit(init: InitSegment): ByteArray {
+            val range = if (init.length != null) {
+                val start = init.offset ?: 0L
+                mapOf("Range" to "bytes=$start-${start + init.length - 1}")
+            } else emptyMap()
+            val body = app.get(init.url, headers = headers + range, verify = false).body
+            val data = body.bytes()
+            body.close()
+            if (data.isEmpty()) throw ErrorLoadingException("no init data")
+            return data
+        }
 
         suspend fun resolveLinkWhileSafe(
             index: Int,
@@ -350,13 +393,24 @@ object M3u8Helper2 {
 
         if (allTsList.isEmpty()) throw IllegalStateException("M3u8 must contains TS files")
 
+        val initSegment = MAP_REGEX.find(playlistResponse)?.groupValues?.get(1)?.let { attributes ->
+            val uri = MAP_URI_REGEX.find(attributes)?.groupValues?.get(1) ?: return@let null
+            val range = MAP_BYTERANGE_REGEX.find(attributes)?.groupValues
+            LazyHlsDownloadData.InitSegment(
+                url = resolveUrl(playlistStream.streamUrl, uri),
+                offset = range?.getOrNull(2)?.toLongOrNull(),
+                length = range?.getOrNull(1)?.toLongOrNull(),
+            )
+        }
+
         return LazyHlsDownloadData(
             encryptionData = encryptionData,
             encryptionIv = encryptionIv,
             isEncrypted = encryptionState,
             allTsLinks = allTsList,
             relativeUrl = relativeUrl,
-            headers = playlistStream.headers
+            headers = playlistStream.headers,
+            initSegment = initSegment,
         )
     }
 }
