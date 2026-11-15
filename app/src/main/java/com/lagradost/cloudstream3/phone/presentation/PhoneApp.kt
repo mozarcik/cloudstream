@@ -289,7 +289,8 @@ fun PhoneApp() {
                         openPlayer(
                             item.sourceUrl.ifBlank { "download://local" },
                             item.apiName.ifBlank { "download" },
-                            PlayerStartTarget.DownloadedEpisode(item.episodeId),
+                            item.serverItemId?.let(PlayerStartTarget::ServerItem)
+                                ?: PlayerStartTarget.DownloadedEpisode(item.episodeId),
                         )
                     },
                 )

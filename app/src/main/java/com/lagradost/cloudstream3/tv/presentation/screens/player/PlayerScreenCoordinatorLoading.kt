@@ -19,6 +19,10 @@ import com.lagradost.cloudstream3.ui.player.ExtractorLinkGenerator
 import com.lagradost.cloudstream3.ui.player.ExtractorUri
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
+import com.lagradost.cloudstream3.ui.player.VideoGenerator
+import com.lagradost.cloudstream3.homeserver.HomeServerApi
+import com.lagradost.cloudstream3.homeserver.HomeServerConfig
+import com.lagradost.cloudstream3.tv.compat.server.ServerPlaybackGenerator
 import com.lagradost.cloudstream3.ui.player.toSubtitleFetchEpisodeMetadataLog
 import com.lagradost.cloudstream3.ui.player.toSubtitleFetchLogPayload
 import com.lagradost.cloudstream3.ui.result.ResultEpisode
@@ -110,7 +114,9 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
     val playbackTarget = PlayerScreenNavigation.fromNavigationArg(rawPlaybackTarget)
     val downloadedEpisodeId = (playbackTarget as? PlayerStartTarget.DownloadedEpisode)?.episodeId
 
-    if (downloadedEpisodeId == null && (url.isBlank() || apiName.isBlank())) {
+    if (playbackTarget !is PlayerStartTarget.ServerItem &&
+        downloadedEpisodeId == null && (url.isBlank() || apiName.isBlank())
+    ) {
         Log.e(DebugTag, "missing args: url=$url apiName=$apiName")
         val uiError = playerUiErrorFromRes(R.string.error_loading_links_toast)
         context.core.uiState.value = TvPlayerUiState.Error(
@@ -128,6 +134,28 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
     context.catalog.loadingJob = context.coroutineScope.launch {
         if (playbackTarget is PlayerStartTarget.Trailer) {
             applyTrailerPlaybackTarget(context, url, apiName, playbackTarget.index)
+            return@launch
+        }
+        if (playbackTarget is PlayerStartTarget.ServerItem) {
+            val serverTarget = withContext(Dispatchers.IO) {
+                resolveServerPlaybackTarget(playbackTarget.itemId)
+            }
+            if (serverTarget == null) {
+                val metadata = TvPlayerMetadata(title = apiName, subtitle = "", backdropUri = null, apiName = apiName)
+                val uiError = playerUiErrorFromRes(R.string.no_links_found_toast)
+                context.core.uiState.value = TvPlayerUiState.Error(metadata = metadata, error = uiError)
+                reportPlayerHandledError(
+                    metadata = metadata,
+                    uiMessage = uiError.message,
+                    eventMessage = "TV player server item unavailable id=${playbackTarget.itemId}",
+                )
+                return@launch
+            }
+            applyDownloadedPlaybackTarget(
+                context = context,
+                target = serverTarget.target,
+                generator = serverTarget.generator,
+            )
             return@launch
         }
         if (downloadedEpisodeId != null) {
@@ -443,9 +471,78 @@ private suspend fun resolveDownloadedPlaybackTarget(
     )
 }
 
+private class ServerPlaybackTarget(
+    val target: DownloadedPlaybackTarget,
+    val generator: VideoGenerator<*>,
+)
+
+/** Episodes of the same show stored on the home server, ordered like the downloaded ones (season, episode). */
+private suspend fun resolveServerPlaybackTarget(itemId: String): ServerPlaybackTarget? {
+    val appContext = CloudStreamApp.context ?: return null
+    val api = HomeServerApi(HomeServerConfig.baseUrl(appContext) ?: return null)
+    val all = runCatching { api.library() }.getOrNull() ?: return null
+    val selected = all.firstOrNull { it.id == itemId } ?: return null
+    val items = all
+        .filter { it.parentId != null && it.parentId == selected.parentId }
+        .ifEmpty { listOf(selected) }
+        .sortedWith(compareBy({ it.season ?: 0 }, { it.episode ?: 0 }))
+    val isEpisodeBased = selected.season != null && selected.episode != null
+    val tvType = if (isEpisodeBased) TvType.TvSeries else TvType.Movie
+    val sourceName = selected.apiName.ifBlank { appContext.getString(R.string.home_server) }
+    val showTitle = selected.title
+
+    val extractorItems = items.map { item ->
+        ExtractorUri(
+            uri = Uri.EMPTY,
+            id = item.episodeId ?: item.id.hashCode(),
+            parentId = item.parentId,
+            name = item.title,
+            season = item.season,
+            episode = item.episode,
+            headerName = showTitle,
+            tvType = tvType,
+        )
+    }
+    val episodes = items.mapIndexed { index, item ->
+        val season = item.season?.takeIf { it > 0 }
+        buildResultEpisode(
+            headerName = showTitle,
+            name = item.title,
+            poster = item.poster,
+            episode = item.episode ?: 0,
+            seasonIndex = season,
+            season = season,
+            data = "server://${item.id}",
+            apiName = sourceName,
+            id = item.episodeId ?: item.id.hashCode(),
+            index = index,
+            description = null,
+            rating = null,
+            tvType = tvType,
+            parentId = item.parentId ?: 0,
+        )
+    }
+    val metadata = TvPlayerMetadata(
+        title = showTitle,
+        subtitle = appContext.getString(R.string.home_server),
+        backdropUri = selected.poster,
+        apiName = sourceName,
+        season = selected.season?.takeIf { it > 0 },
+        episode = selected.episode?.takeIf { it > 0 },
+        episodeTitle = null,
+        isEpisodeBased = isEpisodeBased,
+    )
+    val selectedIndex = items.indexOfFirst { it.id == itemId }.coerceAtLeast(0)
+    return ServerPlaybackTarget(
+        target = DownloadedPlaybackTarget(metadata, episodes, selectedIndex, extractorItems),
+        generator = ServerPlaybackGenerator(items, extractorItems, api),
+    )
+}
+
 private suspend fun applyDownloadedPlaybackTarget(
     context: PlayerScreenCoordinatorContext,
     target: DownloadedPlaybackTarget,
+    generator: VideoGenerator<*>? = null,
 ) {
     val selectedEpisode = target.episodes.getOrNull(target.selectedEpisodeIndex) ?: return
     context.core.baseMetadata = target.metadata.copy(
@@ -471,7 +568,7 @@ private suspend fun applyDownloadedPlaybackTarget(
         nextEpisode = target.episodes.getOrNull(target.selectedEpisodeIndex + 1),
     )
     context.catalog.generator = TvPlaybackGenerator(
-        DownloadFileGenerator(episodes = target.extractorItems),
+        generator ?: DownloadFileGenerator(episodes = target.extractorItems),
         target.selectedEpisodeIndex,
     )
     playerDiagnosticsLog(

@@ -21,6 +21,7 @@ internal object PlayerStartEpisodeSelector {
             PlayerStartTarget.Default -> -1
             is PlayerStartTarget.DownloadedEpisode -> -1
             is PlayerStartTarget.Trailer -> -1
+            is PlayerStartTarget.ServerItem -> -1
             is PlayerStartTarget.RemappedResume -> -1
         }
         if (preferredIndex >= 0) {

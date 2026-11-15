@@ -8,6 +8,9 @@ sealed interface PlayerStartTarget {
     data class ResumeEpisode(val episodeId: Int) : PlayerStartTarget
     data class DownloadedEpisode(val episodeId: Int) : PlayerStartTarget
 
+    /** Library item of the home server (presigned S3 playback). */
+    data class ServerItem(val itemId: String) : PlayerStartTarget
+
     /** Resolved trailer [index] of the details page, taken from TrailerPlaybackStore. */
     data class Trailer(val index: Int) : PlayerStartTarget
 
@@ -22,6 +25,7 @@ internal object PlayerScreenNavigation {
     private const val ResumeEpisodePrefix = "__resume_episode__:"
     private const val DownloadEpisodePrefix = "__download_episode__:"
     private const val TrailerPrefix = "__trailer__:"
+    private const val ServerItemPrefix = "__server_item__:"
 
     fun toNavigationArg(target: PlayerStartTarget): String {
         return when (target) {
@@ -30,6 +34,7 @@ internal object PlayerScreenNavigation {
             is PlayerStartTarget.ResumeEpisode -> "$ResumeEpisodePrefix${target.episodeId}"
             is PlayerStartTarget.DownloadedEpisode -> "$DownloadEpisodePrefix${target.episodeId}"
             is PlayerStartTarget.Trailer -> "$TrailerPrefix${target.index}"
+            is PlayerStartTarget.ServerItem -> "$ServerItemPrefix${target.itemId}"
             is PlayerStartTarget.RemappedResume -> ""
         }
     }
@@ -39,6 +44,9 @@ internal object PlayerScreenNavigation {
             return PlayerStartTarget.Default
         }
 
+        if (rawValue.startsWith(ServerItemPrefix)) {
+            return PlayerStartTarget.ServerItem(rawValue.removePrefix(ServerItemPrefix))
+        }
         parseEpisodeId(rawValue = rawValue, prefix = DownloadEpisodePrefix)?.let { episodeId ->
             return PlayerStartTarget.DownloadedEpisode(episodeId)
         }

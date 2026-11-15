@@ -1,5 +1,13 @@
 package com.lagradost.cloudstream3.phone.presentation.screens.downloads
 
+import com.lagradost.cloudstream3.tv.presentation.screens.downloads.ServerLibraryViewModel
+import com.lagradost.cloudstream3.homeserver.UploadPhase
+import com.lagradost.cloudstream3.homeserver.UploadProgress
+import com.lagradost.cloudstream3.homeserver.UploadState
+import android.widget.Toast
+import androidx.compose.material.icons.filled.CloudUpload
+import com.lagradost.cloudstream3.homeserver.HomeServerConfig
+import com.lagradost.cloudstream3.homeserver.LibraryUploadWorker
 import com.lagradost.cloudstream3.phone.presentation.common.navBarBottom
 import android.text.format.Formatter
 import androidx.compose.foundation.background
@@ -67,11 +75,20 @@ fun PhoneDownloadsScreen(
     onPlayDownloaded: (DownloadItemUiModel) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = viewModel(),
+    serverViewModel: ServerLibraryViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<DownloadItemUiModel?>(null) }
-    LaunchedEffect(context) { viewModel.bind(context) }
+    val uploads by UploadProgress.state.collectAsStateWithLifecycle()
+    val server by serverViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(context) { viewModel.bind(context); serverViewModel.bind(context) }
+
+    // An upload only starts after the download finished, so such items belong with the finished ones even if
+    // the size estimate of an HLS download still reads a bit under 100%.
+    val uploading = state.downloadingItems.filter { uploads.containsKey(it.episodeId) }
+    val downloadingItems = state.downloadingItems - uploading.toSet()
+    val downloadedItems = state.downloadedItems + uploading
 
     val usedBytes = state.downloadedItems.sumOf { (it.state as? DownloadState.Downloaded)?.fileSizeBytes ?: 0L }
 
@@ -82,15 +99,16 @@ fun PhoneDownloadsScreen(
             if (usedBytes > 0) Text(stringResource(R.string.phone_downloads_used, Formatter.formatShortFileSize(context, usedBytes)), style = PhoneText.Meta, color = PhoneColors.Text2)
         }
 
-        if (state.downloadingItems.isEmpty() && state.downloadedItems.isEmpty()) {
+        if (downloadingItems.isEmpty() && downloadedItems.isEmpty() && server.items.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(32.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(stringResource(R.string.tv_downloads_empty_title), style = PhoneText.Section, color = PhoneColors.Text)
                 Text(stringResource(R.string.tv_downloads_empty_subtitle), style = PhoneText.Body, color = PhoneColors.Text2, modifier = Modifier.padding(top = 8.dp))
             }
         } else {
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 32.dp + navBarBottom()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                section(R.string.downloading, "downloading", state.downloadingItems, onOpenDetails, onPlayDownloaded) { pendingDelete = it }
-                section(R.string.downloaded, "downloaded", state.downloadedItems, onOpenDetails, onPlayDownloaded) { pendingDelete = it }
+                section(R.string.downloading, "downloading", downloadingItems, uploads, onOpenDetails, onPlayDownloaded) { pendingDelete = it }
+                section(R.string.downloaded, "downloaded", downloadedItems, uploads, onOpenDetails, onPlayDownloaded) { pendingDelete = it }
+                section(R.string.home_server_library, "server", server.items, uploads, onOpenDetails, onPlayDownloaded) { pendingDelete = it }
             }
         }
     }
@@ -115,7 +133,7 @@ fun PhoneDownloadsScreen(
             // Cancel is the default (first, filled) action, same as the TV dialog.
             confirmButton = { TextButton({ pendingDelete = null }) { Text(stringResource(R.string.cancel), style = PhoneText.Button, color = PhoneColors.Text) } },
             dismissButton = {
-                TextButton({ viewModel.deleteItem(context, item); pendingDelete = null }) {
+                TextButton({ if (item.serverItemId != null) serverViewModel.delete(item) else viewModel.deleteItem(context, item); pendingDelete = null }) {
                     Text(stringResource(R.string.delete), style = PhoneText.Button, color = PhoneColors.Danger)
                 }
             },
@@ -127,6 +145,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
     headerRes: Int,
     keyPrefix: String,
     items: List<DownloadItemUiModel>,
+    uploads: Map<Int, UploadState>,
     onOpenDetails: (DownloadItemUiModel) -> Unit,
     onPlay: (DownloadItemUiModel) -> Unit,
     onDelete: (DownloadItemUiModel) -> Unit,
@@ -136,19 +155,20 @@ private fun androidx.compose.foundation.lazy.LazyListScope.section(
         CsKicker("${stringResource(headerRes)} · ${items.size}", Modifier.padding(top = 10.dp, bottom = 6.dp))
     }
     itemsIndexed(items, key = { index, item -> "$keyPrefix-${item.id}#$index" }) { _, item ->
-        DownloadRow(item, onOpenDetails, onPlay, onDelete)
+        DownloadRow(item, uploads[item.episodeId], onOpenDetails, onPlay, onDelete)
     }
 }
 
 @Composable
 private fun DownloadRow(
     item: DownloadItemUiModel,
+    upload: UploadState?,
     onOpenDetails: (DownloadItemUiModel) -> Unit,
     onPlay: (DownloadItemUiModel) -> Unit,
     onDelete: (DownloadItemUiModel) -> Unit,
 ) {
     val context = LocalContext.current
-    val done = item.state is DownloadState.Downloaded
+    val done = item.state is DownloadState.Downloaded || upload != null
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
             Modifier.size(112.dp, 63.dp).clip(PhoneShapes.Poster).background(PhoneColors.Placeholder)
@@ -164,7 +184,16 @@ private fun DownloadRow(
         Column(Modifier.weight(1f).clickable(role = Role.Button) { onOpenDetails(item) }) {
             Text(item.title, style = PhoneText.Row.copy(fontSize = 14.sp), color = PhoneColors.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(buildMetaLine(item, context), style = PhoneText.Meta.copy(fontSize = 12.sp), color = PhoneColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp))
-            val progress = when (val s = item.state) {
+            if (upload != null) {
+                val label = when (upload.phase) {
+                    UploadPhase.Queued -> stringResource(R.string.home_server_upload_waiting)
+                    UploadPhase.Uploading -> stringResource(R.string.home_server_upload_sending, (upload.fraction * 100).toInt())
+                    UploadPhase.Failed -> stringResource(R.string.home_server_upload_failed)
+                }
+                if (upload.phase != UploadPhase.Failed) CsProgress(upload.fraction, Modifier.padding(top = 7.dp))
+                Text(label, style = PhoneText.Meta.copy(fontSize = 12.sp), color = if (upload.phase == UploadPhase.Failed) PhoneColors.Danger else PhoneColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            }
+            val progress = if (upload != null) null else when (val s = item.state) {
                 is DownloadState.Downloading -> s.progress
                 is DownloadState.Paused -> s.progress
                 else -> null
@@ -173,6 +202,16 @@ private fun DownloadRow(
                 CsProgress(progress, Modifier.padding(top = 7.dp))
                 Text(buildProgressStatus(item, context), style = PhoneText.Meta.copy(fontSize = 12.sp), color = PhoneColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
+        }
+        if (done && item.serverItemId == null && HomeServerConfig.isEnabled(context) && (upload == null || upload.phase == UploadPhase.Failed)) {
+            CsIconButton(
+                Icons.Default.CloudUpload, stringResource(R.string.home_server_send),
+                {
+                    LibraryUploadWorker.enqueue(context, item.episodeId)
+                    Toast.makeText(context, R.string.home_server_send_queued, Toast.LENGTH_SHORT).show()
+                },
+                container = Color.Transparent, size = 44.dp,
+            )
         }
         CsIconButton(Icons.Default.Delete, stringResource(R.string.phone_delete_item, item.title), { onDelete(item) }, container = Color.Transparent, size = 44.dp)
     }

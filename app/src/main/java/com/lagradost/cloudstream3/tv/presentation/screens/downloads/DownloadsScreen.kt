@@ -62,13 +62,15 @@ fun DownloadsScreen(
     onPlayDownloaded: (DownloadItemUiModel) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DownloadsViewModel = viewModel(),
+    serverViewModel: ServerLibraryViewModel = viewModel(),
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    val allItems = remember(uiState.downloadingItems, uiState.downloadedItems) {
-        uiState.downloadingItems + uiState.downloadedItems
+    val serverState by serverViewModel.uiState.collectAsStateWithLifecycle()
+    val allItems = remember(uiState.downloadingItems, uiState.downloadedItems, serverState.items) {
+        uiState.downloadingItems + uiState.downloadedItems + serverState.items
     }
     val itemIds = remember(allItems) { allItems.map(DownloadItemUiModel::id) }
     val itemFocusRequesters = rememberFocusRequesterMap(itemIds)
@@ -88,6 +90,7 @@ fun DownloadsScreen(
 
     LaunchedEffect(context) {
         viewModel.bind(context)
+        serverViewModel.bind(context)
     }
 
     // Entering the list after a screen change from the menu: its first / last focused item.
@@ -162,6 +165,17 @@ fun DownloadsScreen(
                     onDelete = { pendingDeleteItem = it },
                     onFocused = { focusedItemId = it.id },
                 )
+                downloadSection(
+                    headerRes = R.string.home_server_library,
+                    keyPrefix = "server",
+                    items = serverState.items,
+                    isFirst = uiState.downloadingItems.isEmpty() && uiState.downloadedItems.isEmpty(),
+                    focusRequesters = itemFocusRequesters,
+                    onOpenDetails = onOpenDetails,
+                    onPlay = { playDownloadedItem(it, onPlayDownloaded) },
+                    onDelete = { pendingDeleteItem = it },
+                    onFocused = { focusedItemId = it.id },
+                )
             }
         }
 
@@ -177,10 +191,14 @@ fun DownloadsScreen(
                     pendingRestoreFocusId = nextFocusId
                     // Nothing left to focus: the menu is the only way on.
                     if (nextFocusId == null) openMenu()
-                    viewModel.deleteItem(
-                        context = context,
-                        item = itemToDelete
-                    )
+                    if (itemToDelete.serverItemId != null) {
+                        serverViewModel.delete(itemToDelete)
+                    } else {
+                        viewModel.deleteItem(
+                            context = context,
+                            item = itemToDelete
+                        )
+                    }
                     pendingDeleteItem = null
                 }
             )

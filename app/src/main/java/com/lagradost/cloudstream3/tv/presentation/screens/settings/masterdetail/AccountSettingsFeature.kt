@@ -1,5 +1,6 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail
 
+import com.lagradost.cloudstream3.tv.presentation.screens.settings.homeserver.HomeServerSettingsScreen
 import android.content.Context
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -36,6 +37,7 @@ import com.lagradost.cloudstream3.utils.BiometricAuthenticator.startBiometricAut
 private object AccountSettingsScreenIds {
     const val Prefix = "settings_account"
     const val AccountMain = "settings_account"
+    const val HomeServer = "settings_account/home_server"
 
     fun provider(stableId: String): String {
         return "$Prefix/$stableId"
@@ -112,6 +114,10 @@ class AccountSettingsFeature internal constructor(
 
     val staticScreens: List<SettingsScreen> = listOf(
         AccountMainScreen(),
+        HomeServerSettingsScreen(
+            id = AccountSettingsScreenIds.HomeServer,
+            title = context.getString(R.string.home_server),
+        ),
     ) + providers.map { provider ->
         ProviderScreen(provider)
     }
@@ -146,6 +152,16 @@ class AccountSettingsFeature internal constructor(
                                 putBoolean(skipStartupAccountSelectKey, enabled)
                             }
                         }
+                    )
+                )
+
+                add(
+                    itemEntry(
+                        stableKey = "account_home_server",
+                        title = context.getString(R.string.home_server),
+                        subtitle = context.getString(R.string.home_server_summary),
+                        fallbackIconRes = R.drawable.ic_baseline_cloud_24,
+                        nextScreenId = AccountSettingsScreenIds.HomeServer,
                     )
                 )
 

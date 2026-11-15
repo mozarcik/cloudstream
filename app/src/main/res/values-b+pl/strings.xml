@@ -1137,4 +1137,23 @@
         <item quantity="many">Pobieranie %d rozszerzeń…</item>
         <item quantity="other">Pobieranie %d rozszerzenia…</item>
     </plurals>
+    <string name="home_server">Serwer domowy</string>
+    <string name="home_server_library">Na serwerze domowym</string>
+    <string name="home_server_summary">Wspólna biblioteka na Twoim S3, wysyłanie z telefonu</string>
+    <string name="home_server_url">Adres serwera</string>
+    <string name="home_server_url_hint">https://cloudstream.example.lan</string>
+    <string name="home_server_test">Sprawdź połączenie</string>
+    <string name="home_server_ok">Połączono</string>
+    <string name="home_server_unreachable">Serwer niedostępny</string>
+    <string name="home_server_auto_upload">Wysyłaj pobrane na serwer</string>
+    <string name="home_server_delete_after">Usuń lokalną kopię po wysłaniu</string>
+    <string name="home_server_send">Wyślij na serwer</string>
+    <string name="home_server_send_queued">Wysyłanie w kolejce</string>
+    <string name="home_server_notification_channel">Wysyłanie na serwer domowy</string>
+    <string name="home_server_uploading">Wysyłanie na serwer domowy</string>
+    <string name="home_server_upload_percent">%1$d%%</string>
+    <string name="home_server_upload_waiting">Oczekuje na wysłanie</string>
+    <string name="home_server_upload_sending">Wysyłanie na serwer %1$d%%</string>
+    <string name="home_server_upload_done">Wysłano na serwer domowy</string>
+    <string name="home_server_upload_failed">Nie udało się wysłać na serwer domowy</string>
 </resources>

@@ -48,6 +48,8 @@ data class DownloadItemUiModel(
     val startedAtMillis: Long,
     val updatedAtMillis: Long,
     val downloadedAtMillis: Long? = null,
+    /** Set for items stored on the home server (played and deleted through it, not through the local store). */
+    val serverItemId: String? = null,
 )
 
 data class DownloadsUiState(

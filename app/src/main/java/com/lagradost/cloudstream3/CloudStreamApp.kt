@@ -88,6 +88,7 @@ class CloudStreamApp : Application(), SingletonImageLoader.Factory {
         // loading an image or GIF in a splash screen activity.
         // buildImageLoader(applicationContext)
         AppErrorReporter.init(this)
+        com.lagradost.cloudstream3.homeserver.HomeServerUploads.install(this)
 
         ExceptionHandler(filesDir.resolve("last_error")) {
             val intent = context!!.packageManager.getLaunchIntentForPackage(context!!.packageName)
