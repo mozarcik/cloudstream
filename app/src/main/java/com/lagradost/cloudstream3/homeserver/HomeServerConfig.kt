@@ -9,6 +9,7 @@ object HomeServerConfig {
     private const val KEY_URL = "home_server_url"
     private const val KEY_AUTO_UPLOAD = "home_server_auto_upload"
     private const val KEY_DELETE_AFTER = "home_server_delete_after_upload"
+    private const val KEY_SYNC = "home_server_sync"
 
     private fun prefs(context: Context) = PreferenceManager.getDefaultSharedPreferences(context)
 
@@ -29,4 +30,12 @@ object HomeServerConfig {
 
     fun setDeleteAfterUpload(context: Context, value: Boolean) =
         prefs(context).edit { putBoolean(KEY_DELETE_AFTER, value) }
+
+    /** Settings and history sync (on by default once an address is set). */
+    fun syncEnabled(context: Context) = isEnabled(context) && prefs(context).getBoolean(KEY_SYNC, true)
+
+    fun syncSwitch(context: Context) = prefs(context).getBoolean(KEY_SYNC, true)
+
+    fun setSync(context: Context, value: Boolean) =
+        prefs(context).edit { putBoolean(KEY_SYNC, value) }
 }

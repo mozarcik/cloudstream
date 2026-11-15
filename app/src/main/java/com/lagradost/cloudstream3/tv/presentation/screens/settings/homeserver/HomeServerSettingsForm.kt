@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.homeserver.HomeServerApi
 import com.lagradost.cloudstream3.homeserver.HomeServerConfig
+import com.lagradost.cloudstream3.homeserver.HomeServerSync
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsActionRow
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsFieldRow
@@ -44,6 +45,7 @@ fun HomeServerSettingsForm(modifier: Modifier = Modifier) {
     FocusRequestEffect(requester = urlRequester, requestKey = Unit)
 
     var url by remember { mutableStateOf(HomeServerConfig.baseUrl(context).orEmpty()) }
+    var sync by remember { mutableStateOf(HomeServerConfig.syncSwitch(context)) }
     var autoUpload by remember { mutableStateOf(HomeServerConfig.autoUpload(context)) }
     var deleteAfter by remember { mutableStateOf(HomeServerConfig.deleteAfterUpload(context)) }
     var testing by remember { mutableStateOf(false) }
@@ -90,6 +92,15 @@ fun HomeServerSettingsForm(modifier: Modifier = Modifier) {
                     color = if (ok) TvColors.Success else TvColors.ErrorText,
                 )
             }
+            SettingsActionRow(
+                title = stringResource(R.string.home_server_sync),
+                widget = SettingsRowWidget.Switch(sync),
+                onClick = {
+                    sync = !sync
+                    HomeServerConfig.setSync(context, sync)
+                    if (sync) HomeServerSync.syncOnOpen(context, force = true)
+                },
+            )
             SettingsActionRow(
                 title = stringResource(R.string.home_server_auto_upload),
                 widget = SettingsRowWidget.Switch(autoUpload),

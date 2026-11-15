@@ -90,6 +90,8 @@
     <string name="home_server_auto_upload">Upload finished downloads to the server</string>
     <string name="home_server_delete_after">Delete the local copy after upload</string>
     <string name="home_server_send">Send to home server</string>
+    <string name="home_server_sync">Sync settings and watch history</string>
+    <string name="home_server_sync_applied">Settings from the home server applied</string>
     <string name="home_server_send_queued">Upload queued</string>
     <string name="home_server_notification_channel">Home server uploads</string>
     <string name="home_server_uploading">Uploading to home server</string>

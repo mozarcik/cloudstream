@@ -1148,6 +1148,8 @@
     <string name="home_server_auto_upload">Wysyłaj pobrane na serwer</string>
     <string name="home_server_delete_after">Usuń lokalną kopię po wysłaniu</string>
     <string name="home_server_send">Wyślij na serwer</string>
+    <string name="home_server_sync">Synchronizuj ustawienia i historię</string>
+    <string name="home_server_sync_applied">Zastosowano ustawienia z serwera domowego</string>
     <string name="home_server_send_queued">Wysyłanie w kolejce</string>
     <string name="home_server_notification_channel">Wysyłanie na serwer domowy</string>
     <string name="home_server_uploading">Wysyłanie na serwer domowy</string>

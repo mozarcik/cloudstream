@@ -32,6 +32,39 @@ class HomeServerApi(private val baseUrl: String) {
         call(Request.Builder().url("$baseUrl/api/v1/library/$id").delete().build())
     }
 
+    // ---- backup (settings + data store) ----
+
+    data class BackupMeta(val version: Int, val hash: String)
+
+    suspend fun backupMeta(): BackupMeta {
+        val o = get("/backup")
+        return BackupMeta(o.getInt("version"), o.optString("hash"))
+    }
+
+    /** The stored backup document as is, or null when the server has none. */
+    suspend fun backupData(): String? = withContext(Dispatchers.IO) {
+        client.newCall(Request.Builder().url("$baseUrl/api/v1/backup/data").get().build()).execute().use {
+            when {
+                it.code == 404 -> null
+                !it.isSuccessful -> throw IOException("Server ${it.code} backup")
+                else -> it.body.string()
+            }
+        }
+    }
+
+    /** Stores [json] if [base] is still the server's version; null when it moved on (no overwrite, no merge). */
+    suspend fun putBackup(json: String, base: Int): BackupMeta? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("$baseUrl/api/v1/backup?base=$base")
+            .put(json.toRequestBody(this@HomeServerApi.json)).build()
+        client.newCall(req).execute().use {
+            when {
+                it.code == 409 -> null
+                !it.isSuccessful -> throw IOException("Server ${it.code} backup")
+                else -> JSONObject(it.body.string()).let { o -> BackupMeta(o.getInt("version"), o.optString("hash")) }
+            }
+        }
+    }
+
     // ---- upload (phone side) ----
 
     /** @return pair(id, partSize) */

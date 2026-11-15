@@ -12,6 +12,7 @@ object HomeServerUploads {
         if (installed) return
         installed = true
         val app = context.applicationContext
+        (app as? android.app.Application)?.let(HomeServerSync::install)
         VideoDownloadManager.downloadStatusEvent += { (id, type) ->
             if (type == DownloadType.IsDone && HomeServerConfig.autoUpload(app)) {
                 LibraryUploadWorker.enqueue(app, id)
