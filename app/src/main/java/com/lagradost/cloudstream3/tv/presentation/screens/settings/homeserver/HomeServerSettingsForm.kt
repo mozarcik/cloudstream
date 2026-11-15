@@ -83,6 +83,8 @@ fun HomeServerSettingsForm(modifier: Modifier = Modifier) {
                     scope.launch {
                         testResult = HomeServerApi(HomeServerConfig.baseUrl(context) ?: "").health()
                         testing = false
+                        // First contact with a server: fetch (or, if it is empty, provide) the shared backup right away.
+                        if (testResult == true) HomeServerSync.syncOnOpen(context, force = true)
                     }
                 },
             )
