@@ -8,6 +8,9 @@ sealed interface PlayerStartTarget {
     data class ResumeEpisode(val episodeId: Int) : PlayerStartTarget
     data class DownloadedEpisode(val episodeId: Int) : PlayerStartTarget
 
+    /** Resolved trailer [index] of the details page, taken from TrailerPlaybackStore. */
+    data class Trailer(val index: Int) : PlayerStartTarget
+
     /** Resume entry of a removed provider replayed through another one; never put into navigation. */
     data class RemappedResume(val episodeId: Int, val previousParentId: Int) : PlayerStartTarget
 }
@@ -18,6 +21,7 @@ internal object PlayerScreenNavigation {
     const val PlaybackTargetBundleKey = "playbackTarget"
     private const val ResumeEpisodePrefix = "__resume_episode__:"
     private const val DownloadEpisodePrefix = "__download_episode__:"
+    private const val TrailerPrefix = "__trailer__:"
 
     fun toNavigationArg(target: PlayerStartTarget): String {
         return when (target) {
@@ -25,6 +29,7 @@ internal object PlayerScreenNavigation {
             is PlayerStartTarget.DirectEpisodeData -> target.data
             is PlayerStartTarget.ResumeEpisode -> "$ResumeEpisodePrefix${target.episodeId}"
             is PlayerStartTarget.DownloadedEpisode -> "$DownloadEpisodePrefix${target.episodeId}"
+            is PlayerStartTarget.Trailer -> "$TrailerPrefix${target.index}"
             is PlayerStartTarget.RemappedResume -> ""
         }
     }
@@ -36,6 +41,9 @@ internal object PlayerScreenNavigation {
 
         parseEpisodeId(rawValue = rawValue, prefix = DownloadEpisodePrefix)?.let { episodeId ->
             return PlayerStartTarget.DownloadedEpisode(episodeId)
+        }
+        parseEpisodeId(rawValue = rawValue, prefix = TrailerPrefix)?.let { index ->
+            return PlayerStartTarget.Trailer(index)
         }
         parseEpisodeId(rawValue = rawValue, prefix = ResumeEpisodePrefix)?.let { episodeId ->
             return PlayerStartTarget.ResumeEpisode(episodeId)

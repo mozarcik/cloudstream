@@ -582,6 +582,14 @@ object TvDimens {
     val CastGap = 14.dp
     val CastNameTop = 10.dp
     val CastRingInset = 8.dp
+    // Trailers tab (mockup px / 2): up to three centered rows
+    val TrailerRowWidth = 600.dp
+    val TrailerRowHeight = 52.dp
+    val TrailerRowGap = 8.dp
+    val TrailerRowRadius = 14.dp
+    val TrailerRowPadding = 12.dp
+    val TrailerCircleSize = 28.dp
+    val TrailerChipHeight = 22.dp
     /** Space under the last row of the More like this grid so its focus ring keeps clear of the screen edge. */
     val SimilarGridBottomInset = 24.dp
     /** Fade under the "Similar to" header so scrolled posters are not cut in half. */
@@ -769,6 +777,7 @@ object TvShapes {
     val PanelRow = RoundedCornerShape(TvDimens.PanelRowRadius)
     val Dialog = RoundedCornerShape(TvDimens.DialogRadius)
     val Pill = RoundedCornerShape(percent = 50)
+    val TrailerRow = RoundedCornerShape(TvDimens.TrailerRowRadius)
 }
 
 /** Text roles from the mockups (px / 2 = sp). */

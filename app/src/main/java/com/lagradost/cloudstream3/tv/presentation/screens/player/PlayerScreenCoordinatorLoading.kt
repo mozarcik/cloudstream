@@ -9,11 +9,13 @@ import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
 import com.lagradost.cloudstream3.mvvm.logError
+import com.lagradost.cloudstream3.tv.compat.TrailerPlaybackStore
 import com.lagradost.cloudstream3.tv.compat.resume.findReplacementForMissingProvider
 import com.lagradost.cloudstream3.tv.presentation.screens.player.core.resolvePlayerPlaybackTarget
 import com.lagradost.cloudstream3.tv.presentation.screens.player.panels.TvPlayerPanelsUiState
 import com.lagradost.cloudstream3.ui.APIRepository
 import com.lagradost.cloudstream3.ui.player.DownloadFileGenerator
+import com.lagradost.cloudstream3.ui.player.ExtractorLinkGenerator
 import com.lagradost.cloudstream3.ui.player.ExtractorUri
 import com.lagradost.cloudstream3.ui.player.LOADTYPE_INAPP
 import com.lagradost.cloudstream3.ui.player.RepoLinkGenerator
@@ -124,6 +126,10 @@ internal fun loadSources(context: PlayerScreenCoordinatorContext) {
     }
 
     context.catalog.loadingJob = context.coroutineScope.launch {
+        if (playbackTarget is PlayerStartTarget.Trailer) {
+            applyTrailerPlaybackTarget(context, url, apiName, playbackTarget.index)
+            return@launch
+        }
         if (downloadedEpisodeId != null) {
             val downloadedTarget = withContext(Dispatchers.IO) {
                 resolveDownloadedPlaybackTarget(
@@ -472,6 +478,51 @@ private suspend fun applyDownloadedPlaybackTarget(
         "offline playback prepared episodeId=${selectedEpisode.id} items=${target.extractorItems.size}" +
             " selectedIndex=${target.selectedEpisodeIndex}"
     )
+    loadCurrentGeneratorEpisodeSources(
+        context = context,
+        showLoadingState = true,
+        clearPublicUiState = true,
+    )
+}
+
+/** Trailer of the details page: its already resolved links play as a single item without queue or progress. */
+private suspend fun applyTrailerPlaybackTarget(
+    context: PlayerScreenCoordinatorContext,
+    url: String,
+    apiName: String,
+    index: Int,
+) {
+    val entry = TrailerPlaybackStore.get(url)
+    val links = entry?.trailers?.getOrNull(index)?.links
+    val metadata = TvPlayerMetadata(
+        title = entry?.title ?: apiName,
+        subtitle = stringFromAppContext(context = context, resId = R.string.trailer, fallback = "Trailer"),
+        backdropUri = null,
+        apiName = apiName,
+    )
+    if (links.isNullOrEmpty()) {
+        val uiError = playerUiErrorFromRes(R.string.no_links_found_toast)
+        context.core.uiState.value = TvPlayerUiState.Error(metadata = metadata, error = uiError)
+        reportPlayerHandledError(
+            metadata = metadata,
+            uiMessage = uiError.message,
+            eventMessage = "TV player trailer unavailable index=$index",
+        )
+        return
+    }
+    context.core.baseMetadata = metadata
+    context.core.metadata = metadata
+    context.core.loadingUseBlackBackground = false
+    context.core.currentEpisode = null
+    context.core.episodeQueue = emptyList()
+    context.core.currentEpisodeIndex = 0
+    context.core.currentLoadResponse = null
+    context.panels.subtitleEncodingController.resetNavigation()
+    context.panels.onlineSubtitlesController.reset(
+        query = defaultOnlineSubtitlesQuery(context),
+    )
+    context.core.playbackProgressState.onEpisodeChanged(episode = null, nextEpisode = null)
+    context.catalog.generator = TvPlaybackGenerator(ExtractorLinkGenerator(links, emptyList()), 0)
     loadCurrentGeneratorEpisodeSources(
         context = context,
         showLoadingState = true,

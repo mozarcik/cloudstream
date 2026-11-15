@@ -41,6 +41,8 @@
     <string name="tv_search_input_placeholder">Search for movies and shows...</string>
     <string name="tv_details_tab_cast">Cast &amp; crew</string>
     <string name="tv_details_tab_more_like_this">More like this</string>
+    <string name="tv_details_tab_trailers">Trailers</string>
+    <string name="tv_details_trailer_item">Trailer %1$d</string>
     <string name="search_hint_site" formatted="true">Search %s…</string>
     <string name="speech_recognition_unavailable">Speech recognition is not available</string>
     <string name="begin_speaking">Begin Speaking…</string>

@@ -1,6 +1,7 @@
 package com.lagradost.cloudstream3.tv.presentation.screens.details
 
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
+import com.lagradost.cloudstream3.tv.data.entities.MovieTrailer
 import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.movies.DetailsLoadingPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,9 +50,15 @@ internal class DetailsRouteStateHolder(
         currentActionsCompat = secondary.actionsCompat
         updateDoneState { currentState ->
             currentState.copy(
-                details = secondary.details,
+                details = secondary.details.copy(trailers = currentState.details.trailers),
                 isSecondaryContentLoading = false,
             )
+        }
+    }
+
+    fun applyTrailers(trailers: List<MovieTrailer>) {
+        updateDoneState { currentState ->
+            currentState.copy(details = currentState.details.copy(trailers = trailers))
         }
     }
 

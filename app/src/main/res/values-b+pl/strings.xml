@@ -829,6 +829,8 @@
     <string name="tv_search_input_placeholder">Szukaj filmów i seriali...</string>
     <string name="tv_details_tab_cast">Obsada i ekipa</string>
     <string name="tv_details_tab_more_like_this">Podobne tytuły</string>
+    <string name="tv_details_tab_trailers">Zwiastuny</string>
+    <string name="tv_details_trailer_item">Zwiastun %1$d</string>
     <string name="details_original_title_format">Tytuł oryginalny: %1$s</string>
     <string name="need_storage">Zezwól na pobieranie odcinków</string>
     <string name="tv_downloads_empty_title">Brak pobranych plików</string>

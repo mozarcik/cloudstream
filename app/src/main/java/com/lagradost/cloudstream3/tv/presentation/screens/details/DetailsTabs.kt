@@ -42,6 +42,7 @@ internal enum class DetailsTab {
     CastAndCrew,
     MoreLikeThis,
     Info,
+    Trailers,
 }
 
 @Composable
@@ -50,6 +51,7 @@ internal fun DetailsTab.label(): String = when (this) {
     DetailsTab.CastAndCrew -> stringResource(R.string.tv_details_tab_cast)
     DetailsTab.MoreLikeThis -> stringResource(R.string.tv_details_tab_more_like_this)
     DetailsTab.Info -> stringResource(R.string.details)
+    DetailsTab.Trailers -> stringResource(R.string.tv_details_tab_trailers)
 }
 
 /**

@@ -5,14 +5,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lagradost.cloudstream3.CloudStreamApp
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.LoadResponse
 import com.lagradost.cloudstream3.reporting.AppErrorReporter
 import com.lagradost.cloudstream3.reporting.HandledAppErrorContext
 import com.lagradost.cloudstream3.tv.compat.MovieDetailsEpisodeActionsCompat
 import com.lagradost.cloudstream3.tv.compat.UnavailableDetailsCompat
+import com.lagradost.cloudstream3.tv.compat.TrailerPlaybackStore
+import com.lagradost.cloudstream3.tv.compat.TrailerResolver
+import com.lagradost.cloudstream3.tv.data.mappers.toMovieTrailers
 import com.lagradost.cloudstream3.tv.data.repositories.MovieRepository
 import com.lagradost.cloudstream3.tv.presentation.common.TvErrorUiModel
 import com.lagradost.cloudstream3.tv.presentation.screens.unavailable.UnavailableDetailsUiModel
 import com.lagradost.cloudstream3.ui.WatchType
+import com.lagradost.cloudstream3.utils.AppContextUtils.updateHasTrailers
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -35,6 +42,7 @@ class DetailsScreenViewModel(
         libraryOverridesStateHolder = libraryOverridesStateHolder,
     )
     private var activeSource: DetailsRouteSource? = routeArgs.source
+    private var trailersJob: Job? = null
 
     val unavailableDetails: UnavailableDetailsUiModel
         get() = routeArgs.unavailableDetails
@@ -118,6 +126,7 @@ class DetailsScreenViewModel(
             return
         }
 
+        trailersJob?.cancel()
         libraryOverridesStateHolder.clear()
         routeStateHolder.showLoading()
         activeSource = originSource
@@ -151,6 +160,7 @@ class DetailsScreenViewModel(
                     apiName = source.apiName,
                     onPrimaryLoaded = { primary ->
                         routeStateHolder.applyPrimary(primary)
+                        loadTrailers(source.url, primary)
                         DetailsScreenLoadLogger.logPrimaryLoaded(primary, mode)
                     }
                 )) {
@@ -184,6 +194,19 @@ class DetailsScreenViewModel(
                     source = activeSource ?: originSource,
                 )
             }
+        }
+    }
+
+    /** Resolves trailer links off the main thread; the Trailers tab appears only once at least one resolved. */
+    private fun loadTrailers(detailsUrl: String, primary: DetailsPrimaryStageResult) {
+        CloudStreamApp.context?.updateHasTrailers()
+        if (!LoadResponse.isTrailersEnabled || primary.loadResponse.trailers.isEmpty()) return
+        trailersJob?.cancel()
+        trailersJob = viewModelScope.launch(Dispatchers.IO) {
+            val resolved = TrailerResolver.resolve(primary.loadResponse)
+            if (resolved.isEmpty()) return@launch
+            TrailerPlaybackStore.put(detailsUrl, primary.details.name, resolved)
+            routeStateHolder.applyTrailers(resolved.toMovieTrailers())
         }
     }
 

@@ -81,10 +81,11 @@ internal fun DetailsScreenBody(
     isPanelVisible: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val availableTabs = remember(isSeriesContent, isSecondaryContentLoading, details.cast, details.similarMovies) {
+    val availableTabs = remember(isSeriesContent, isSecondaryContentLoading, details.cast, details.similarMovies, details.trailers) {
         buildList {
             if (isSeriesContent) add(DetailsTab.Episodes)
             add(DetailsTab.Info)
+            if (details.trailers.isNotEmpty()) add(DetailsTab.Trailers)
             if (!isSecondaryContentLoading) {
                 if (details.cast.isNotEmpty()) add(DetailsTab.CastAndCrew)
                 if (details.similarMovies.isNotEmpty()) add(DetailsTab.MoreLikeThis)
@@ -116,6 +117,7 @@ internal fun DetailsScreenBody(
     val tabRequesters = remember(availableTabs) { availableTabs.associateWith { FocusRequester() } }
     val castEntry = remember { FocusRequester() }
     val similarEntry = remember { FocusRequester() }
+    val trailersEntry = remember { FocusRequester() }
     val episodesFocus = remember(details.id) { DetailsEpisodesFocusController() }
     val actions = DetailsHeroActions(
         showPlay = !details.comingSoon,
@@ -144,6 +146,7 @@ internal fun DetailsScreenBody(
             }
 
             selectedTab == DetailsTab.CastAndCrew -> castEntry.requestFocusWithRetry()
+            selectedTab == DetailsTab.Trailers -> trailersEntry.requestFocusWithRetry()
             selectedTab == DetailsTab.MoreLikeThis -> {
                 val key = focusMemory.lastKey?.takeIf { it.startsWith(SimilarKeyPrefix) }
                 val index = key?.let { k -> details.similarMovies.indexOfFirst { similarKey(it.id) == k } } ?: -1
@@ -208,6 +211,7 @@ internal fun DetailsScreenBody(
 
             DetailsTab.CastAndCrew -> requestOrFalse(castEntry)
             DetailsTab.MoreLikeThis -> requestOrFalse(similarEntry)
+            DetailsTab.Trailers -> requestOrFalse(trailersEntry)
             DetailsTab.Info -> {
                 // Nothing to focus: Down only slides the page up to read the full details.
                 collapsed = true
@@ -318,6 +322,13 @@ internal fun DetailsScreenBody(
                     )
 
                     DetailsTab.Info -> DetailsInfoTab(details = details)
+
+                    DetailsTab.Trailers -> DetailsTrailersTab(
+                        trailers = details.trailers,
+                        entryRequester = trailersEntry,
+                        upRequester = tabTop,
+                        onTrailerClick = { trailer -> goToPlayer(PlayerStartTarget.Trailer(trailer.index)) },
+                    )
                 }
             }
         }

@@ -50,4 +50,14 @@ data class MovieDetails(
     val originalLanguage: String = "",
     val budget: String = "",
     val revenue: String = "",
+    val trailers: List<MovieTrailer> = emptyList(),
+)
+
+/** A trailer whose links were resolved; [index] is its position in the playback store. */
+@Immutable
+data class MovieTrailer(
+    val index: Int,
+    val host: String,
+    val qualityLabel: String,
+    val isHls: Boolean,
 )
