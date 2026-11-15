@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.lagradost.cloudstream3.R
+import com.lagradost.cloudstream3.tv.compat.RepositoryItem
 import com.lagradost.cloudstream3.tv.presentation.focus.FocusRequestEffect
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsActionRow
 import com.lagradost.cloudstream3.tv.presentation.screens.settings.masterdetail.SettingsInfoParagraph
@@ -38,7 +39,7 @@ import androidx.compose.foundation.layout.Arrangement
  */
 @Composable
 fun AddRepositoryForm(
-    viewModel: ExtensionsViewModel,
+    addRepository: (name: String?, url: String, onResult: (Result<RepositoryItem>) -> Unit) -> Unit,
     onBack: () -> Unit,
     onRepositoryAdded: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -60,7 +61,7 @@ fun AddRepositoryForm(
         isLoading = true
         error = null
         // Pass null as name if empty, so it will be auto-detected.
-        viewModel.addRepository(name.ifBlank { null }, url.trim()) { result ->
+        addRepository(name.ifBlank { null }, url.trim()) { result ->
             isLoading = false
             result.fold(
                 onSuccess = {

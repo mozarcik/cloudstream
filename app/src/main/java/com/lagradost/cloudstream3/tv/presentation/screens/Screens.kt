@@ -13,6 +13,8 @@ enum class Screens(
     val tabIcon: ImageVector? = null,
     val stringRes: Int? = null
 ) {
+    /** First-run setup flow (see `welcome/WelcomeRoute`). */
+    Welcome,
     Profile,
     Sources(isTabItem = true, stringRes = R.string.sources),
     Home(isTabItem = true, stringRes = R.string.title_home),

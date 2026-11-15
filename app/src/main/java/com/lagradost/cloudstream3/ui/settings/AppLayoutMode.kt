@@ -50,10 +50,13 @@ val AppLayoutMode.resolvedLayoutFlag: Int
 
 fun Context.selectedAppLayoutMode(): AppLayoutMode {
     val settingsManager = PreferenceManager.getDefaultSharedPreferences(this)
-    val rawValue = settingsManager.getInt(
-        getString(R.string.app_layout_key),
-        AppLayoutMode.Automatic.storedValue,
-    )
+    val layoutKey = getString(R.string.app_layout_key)
+    // Fresh install (nothing chosen yet): TV devices default to the TV Material UI.
+    // An explicitly saved value, including Automatic, is kept as it is.
+    if (!settingsManager.contains(layoutKey) && isAutoTvDevice()) {
+        return AppLayoutMode.TvMaterial
+    }
+    val rawValue = settingsManager.getInt(layoutKey, AppLayoutMode.Automatic.storedValue)
     return AppLayoutMode.fromStoredValue(rawValue)
 }
 

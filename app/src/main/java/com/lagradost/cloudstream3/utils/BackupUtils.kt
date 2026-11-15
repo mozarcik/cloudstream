@@ -3,6 +3,7 @@ package com.lagradost.cloudstream3.utils
 import android.app.Activity
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +39,8 @@ import com.lagradost.cloudstream3.utils.downloader.VideoDownloadManager.KEY_RESU
 import com.lagradost.cloudstream3.utils.downloader.VideoDownloadManager.KEY_RESUME_PACKAGES
 import com.lagradost.safefile.MediaFileContentType
 import com.lagradost.safefile.SafeFile
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import okhttp3.internal.closeQuietly
@@ -120,6 +123,34 @@ object BackupUtils {
     }
 
     private var restoreFileSelector: ActivityResultLauncher<Array<String>>? = null
+
+    /** Outcome of a restore started from the file picker; [fileName] may be null when the provider hides it. */
+    sealed interface RestoreResult {
+        val fileName: String?
+
+        data class Success(override val fileName: String?) : RestoreResult
+        data class Failure(override val fileName: String?, val error: String) : RestoreResult
+    }
+
+    private val _restoreResult = MutableStateFlow<RestoreResult?>(null)
+
+    /**
+     * Last restore result, process wide so it survives the `recreate()` that follows a successful
+     * restore. Listeners call [consumeRestoreResult] once they have handled it. Legacy UI ignores it.
+     */
+    val restoreResult: StateFlow<RestoreResult?> = _restoreResult
+
+    fun consumeRestoreResult() {
+        _restoreResult.value = null
+    }
+
+    private fun Context.displayName(uri: Uri): String? = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+    } catch (e: Exception) {
+        null
+    } ?: uri.lastPathSegment
 
     // Kinda hack, but I couldn't think of a better way
     @Serializable
@@ -261,6 +292,7 @@ object BackupUtils {
                     if (uri == null) return@registerForActivityResult
                     val activity = this
                     ioSafe {
+                        val fileName = activity.displayName(uri)
                         try {
                             val input = activity.contentResolver.openInputStream(uri)
                                 ?: return@ioSafe
@@ -274,9 +306,12 @@ object BackupUtils {
                                 restoreSettings = true,
                                 restoreDataStore = true,
                             )
+                            // Published before recreate() so the new activity still sees it.
+                            _restoreResult.value = RestoreResult.Success(fileName)
                             activity.runOnUiThread { activity.recreate() }
                         } catch (e: Exception) {
                             logError(e)
+                            _restoreResult.value = RestoreResult.Failure(fileName, e.toString())
                             main { // smth can fail in .format
                                 showToast(
                                     getString(R.string.restore_failed_format).format(e.toString())

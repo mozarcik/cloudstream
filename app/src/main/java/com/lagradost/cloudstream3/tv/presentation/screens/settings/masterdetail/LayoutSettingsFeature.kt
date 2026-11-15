@@ -12,6 +12,7 @@ import com.lagradost.cloudstream3.SearchQuality
 import com.lagradost.cloudstream3.mvvm.logError
 import com.lagradost.cloudstream3.ui.search.SearchResultBuilder
 import com.lagradost.cloudstream3.ui.settings.appLayoutOptions
+import com.lagradost.cloudstream3.ui.settings.selectedAppLayoutMode
 import com.lagradost.cloudstream3.ui.settings.restartIntoSelectedAppLayout
 import com.lagradost.cloudstream3.tv.compat.theme.resolveLegacyPrimaryPreviewColor
 import com.lagradost.cloudstream3.utils.UIHelper.toPx
@@ -87,7 +88,7 @@ class LayoutSettingsFeature(
 
         override suspend fun load(): List<SettingsEntry> {
             val appLayoutOptions = appLayoutOptions()
-            val currentLayout = settingsManager.getInt(appLayoutKey, -1)
+            val currentLayout = context.selectedAppLayoutMode().storedValue
 
             val appThemeOptions = appThemeOptions()
             val currentTheme = settingsManager.getString(
@@ -409,7 +410,7 @@ class LayoutSettingsFeature(
 
         override suspend fun load(): List<SettingsEntry> {
             val options = appLayoutOptions()
-            val current = settingsManager.getInt(appLayoutKey, -1)
+            val current = context.selectedAppLayoutMode().storedValue
             return buildList {
                 options.forEachIndexed { index, option ->
                     add(

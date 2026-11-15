@@ -21,6 +21,9 @@ import com.lagradost.cloudstream3.tv.data.repositories.MovieRepositoryImpl
 import com.lagradost.cloudstream3.tv.compat.home.MediaItemCompat
 import com.lagradost.cloudstream3.tv.compat.home.SourceRepository
 import com.lagradost.cloudstream3.BuildConfig
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.tv.presentation.screens.welcome.WelcomeRoute
+import com.lagradost.cloudstream3.ui.setup.HAS_DONE_SETUP_KEY
 import com.lagradost.cloudstream3.tv.presentation.screens.Screens
 import com.lagradost.cloudstream3.tv.presentation.screens.gallery.ComponentGalleryScreen
 import com.lagradost.cloudstream3.tv.presentation.screens.gallery.TvDebugGallery
@@ -112,6 +115,8 @@ fun TvApp(
     val searchNavLogTag = "TvSearchNav"
     val tmdbNavLogTag = "TvTmdbResolve"
     val navController = rememberNavController()
+    // First run: HAS_DONE_SETUP is not true (fresh install, "Redo setup process" restarts the activity).
+    val needsWelcome = remember { getKey<Boolean>(HAS_DONE_SETUP_KEY, false) != true }
     var isComingBackFromDifferentScreen by remember { mutableStateOf(false) }
     var pendingSearchPrefillQuery by remember { mutableStateOf<String?>(null) }
 
@@ -207,12 +212,22 @@ fun TvApp(
 
     NavHost(
         navController = navController,
-        startDestination = Screens.Dashboard(),
+        startDestination = if (needsWelcome) Screens.Welcome() else Screens.Dashboard(),
         builder = {
             if (BuildConfig.DEBUG) {
                 composable(route = Screens.ComponentGallery()) {
                     ComponentGalleryScreen(onBack = { navController.popBackStack() })
                 }
+            }
+
+            composable(route = Screens.Welcome()) {
+                WelcomeRoute(
+                    onFinished = {
+                        navController.navigate(Screens.Dashboard()) {
+                            popUpTo(Screens.Welcome()) { inclusive = true }
+                        }
+                    }
+                )
             }
 
             composable(route = Screens.Dashboard()) {

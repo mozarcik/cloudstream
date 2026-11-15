@@ -19,6 +19,7 @@ import com.lagradost.cloudstream3.mvvm.safe
 import com.lagradost.cloudstream3.network.initClient
 import com.lagradost.cloudstream3.plugins.PluginManager
 import com.lagradost.cloudstream3.services.BackupWorkManager
+import com.lagradost.cloudstream3.ui.settings.restartIntoSelectedAppLayout
 import com.lagradost.cloudstream3.ui.setup.HAS_DONE_SETUP_KEY
 import com.lagradost.cloudstream3.utils.BackupUtils
 import com.lagradost.cloudstream3.utils.BackupUtils.restorePrompt
@@ -302,7 +303,8 @@ class UpdatesSettingsFeature(
                         fallbackIconRes = R.drawable.ic_baseline_construction_24,
                         action = {
                             setKey(HAS_DONE_SETUP_KEY, false)
-                            context.getActivity()?.recreate()
+                            // Fresh start so TvApp opens the Welcome flow (recreate() would restore the old back stack).
+                            context.getActivity()?.restartIntoSelectedAppLayout()
                         }
                     )
                 )

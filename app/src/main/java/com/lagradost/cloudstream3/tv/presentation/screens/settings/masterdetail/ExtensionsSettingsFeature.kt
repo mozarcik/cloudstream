@@ -196,7 +196,7 @@ class ExtensionsSettingsFeature(
             // The next level of "Add repository" has no preview.
             if (isPreview) return
             AddRepositoryForm(
-                viewModel = viewModel,
+                addRepository = viewModel::addRepository,
                 onBack = onBack,
                 onRepositoryAdded = {
                     onDataChanged(ExtensionsScreenPrefix)

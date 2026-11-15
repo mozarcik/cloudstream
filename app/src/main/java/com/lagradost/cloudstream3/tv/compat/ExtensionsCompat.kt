@@ -161,6 +161,7 @@ object ExtensionsCompat {
                     repositoryUrl = repoUrl,
                     url = sitePlugin.url,
                     fileHash = sitePlugin.fileHash,
+                    language = sitePlugin.language,
                     status = when {
                         installedPlugin == null -> PluginStatus.NOT_DOWNLOADED
                         installedPlugin.version < sitePlugin.version -> PluginStatus.UPDATE_AVAILABLE
@@ -281,6 +282,8 @@ data class PluginItem(
     val status: PluginStatus,
     val hasSettings: Boolean,
     val fileHash: String? = null,
+    /** Language tag of the extension ("en", "pl", ...), null when the repository does not say. */
+    val language: String? = null,
 )
 
 /**
