@@ -610,6 +610,163 @@ Po każdej zmianie: `./gradlew :app:assemblePrereleaseDebug` i porównanie trace
 
 ---
 
+## Dodatek A — Home: nawigacja fokusem góra/dół między feedami
+
+Prześledzony przepływ dla ↓/↑ na posterze:
+klawisz → `onPreviewKeyEvent` wiersza (`shouldBlockVerticalMove`) → domyślne wyszukiwanie fokusu w `LazyColumn`
+(beyond-bounds layout komponuje sąsiedni wiersz, jeśli go nie ma) → `focusGroup.enter` wiersza docelowego
+(zapamiętany poster) → `FeedRow` `onFocusChanged` → `onSectionFocusChanged` → `pinFeedToTop` →
+`slideToItem` (`animateScrollBy`, tween 150 ms) + po 2 klatkach aktualizacja opisu w nagłówku obu wierszy.
+Pliki: `screens/home/HomeScreenV2Content.kt`, `HomeScreenFeedList.kt`, `FeedRow.kt`, `FeedScrollSupport.kt`,
+`HomeFocusStore.kt`, `presentation/focus/TvFocus.kt`.
+
+### A1. Przytrzymany ↓/↑: brak ograniczenia powtórzeń, kompozycja nowych wierszy w obsłudze klawisza
+
+- **Problem:** każde powtórzenie klawisza (key repeat ~15–20/s) przenosi fokus o jeden feed, anuluje trwający slide
+  (`feedPinJob?.cancel()`) i startuje nowy. Gdy fokus „wyprzedza” przewijanie, wiersz docelowy jest poza
+  viewportem i nie był jeszcze prefetchowany — `LazyColumn` komponuje i mierzy go synchronicznie (beyond-bounds)
+  w trakcie obsługi zdarzenia klawisza. `NeighbourRowsPrefetchStrategy` przygotowuje tylko bezpośrednich sąsiadów
+  i robi to w wolnym czasie klatek, którego przy ciągłej animacji brakuje.
+- **Lokalizacja:** `HomeScreenV2Content.kt`, `pinFeedToTop`, l. ~218–227; `FeedScrollSupport.kt`, `slideToItem`,
+  l. ~21–33; `FeedRow.kt`, `FeedPosterRow.verticalKeys`, l. ~248–255.
+- **Kategoria:** [5] praca na Main w krytycznej klatce, [1] animacje.
+- **Wpływ:** najbardziej prawdopodobne źródło jank przy szybkim przewijaniu Home: klatka z kompozycją całego wiersza
+  (nagłówek + LazyRow z ~7 plakatami + żądania obrazów) wypada w środku animacji przewijania.
+  Pojedyncze naciśnięcia nie są dotknięte (prefetch nadąża).
+- **Przyczyna:** brak polityki dla przytrzymanego klawisza. Dla ←/→ w Dashboardzie taka polityka już istnieje
+  (`dashboard/DashboardNavLogic.kt` blokuje `repeatCount > 0`).
+- **Rozwiązanie (do wyboru po pomiarze):**
+  (a) przy `repeatCount > 0` przepuszczać ruch dopiero, gdy poprzedni slide się skończył (`feedPinJob?.isActive != true`);
+  (b) przy `repeatCount > 0` przewijać bez animacji (`scrollToItem`), animacja tylko dla pojedynczych naciśnięć.
+- **Przykład:**
+  ```kotlin
+  // FeedPosterRow.verticalKeys (obecnie)
+  Key.DirectionDown -> shouldBlockVerticalMove?.invoke(false) ?: false
+  // proponowane (wariant a): wiersz pyta Home, czy przyjmie powtórzenie
+  Key.DirectionDown -> shouldBlockVerticalMove?.invoke(false) == true ||
+      (event.nativeKeyEvent.repeatCount > 0 && isFeedSlideRunning())
+  ```
+- **Priorytet:** Medium · **Pewność:** Wymaga profilowania (Perfetto: przytrzymany ↓ na 10+ feedach,
+  szukać `Compose:recompose`/`measure` wewnątrz `dispatchKeyEvent`).
+
+### A2. Aktualizacja opisów w nagłówkach obu wierszy wypada w trakcie slide'u
+
+- **Problem:** przy przejściu ↓ stary wiersz czyści opis (`updateFocusDescription(null, false)` po utracie fokusu),
+  a nowy ustawia opis plakatu. Oba zapisy są odroczone o te same 2 klatki, więc obie rekompozycje
+  `FeedRowFocusDescription` trafiają w **tę samą klatkę**, i to w środku 150 ms animacji przewijania
+  (ok. klatka 2 z 9). Komentarz w kodzie szacuje koszt rekompozycji opisu na ~10 ms.
+- **Lokalizacja:** `FeedRow.kt`, `FeedRow`, l. ~127–135 (`updateFocusDescription`) i ~144–149 (`onFocusChanged`).
+- **Kategoria:** [1] / [4] — rozłożenie pracy w czasie.
+- **Wpływ:** potencjalnie jedna długa klatka (2 × pomiar tekstu) w każdym przejściu między feedami.
+- **Przyczyna:** odroczenie liczone w klatkach od zdarzenia, a nie od końca przewijania; brak rozdzielenia
+  „wyczyść stary” i „ustaw nowy”.
+- **Rozwiązanie:** (1) czyszczenie starego wiersza wykonywać po zakończeniu slide'u albo pominąć, gdy wiersz
+  wyjeżdża poza ekran (przy kolejnym wejściu i tak zostanie nadpisany); (2) ustawienie nowego opisu
+  odroczyć do końca `feedPinJob` (lub o ~`MaxAnimationMs`), a nie o stałe 2 klatki.
+- **Przykład:**
+  ```kotlin
+  // obecnie
+  pendingUpdate[0] = scope.launch { withFrameNanos { }; withFrameNanos { }; focusedItem.value = item; … }
+  // proponowane: poczekaj na koniec przewijania (Home wystawia np. suspend awaitSlideIdle())
+  pendingUpdate[0] = scope.launch { awaitSlideIdle(); withFrameNanos { }; focusedItem.value = item; … }
+  ```
+- **Priorytet:** Medium · **Pewność:** Wymaga profilowania (trace: czas klatki N+2 po ↓; sprawdzić, czy ~10 ms
+  z komentarza nadal obowiązuje).
+
+### A3. Każde załadowanie feedu rekomponuje wszystkie skomponowane wiersze
+
+- **Problem:** lambda `onSectionFocusChanged` w `HomeScreenV2Content` woła lokalną funkcję `pinFeedToTop`, która
+  czyta parametr `feedsUiState`. Przechwycony `feedsUiState` zmienia się przy każdym załadowanym feedzie, więc
+  (przy strong skipping) powstaje nowa instancja lambdy, a z nią nowy wrapper w `homeFeedSections` → **każdy**
+  skomponowany `FeedRow` dostaje „zmieniony” parametr i rekomponuje się (dzieci zwykle są pomijane).
+  Ten sam problem rozwiązano już dla `shouldBlockVerticalMove` przez `rememberUpdatedState` (komentarz l. ~257–260),
+  ale nie dla `onSectionFocusChanged`.
+- **Lokalizacja:** `HomeScreenV2Content.kt`, l. ~218–227 i ~485–487; `HomeScreenFeedList.kt`, l. ~72.
+- **Kategoria:** [4].
+- **Wpływ:** przy starcie Home (feedy kończą się ładować jeden po drugim, a użytkownik już nawiguje) — seria
+  zbędnych rekompozycji wierszy w klatkach, w których może trwać slide.
+- **Rozwiązanie:** ten sam wzorzec co dla `shouldBlockVerticalMove`.
+- **Przykład:**
+  ```kotlin
+  val latestPinFeedToTop by rememberUpdatedState { feedId: String -> pinFeedToTop(feedId) }
+  …
+  onSectionFocusChanged = { feedId, hasFocus -> if (hasFocus) latestPinFeedToTop(feedId) },
+  ```
+- **Priorytet:** Low/Medium · **Pewność:** Potwierdzony problem (mechanizm); koszt — Layout Inspector.
+
+### A4. Zmiana wysokości wiersza po załadowaniu pustego/błędnego feedu przesuwa wiersze w trakcie nawigacji
+
+- **Problem:** wiersz w stanie Loading ma wysokość `FeedRowSectionHeight`, po wyniku Empty/Error —
+  `FeedRowEmptySectionHeight`. Gdy feed nad wierszem z fokusem (lub między pozycją przypiętą a fokusem) zakończy
+  ładowanie jako pusty, wszystko poniżej skacze w górę bez animacji, a „przypięcie” feedu do górnej krawędzi
+  przestaje się zgadzać do następnego ruchu fokusu.
+- **Lokalizacja:** `FeedRow.kt`, `FeedRow`, l. ~136–142.
+- **Kategoria:** [1] zmiana layoutu (UX/płynność wizualna).
+- **Wpływ:** widoczny skok listy podczas nawigacji w pierwszych sekundach po wejściu na Home / zmianie źródła.
+- **Rozwiązanie:** po zakończeniu ładowania sprawdzić, czy wiersz z fokusem jest nadal przypięty, i jeśli nie —
+  wywołać `pinFeedToTop` dla feedu z fokusem; albo utrzymać stałą wysokość placeholdera = wysokość pustego wiersza,
+  dopóki feed nie ma wyników.
+- **Priorytet:** Low/Medium · **Pewność:** Potwierdzony (zależny od źródeł z pustymi kategoriami).
+
+### A5. Logowanie i budowanie stringów przy każdym ruchu fokusu
+
+- **Problem:** każdy fokus plakatu wywołuje `HomeFocusStore.onTargetFocused(HomeFocusStore.feedPoster(feed.id, item))`:
+  sklejenie stringa `"home:feed:$feedId:item:${apiName}|${id}|${url}"` + `Log.d` (bez warunku DEBUG).
+- **Lokalizacja:** `HomeFocusStore.kt`, l. ~17–20, 38–40; wywołania w `HomeScreenV2Content.kt`, l. ~489–499.
+- **Kategoria:** [5] alokacje w klatce zmiany fokusu.
+- **Wpływ:** mały, ale dokładnie w klatce obsługi klawisza (także przy ←/→).
+- **Rozwiązanie:** logi za `BuildConfig.DEBUG`; docelowo trzymać cel jako dane (`feedId`, indeks) zamiast stringa
+  i parsować go dopiero przy przywracaniu (`feedIdFromTarget`).
+- **Priorytet:** Low · **Pewność:** Potwierdzony.
+
+### A6. `onFocusChanged` wiersza uruchamia coroutine już przy dołączeniu wiersza
+
+- **Problem:** `Modifier.onFocusChanged` wywołuje callback przy dołączeniu węzła (stan Inactive), więc każdy nowo
+  skomponowany `FeedRow` (także prefetchowany / beyond-bounds) startuje coroutine z 2× `withFrameNanos` tylko po to,
+  by zapisać `null`/`false`, które już są w stanie.
+- **Lokalizacja:** `FeedRow.kt`, l. ~144–149.
+- **Kategoria:** [2].
+- **Rozwiązanie:** czyścić tylko przy przejściu `hasFocus: true → false` (zapamiętać poprzednią wartość w zwykłym polu).
+- **Priorytet:** Low · **Pewność:** Potwierdzony (koszt mały).
+
+### A7. Powrót ↑ do odtworzonego wiersza przesuwa jego zawartość w poziomie
+
+- **Problem:** wiersz, który wypadł z kompozycji, jest odtwarzany z
+  `rememberLazyListState(initialFirstVisibleItemIndex = group.lastIndex)` — zapamiętany plakat ląduje na początku
+  wiersza, a nie w miejscu, w którym był (np. 3. plakat na pozycji 3 → po powrocie na pozycji 1).
+- **Lokalizacja:** `FeedRow.kt`, `FeedPosterRow`, l. ~228–230; `focus/TvFocus.kt` (`TvFocusGroup.lastIndex`).
+- **Kategoria:** UX nawigacji (pośrednio [3] — utrata stanu przewinięcia elementu listy).
+- **Wpływ:** wizualny „przeskok” wiersza przy ↑ po dłuższym przewinięciu w dół.
+- **Rozwiązanie:** w `TvFocusGroup` zapamiętywać także `firstVisibleItemIndex` i `firstVisibleItemScrollOffset`
+  wiersza (np. przy utracie fokusu) i odtwarzać stan z nich.
+- **Priorytet:** Low · **Pewność:** Potwierdzony (analiza kodu; zachowanie warto obejrzeć na urządzeniu).
+
+### A8. ↑ z pierwszego feedu do źródeł/hero: inna animacja niż pozostałe przejścia
+
+- **Problem:** wejście fokusu w sekcję hero/chipów wywołuje `listState.animateScrollToItem(0)` (domyślna sprężyna),
+  podczas gdy przejścia między feedami używają tween 150 ms (`slideToItem`).
+- **Lokalizacja:** `HomeScreenV2Content.kt`, `restoreContinueWatchingToTop`, l. ~158–164.
+- **Kategoria:** [1] animacje (spójność, długość animacji).
+- **Rozwiązanie:** `listState.slideToItem(HomeContinueWatchingListIndex)` (ten sam helper co dla feedów).
+- **Priorytet:** Low · **Pewność:** Potwierdzony.
+
+### Co w nawigacji ↑/↓ na Home jest zrobione dobrze
+
+- Stała wysokość wierszy z treścią (fokus nie zmienia layoutu), fokus karty tylko przez `graphicsLayer` + draw.
+- Wyłączone domyślne bring-into-view dla listy (`HomeBringIntoViewSpec`) i własne przypinanie feedu jednym tweenem.
+- `NeighbourRowsPrefetchStrategy` (prefetch sąsiednich feedów w wolnych klatkach) i dwuetapowa kompozycja nowego wiersza.
+- Jeden handler ↑/↓ na wiersz (nie na plakat); `focusGroup.enter` przywraca zapamiętany plakat bez dodatkowych modyfikatorów.
+- `slideToItem` obsługuje wiersz tuż nad viewportem (`scrollBy(-1f)`), więc ↑ ma tę samą animację co ↓.
+- Hero i chipy przesuwane w fazie placement (`offset {}`), bez rekompozycji przy scrollu.
+- Opis plakatu w osobnym zakresie rekompozycji (`FeedRowFocusDescription`), stan fokusu wiersza (`TvFocusGroup.lastIndex`)
+  jako zwykłe pole, nieczytane w Composition.
+- Zapisy `feedPinJob`/`feedNavJob`/`isFeedSliding` są czytane tylko w callbackach, więc nie wywołują rekompozycji.
+
+Proponowana kolejność dla Home: A3 (tania, pewna) → A8 → A6 → A5 → pomiar trace'u przytrzymanego ↓ i pojedynczego ↓ →
+A1 i A2 zależnie od wyniku → A4, A7.
+
+---
+
 *Walidacja:* raport powstał wyłącznie na podstawie analizy statycznej. Nie uruchamiano buildu, testów, emulatora,
 Layout Inspectora ani trace'ów — wszystkie oceny wpływu oznaczone jako „Prawdopodobny” / „Wymaga profilowania”
 należy potwierdzić pomiarem przed wdrożeniem.
