@@ -7,7 +7,7 @@ import com.lagradost.cloudstream3.homeserver.UploadState
 import android.widget.Toast
 import androidx.compose.material.icons.filled.CloudUpload
 import com.lagradost.cloudstream3.homeserver.HomeServerConfig
-import com.lagradost.cloudstream3.homeserver.LibraryUploadWorker
+import com.lagradost.cloudstream3.homeserver.HomeServerUploadService
 import com.lagradost.cloudstream3.phone.presentation.common.navBarBottom
 import android.text.format.Formatter
 import androidx.compose.foundation.background
@@ -207,7 +207,7 @@ private fun DownloadRow(
             CsIconButton(
                 Icons.Default.CloudUpload, stringResource(R.string.home_server_send),
                 {
-                    LibraryUploadWorker.enqueue(context, item.episodeId)
+                    HomeServerUploadService.enqueue(context, item.episodeId)
                     Toast.makeText(context, R.string.home_server_send_queued, Toast.LENGTH_SHORT).show()
                 },
                 container = Color.Transparent, size = 44.dp,

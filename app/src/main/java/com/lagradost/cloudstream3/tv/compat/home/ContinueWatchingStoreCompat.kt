@@ -2,11 +2,14 @@ package com.lagradost.cloudstream3.tv.compat.home
 
 import com.lagradost.cloudstream3.APIHolder.getApiFromNameNull
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKey
+import com.lagradost.cloudstream3.CloudStreamApp.Companion.getKeys
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.removeKey
 import com.lagradost.cloudstream3.CloudStreamApp.Companion.setKey
 import com.lagradost.cloudstream3.TvType
 import com.lagradost.cloudstream3.isEpisodeBased
+import com.lagradost.cloudstream3.utils.DOWNLOAD_EPISODE_CACHE
 import com.lagradost.cloudstream3.utils.DOWNLOAD_HEADER_CACHE
+import com.lagradost.cloudstream3.utils.DataStore.getFolderName
 import com.lagradost.cloudstream3.utils.DataStoreHelper
 import com.lagradost.cloudstream3.utils.downloader.DownloadObjects
 
@@ -52,7 +55,13 @@ internal fun removeContinueWatchingEntry(parentId: Int?) {
     if (parentId == null) return
 
     DataStoreHelper.removeLastWatched(parentId)
-    removeKey(DOWNLOAD_HEADER_CACHE, parentId.toString())
+    removeHeaderUnlessDownloaded(parentId)
+}
+
+/** The header is shared with the downloads list: without it a downloaded title vanishes from it (file stays on disk). */
+private fun removeHeaderUnlessDownloaded(parentId: Int) {
+    val hasDownloads = !getKeys(getFolderName(DOWNLOAD_EPISODE_CACHE, parentId.toString())).isNullOrEmpty()
+    if (!hasDownloads) removeKey(DOWNLOAD_HEADER_CACHE, parentId.toString())
 }
 
 private fun removeUnavailableContinueWatchingEntries(
@@ -81,7 +90,7 @@ private fun removeUnavailableContinueWatchingEntries(
         }
 
         DataStoreHelper.removeLastWatched(resume.parentId)
-        removeKey(DOWNLOAD_HEADER_CACHE, resume.parentId.toString())
+        removeHeaderUnlessDownloaded(resume.parentId)
     }
 }
 

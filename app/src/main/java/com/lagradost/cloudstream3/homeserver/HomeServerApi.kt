@@ -11,6 +11,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+/** HTTP error answered by the server or S3; [code] tells "try again" (5xx, 408, 429) from "gone" (other 4xx). */
+class HomeServerHttpException(val code: Int, message: String) : IOException(message) {
+    val isRetryable: Boolean get() = code >= 500 || code == 408 || code == 429
+}
 
 /** Minimal client of cloudstream-server. All URLs it returns are presigned (no headers needed). */
 class HomeServerApi(private val baseUrl: String) {
@@ -99,8 +105,8 @@ class HomeServerApi(private val baseUrl: String) {
             val plain = bytes.toRequestBody(contentType?.toMediaType())
             val body = if (onProgress == null) plain else ProgressBody(plain, onProgress)
             val req = Request.Builder().url(url).put(body).build()
-            client.newCall(req).execute().use {
-                if (!it.isSuccessful) throw IOException("S3 PUT ${it.code}")
+            uploadClient.newCall(req).execute().use {
+                if (!it.isSuccessful) throw HomeServerHttpException(it.code, "S3 PUT ${it.code}")
                 it.header("ETag")
             }
         }
@@ -117,9 +123,19 @@ class HomeServerApi(private val baseUrl: String) {
 
     private suspend fun call(req: Request): JSONObject = withContext(Dispatchers.IO) {
         client.newCall(req).execute().use {
-            if (!it.isSuccessful) throw IOException("Server ${it.code} ${req.url.encodedPath}")
+            if (!it.isSuccessful) throw HomeServerHttpException(it.code, "Server ${it.code} ${req.url.encodedPath}")
             val text = it.body.string()
             if (text.isBlank()) JSONObject() else JSONObject(text)
+        }
+    }
+
+    private companion object {
+        /** Parts are tens of MB and S3 may take a while to confirm one; the default 10 s timeouts are too short. */
+        val uploadClient by lazy {
+            app.baseClient.newBuilder()
+                .writeTimeout(2, TimeUnit.MINUTES)
+                .readTimeout(2, TimeUnit.MINUTES)
+                .build()
         }
     }
 

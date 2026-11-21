@@ -43,7 +43,7 @@ internal class MovieDetailsDownloadLauncher {
             "startMirrorDownload: episodeId=${target.episode.id} linkIndex=$linkIndex linkName=${loaded.links[linkIndex].name}"
         )
         val loadResponse = target.loadResponse
-        DownloadQueueManager.addToQueue(
+        val queued = DownloadQueueManager.addToQueue(
             DownloadObjects.DownloadQueueItem(
                 episode = target.episode,
                 isMovie = loadResponse.type in setOf(TvType.Movie, TvType.AnimeMovie),
@@ -60,9 +60,11 @@ internal class MovieDetailsDownloadLauncher {
         )
         Log.d(
             DebugTag,
-            "startMirrorDownload: request sent for episodeId=${target.episode.id}"
+            "startMirrorDownload: request sent for episodeId=${target.episode.id} queued=$queued"
         )
-        showToast(R.string.download_started)
+        // The queue silently skips finished files; say so instead of "started" (an already queued one keeps "started").
+        val alreadyDownloaded = !queued && VideoDownloadManager.getDownloadFileInfo(downloadContext, target.episode.id) != null
+        showToast(if (alreadyDownloaded) R.string.download_already_downloaded else R.string.download_started)
     }
 
     suspend fun startSubtitleDownload(

@@ -155,7 +155,7 @@ class DownloadsViewModel : ViewModel() {
         val episodes = (cachedEpisodes + movieSyntheticEpisodes).distinctBy { episode -> episode.id }
 
         val downloadItems = episodes.mapNotNull { episode ->
-            val header = headersById[episode.parentId] ?: return@mapNotNull null
+            val header = headersById[episode.parentId] ?: orphanHeader(context, episode) ?: return@mapNotNull null
             val fileInfo = VideoDownloadManager.getDownloadFileInfo(context, episode.id)
             val downloadedBytes = fileInfo?.fileLength ?: 0L
             val totalBytes = fileInfo?.totalBytes ?: 0L
@@ -260,6 +260,30 @@ class DownloadsViewModel : ViewModel() {
             downloadedItems = downloadItems
                 .filter { item -> item.state is DownloadState.Downloaded }
                 .sortedByDescending { item -> item.downloadedAtMillis ?: item.startedAtMillis }
+        )
+    }
+
+    /**
+     * Stand-in header for a download whose header was removed elsewhere (it is shared with continue watching),
+     * so the file stays visible and deletable. Opening the details screen of the title writes the real one back.
+     */
+    private fun orphanHeader(
+        context: Context,
+        episode: DownloadObjects.DownloadEpisodeCached,
+    ): DownloadObjects.DownloadHeaderCached? {
+        val info = context.getKey<DownloadObjects.DownloadedFileInfo>(
+            VideoDownloadManager.KEY_DOWNLOAD_INFO,
+            episode.id.toString()
+        ) ?: return null
+        val isMovie = episode.season == null && episode.episode <= 0
+        return DownloadObjects.DownloadHeaderCached(
+            apiName = "",
+            url = "",
+            type = if (isMovie) TvType.Movie else TvType.TvSeries,
+            name = info.displayName.substringBeforeLast('.').ifBlank { episode.name.orEmpty() },
+            poster = episode.poster,
+            cacheTime = episode.cacheTime,
+            id = episode.parentId,
         )
     }
 
