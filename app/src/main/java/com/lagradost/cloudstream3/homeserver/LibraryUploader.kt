@@ -19,8 +19,8 @@ import kotlinx.coroutines.withContext
 import java.io.FileInputStream
 import java.io.IOException
 
-/** The upload can not succeed by retrying (file gone, metadata missing, server rejected it). */
-class UploadAbortedException(message: String) : Exception(message)
+/** The downloaded file can not be read (deleted, or the app lost access to the download folder). */
+class UploadFileException(cause: Throwable?) : Exception("cannot read the downloaded file", cause)
 
 /**
  * Uploads one downloaded episode to the home server's S3 with presigned multipart PUTs.
@@ -37,7 +37,6 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
         val fileInfo = awaitSettledFile(episodeId) ?: return null
         val stored = ctx.getKey<DownloadObjects.DownloadedFileInfo>(VideoDownloadManager.KEY_DOWNLOAD_INFO, episodeId.toString())
         val meta = buildMetadata(episodeId, stored?.displayName ?: "video.mp4", fileInfo.fileLength)
-            ?: throw UploadAbortedException("missing download metadata for $episodeId")
         return Info(meta.title, fileInfo.fileLength) to Prepared(episodeId, fileInfo.path, meta, stored)
     }
 
@@ -98,7 +97,12 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
             val partSize = session.partSize
             var done = session.parts.size.toLong() * partSize
             onSent(done)
-            val fd = ctx.contentResolver.openFileDescriptor(p.uri, "r") ?: throw UploadAbortedException("cannot open ${p.uri}")
+            // Not retried: a missing file or a lost folder permission does not fix itself.
+            val fd = try {
+                ctx.contentResolver.openFileDescriptor(p.uri, "r")
+            } catch (e: Exception) {
+                throw UploadFileException(e)
+            } ?: throw UploadFileException(null)
             fd.use {
                 FileInputStream(fd.fileDescriptor).use { stream ->
                     stream.channel.position(done)
@@ -170,17 +174,21 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
         return VideoDownloadManager.getDownloadFileInfo(ctx, episodeId)
     }
 
-    private fun buildMetadata(episodeId: Int, displayName: String, size: Long): UploadMetadata? {
+    /**
+     * Without the title header (removed together with a continue watching entry by older versions) the file is
+     * still uploaded, named after the file; the server item then just has no link back to the provider page.
+     */
+    private fun buildMetadata(episodeId: Int, displayName: String, size: Long): UploadMetadata {
         val episode = ctx.getKeys(DOWNLOAD_EPISODE_CACHE)
             .firstNotNullOfOrNull { key -> ctx.getKey<DownloadObjects.DownloadEpisodeCached>(key)?.takeIf { it.id == episodeId } }
         val parentId = episode?.parentId ?: episodeId // movies use the header id as episode id
         val header = ctx.getKey<DownloadObjects.DownloadHeaderCached>(DOWNLOAD_HEADER_CACHE, parentId.toString())
-            ?: return null
         return UploadMetadata(
-            title = header.name, filename = displayName, size = size,
-            poster = episode?.poster ?: header.poster,
-            parentId = header.id, episodeId = episodeId,
-            apiName = header.apiName, url = header.url,
+            title = header?.name ?: displayName.substringBeforeLast('.').ifBlank { episode?.name ?: displayName },
+            filename = displayName, size = size,
+            poster = episode?.poster ?: header?.poster,
+            parentId = parentId, episodeId = episodeId,
+            apiName = header?.apiName.orEmpty(), url = header?.url.orEmpty(),
             season = episode?.season, episode = episode?.episode,
         )
     }

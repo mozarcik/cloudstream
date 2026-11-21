@@ -7,8 +7,8 @@ import kotlinx.coroutines.flow.update
 
 enum class UploadPhase { Queued, Uploading, Failed }
 
-/** Upload of one downloaded episode; [total] is 0 until the file size is known. */
-data class UploadState(val phase: UploadPhase, val sent: Long = 0L, val total: Long = 0L) {
+/** Upload of one downloaded episode; [total] is 0 until the file size is known, [error] says why it failed. */
+data class UploadState(val phase: UploadPhase, val sent: Long = 0L, val total: Long = 0L, val error: String? = null) {
     val fraction: Float get() = if (total > 0) (sent.toFloat() / total).coerceIn(0f, 1f) else 0f
 }
 

@@ -14,7 +14,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** HTTP error answered by the server or S3; [code] tells "try again" (5xx, 408, 429) from "gone" (other 4xx). */
-class HomeServerHttpException(val code: Int, message: String) : IOException(message) {
+class HomeServerHttpException(val code: Int, message: String, val body: String? = null) : IOException(message) {
     val isRetryable: Boolean get() = code >= 500 || code == 408 || code == 429
 }
 
@@ -106,7 +106,7 @@ class HomeServerApi(private val baseUrl: String) {
             val body = if (onProgress == null) plain else ProgressBody(plain, onProgress)
             val req = Request.Builder().url(url).put(body).build()
             uploadClient.newCall(req).execute().use {
-                if (!it.isSuccessful) throw HomeServerHttpException(it.code, "S3 PUT ${it.code}")
+                if (!it.isSuccessful) throw HomeServerHttpException(it.code, "S3 PUT ${it.code}", it.errorBody())
                 it.header("ETag")
             }
         }
@@ -123,7 +123,7 @@ class HomeServerApi(private val baseUrl: String) {
 
     private suspend fun call(req: Request): JSONObject = withContext(Dispatchers.IO) {
         client.newCall(req).execute().use {
-            if (!it.isSuccessful) throw HomeServerHttpException(it.code, "Server ${it.code} ${req.url.encodedPath}")
+            if (!it.isSuccessful) throw HomeServerHttpException(it.code, "Server ${it.code} ${req.url.encodedPath}", it.errorBody())
             val text = it.body.string()
             if (text.isBlank()) JSONObject() else JSONObject(text)
         }
@@ -138,6 +138,10 @@ class HomeServerApi(private val baseUrl: String) {
                 .build()
         }
     }
+
+    /** First line of the error body (server JSON error or S3 XML code), short enough for a notification. */
+    private fun okhttp3.Response.errorBody(): String? =
+        runCatching { body.string() }.getOrNull()?.trim()?.lineSequence()?.firstOrNull()?.take(200)?.takeIf { it.isNotBlank() }
 
     private fun parseItem(o: JSONObject) = ServerLibraryItem(
         id = o.getString("id"),

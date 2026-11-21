@@ -188,10 +188,10 @@ private fun DownloadRow(
                 val label = when (upload.phase) {
                     UploadPhase.Queued -> stringResource(R.string.home_server_upload_waiting)
                     UploadPhase.Uploading -> stringResource(R.string.home_server_upload_sending, (upload.fraction * 100).toInt())
-                    UploadPhase.Failed -> stringResource(R.string.home_server_upload_failed)
+                    UploadPhase.Failed -> listOfNotNull(stringResource(R.string.home_server_upload_failed), upload.error).joinToString(": ")
                 }
                 if (upload.phase != UploadPhase.Failed) CsProgress(upload.fraction, Modifier.padding(top = 7.dp))
-                Text(label, style = PhoneText.Meta.copy(fontSize = 12.sp), color = if (upload.phase == UploadPhase.Failed) PhoneColors.Danger else PhoneColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                Text(label, style = PhoneText.Meta.copy(fontSize = 12.sp), color = if (upload.phase == UploadPhase.Failed) PhoneColors.Danger else PhoneColors.Text2, maxLines = if (upload.phase == UploadPhase.Failed) 3 else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
             val progress = if (upload != null) null else when (val s = item.state) {
                 is DownloadState.Downloading -> s.progress

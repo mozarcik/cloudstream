@@ -106,10 +106,12 @@ class HomeServerUploadService : Service() {
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {
+            Log.e(TAG, "Upload of $episodeId failed", t)
             logError(t)
+            val reason = describeError(t)
             // The session stays stored: "Send" again (or the next app start) resumes from the last part.
-            UploadProgress.set(episodeId, UploadState(UploadPhase.Failed, 0L, total))
-            notifyResult(episodeId, title, ok = false)
+            UploadProgress.set(episodeId, UploadState(UploadPhase.Failed, 0L, total, reason))
+            notifyResult(episodeId, title, ok = false, reason = reason)
         }
     }
 
@@ -164,11 +166,21 @@ class HomeServerUploadService : Service() {
             .build()
     }
 
-    private fun notifyResult(episodeId: Int, title: String, ok: Boolean) {
+    /** Short reason for the user; the full stack trace goes to logcat (tag [TAG]). */
+    private fun describeError(t: Throwable): String = when (t) {
+        is HomeServerHttpException -> listOfNotNull(getString(R.string.home_server_upload_error_http, t.code), t.body).joinToString(": ")
+        is UploadFileException -> getString(R.string.home_server_upload_error_file)
+        is java.io.IOException -> getString(R.string.home_server_upload_error_network, t.message ?: t.javaClass.simpleName)
+        else -> listOfNotNull(t.javaClass.simpleName, t.message).joinToString(": ")
+    }
+
+    private fun notifyResult(episodeId: Int, title: String, ok: Boolean, reason: String? = null) {
+        val text = listOfNotNull(title.takeIf { it.isNotBlank() }, reason).joinToString("\n")
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_cloudstream_monochrome_big)
             .setContentTitle(getString(if (ok) R.string.home_server_upload_done else R.string.home_server_upload_failed))
-            .setContentText(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(openAppIntent(this))
             .setAutoCancel(true)
             .build()

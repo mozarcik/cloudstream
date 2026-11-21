@@ -100,6 +100,9 @@
     <string name="home_server_upload_sending">Uploading to server %1$d%%</string>
     <string name="home_server_upload_done">Uploaded to home server</string>
     <string name="home_server_upload_failed">Upload to home server failed</string>
+    <string name="home_server_upload_error_http">server responded with error %1$d</string>
+    <string name="home_server_upload_error_network">cannot reach the server (%1$s)</string>
+    <string name="home_server_upload_error_file">cannot read the downloaded file</string>
     <string name="home_server_upload_tap_to_start">Tap to start uploading</string>
     <plurals name="home_server_uploads_queued">
         <item quantity="one">%d more in queue</item>

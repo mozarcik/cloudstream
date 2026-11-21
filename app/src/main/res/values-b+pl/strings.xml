@@ -1158,6 +1158,9 @@
     <string name="home_server_upload_sending">Wysyłanie na serwer %1$d%%</string>
     <string name="home_server_upload_done">Wysłano na serwer domowy</string>
     <string name="home_server_upload_failed">Nie udało się wysłać na serwer domowy</string>
+    <string name="home_server_upload_error_http">serwer odpowiedział błędem %1$d</string>
+    <string name="home_server_upload_error_network">brak połączenia z serwerem (%1$s)</string>
+    <string name="home_server_upload_error_file">nie można odczytać pobranego pliku</string>
     <string name="home_server_upload_tap_to_start">Dotknij, aby rozpocząć wysyłanie</string>
     <plurals name="home_server_uploads_queued">
         <item quantity="one">jeszcze %d w kolejce</item>
