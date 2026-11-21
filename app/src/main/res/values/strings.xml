@@ -100,6 +100,15 @@
     <string name="home_server_upload_sending">Uploading to server %1$d%%</string>
     <string name="home_server_upload_done">Uploaded to home server</string>
     <string name="home_server_upload_failed">Upload to home server failed</string>
+    <string name="home_server_upload_tap_to_start">Tap to start uploading</string>
+    <plurals name="home_server_uploads_queued">
+        <item quantity="one">%d more in queue</item>
+        <item quantity="other">%d more in queue</item>
+    </plurals>
+    <string name="download_already_downloaded">Already downloaded</string>
+    <string name="phone_redownload_title">Already downloaded</string>
+    <string name="phone_redownload_message">Delete the downloaded file to download it again, e.g. from another source?</string>
+    <string name="phone_redownload_confirm">Delete and choose source</string>
     <string name="downloading">Downloading</string>
     <string name="download_paused">Download Paused</string>
     <string name="download_started">Download Started</string>

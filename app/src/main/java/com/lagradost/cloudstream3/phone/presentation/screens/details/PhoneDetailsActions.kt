@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -69,9 +70,33 @@ class PhoneDetailsActions(
     var isBusy by mutableStateOf(false)
         private set
 
-    fun openDownload(season: Int? = null, episode: Int? = null) {
+    /** Episode (null = the movie) waiting for "delete and download again"; non-null shows the dialog. */
+    var redownload by mutableStateOf<EpisodeRef?>(null)
+        private set
+
+    /** An already downloaded file would be skipped by the queue, so offer to delete it first (e.g. to pick another source). */
+    fun openDownload(season: Int? = null, episode: Int? = null, downloaded: Boolean = false) {
+        if (downloaded) {
+            redownload = EpisodeRef(season, episode)
+            return
+        }
         val actions = compat() ?: return
         mirror.onEvent(DownloadMirrorSelectionEvent.Open(actions, context, season, episode))
+    }
+
+    fun confirmRedownload() {
+        val target = redownload ?: return
+        redownload = null
+        val actions = compat() ?: return
+        scope.launch {
+            withContext(Dispatchers.IO) { actions.deleteDownload(context, target.season, target.episode) }
+            refreshKey++
+            openDownload(target.season, target.episode)
+        }
+    }
+
+    fun dismissRedownload() {
+        redownload = null
     }
 
     fun openMore(season: Int? = null, episode: Int? = null, title: String? = null) {
@@ -104,6 +129,24 @@ class PhoneDetailsActions(
     }
 
     fun close() = mirror.onEvent(DownloadMirrorSelectionEvent.Close)
+}
+
+data class EpisodeRef(val season: Int?, val episode: Int?)
+
+@Composable
+fun RedownloadDialog(actions: PhoneDetailsActions) {
+    if (actions.redownload == null) return
+    AlertDialog(
+        onDismissRequest = actions::dismissRedownload,
+        containerColor = PhoneColors.Sheet,
+        title = { Text(stringResource(R.string.phone_redownload_title), style = PhoneText.Section, color = PhoneColors.Text) },
+        text = { Text(stringResource(R.string.phone_redownload_message), style = PhoneText.Body, color = PhoneColors.Body) },
+        // Cancel first, same as the delete dialog of the downloads screen.
+        confirmButton = { TextButton(actions::dismissRedownload) { Text(stringResource(R.string.cancel), style = PhoneText.Button, color = PhoneColors.Text) } },
+        dismissButton = {
+            TextButton(actions::confirmRedownload) { Text(stringResource(R.string.phone_redownload_confirm), style = PhoneText.Button, color = PhoneColors.Danger) }
+        },
+    )
 }
 
 @Composable

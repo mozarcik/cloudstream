@@ -242,7 +242,7 @@ private fun DetailsContent(
                     }
                     if (!isSeries) {
                         val snapshot = rememberDownloadSnapshot(actions, compat, context, null, null)
-                        DownloadTile(snapshot, Modifier.weight(1f)) { actions.openDownload() }
+                        DownloadTile(snapshot, Modifier.weight(1f)) { actions.openDownload(downloaded = snapshot?.status == DownloadType.IsDone) }
                     }
                     ActionTile(
                         icon = if (details.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -276,12 +276,13 @@ private fun DetailsContent(
             }
             itemsIndexed(season.episodes, key = { index, ep -> "${ep.id}#$index" }) { _, ep ->
                 val season = ep.seasonNumber ?: season.seasonNumber
+                val snapshot = rememberDownloadSnapshot(actions, compat, context, season, ep.episodeNumber)
                 EpisodeRow(
                     ep = ep,
                     watched = rememberWatched(actions, compat, season, ep.episodeNumber),
-                    snapshot = rememberDownloadSnapshot(actions, compat, context, season, ep.episodeNumber),
+                    snapshot = snapshot,
                     onClick = { onPlay(PlayerStartTarget.DirectEpisodeData(ep.data)) },
-                    onDownload = { actions.openDownload(season, ep.episodeNumber) },
+                    onDownload = { actions.openDownload(season, ep.episodeNumber, downloaded = snapshot?.status == DownloadType.IsDone) },
                     onMore = { actions.openMore(season, ep.episodeNumber) },
                 )
             }
@@ -325,6 +326,7 @@ private fun DetailsContent(
         }
 
         DetailsActionSheet(actions)
+        RedownloadDialog(actions)
         if (showBookmarkSheet) {
             ModalBottomSheet(onDismissRequest = { showBookmarkSheet = false }, containerColor = PhoneColors.Sheet) {
                 SheetTitle(stringResource(R.string.phone_set_watch_status), details.name)

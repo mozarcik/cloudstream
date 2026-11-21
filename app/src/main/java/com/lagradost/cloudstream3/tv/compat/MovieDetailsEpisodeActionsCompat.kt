@@ -3,6 +3,8 @@ package com.lagradost.cloudstream3.tv.compat
 import android.content.Context
 import com.lagradost.cloudstream3.R
 import com.lagradost.cloudstream3.LoadResponse
+import com.lagradost.cloudstream3.tv.compat.downloads.deleteDownloadEntry
+import com.lagradost.cloudstream3.ui.result.getId
 import com.lagradost.cloudstream3.utils.AppContextUtils.getNameFull
 
 class MovieDetailsEpisodeActionsCompat(
@@ -166,6 +168,12 @@ class MovieDetailsEpisodeActionsCompat(
             context = context,
             onPlayInApp = onPlayInApp,
         )
+    }
+
+    /** Removes the downloaded file and its entry, so the episode can be downloaded again (from any source). */
+    suspend fun deleteDownload(context: Context, preferredSeason: Int?, preferredEpisode: Int?): Boolean {
+        val target = resolveTarget(preferredSeason, preferredEpisode) ?: return false
+        return deleteDownloadEntry(context, target.episode.id, target.loadResponse.getId())
     }
 
     private suspend fun resolveTarget(

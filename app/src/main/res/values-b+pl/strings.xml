@@ -1158,4 +1158,15 @@
     <string name="home_server_upload_sending">Wysyłanie na serwer %1$d%%</string>
     <string name="home_server_upload_done">Wysłano na serwer domowy</string>
     <string name="home_server_upload_failed">Nie udało się wysłać na serwer domowy</string>
+    <string name="home_server_upload_tap_to_start">Dotknij, aby rozpocząć wysyłanie</string>
+    <plurals name="home_server_uploads_queued">
+        <item quantity="one">jeszcze %d w kolejce</item>
+        <item quantity="few">jeszcze %d w kolejce</item>
+        <item quantity="many">jeszcze %d w kolejce</item>
+        <item quantity="other">jeszcze %d w kolejce</item>
+    </plurals>
+    <string name="download_already_downloaded">Już pobrane</string>
+    <string name="phone_redownload_title">Już pobrane</string>
+    <string name="phone_redownload_message">Usunąć pobrany plik, aby pobrać go ponownie, np. z innego źródła?</string>
+    <string name="phone_redownload_confirm">Usuń i wybierz źródło</string>
 </resources>

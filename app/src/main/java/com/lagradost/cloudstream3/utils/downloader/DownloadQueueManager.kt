@@ -221,9 +221,10 @@ object DownloadQueueManager {
         }
     }
 
-    /** Add a new object to the queue. Will not queue completed downloads or current downloads. */
-    fun addToQueue(downloadQueueWrapper: DownloadQueueWrapper) = safe {
-        val context = CloudStreamApp.context ?: return@safe
+    /** Add a new object to the queue. Will not queue completed downloads or current downloads.
+     * @return false when nothing was queued (already downloaded, already queued or no context) */
+    fun addToQueue(downloadQueueWrapper: DownloadQueueWrapper): Boolean = safe {
+        val context = CloudStreamApp.context ?: return@safe false
         val fileInfo = getDownloadFileInfo(context, downloadQueueWrapper.id)
         val isComplete = fileInfo != null &&
                 // Assure no division by 0
@@ -231,13 +232,16 @@ object DownloadQueueManager {
                 // If more than 98% downloaded then do not add to queue
                 (fileInfo.fileLength.toFloat() / fileInfo.totalBytes.toFloat()) > 0.98f
         // Do not queue completed files!
-        if (isComplete) return@safe
+        if (isComplete) return@safe false
 
         if (add(downloadQueueWrapper)) {
             setQueueStatus(downloadQueueWrapper.id, VideoDownloadManager.DownloadType.IsPending)
             startQueueService(context)
+            true
+        } else {
+            false
         }
-    }
+    } ?: false
 
 
     /** Refreshes the queue flow with the same value, but copied.
