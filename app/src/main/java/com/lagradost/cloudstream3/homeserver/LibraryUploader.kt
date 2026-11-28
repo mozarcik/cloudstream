@@ -34,10 +34,10 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
     /** Reads what is needed before the upload starts; null when the download is gone (nothing to upload). */
     suspend fun prepare(episodeId: Int): Pair<Info, Prepared>? {
         // The finished event arrives while the downloader is still closing the file; read it only once its size is stable.
-        val fileInfo = awaitSettledFile(episodeId) ?: return null
+        val (uri, size) = awaitSettledFile(episodeId) ?: return null
         val stored = ctx.getKey<DownloadObjects.DownloadedFileInfo>(VideoDownloadManager.KEY_DOWNLOAD_INFO, episodeId.toString())
-        val meta = buildMetadata(episodeId, stored?.displayName ?: "video.mp4", fileInfo.fileLength)
-        return Info(meta.title, fileInfo.fileLength) to Prepared(episodeId, fileInfo.path, meta, stored)
+        val meta = buildMetadata(episodeId, stored?.displayName ?: "video.mp4", size)
+        return Info(meta.title, size) to Prepared(episodeId, uri, meta, stored)
     }
 
     class Prepared(
@@ -108,7 +108,8 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
                     stream.channel.position(done)
                     val buf = ByteArray(partSize)
                     var n = session.parts.size + 1
-                    while (done < session.size) {
+                    // Read to the end of the file, not to a precomputed size: the file itself is the truth.
+                    while (true) {
                         val read = stream.readFully(buf)
                         if (read == 0) break
                         val bytes = if (read == buf.size) buf else buf.copyOf(read)
@@ -127,7 +128,7 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
                     }
                 }
             }
-            retrying { api.complete(session.id, session.parts.map { it.n to it.etag }, session.size) }
+            retrying { api.complete(session.id, session.parts.map { it.n to it.etag }, done) }
             session.copy(completed = true).also { UploadStore.saveSession(ctx, p.episodeId, it) }
         }
 
@@ -161,17 +162,35 @@ class LibraryUploader(private val ctx: Context, private val api: HomeServerApi) 
         }
     }
 
-    private suspend fun awaitSettledFile(episodeId: Int): DownloadObjects.DownloadedFileInfoResult? {
+    /**
+     * Uri and real size of the downloaded file once it stopped growing.
+     * The size comes from fstat of the open file, not from [VideoDownloadManager.getDownloadFileInfo]: for files in
+     * MediaStore (the default Downloads folder) that one reads the `_size` column, which can lag far behind the
+     * file and cut the upload short (a 2 h film arriving as 8 min).
+     */
+    private suspend fun awaitSettledFile(episodeId: Int): Pair<Uri, Long>? {
         var last = -1L
         repeat(SETTLE_CHECKS) {
             val info = VideoDownloadManager.getDownloadFileInfo(ctx, episodeId) ?: return null
-            if (info.fileLength == last && VideoDownloadManager.downloadStatus[episodeId] != VideoDownloadManager.DownloadType.IsDownloading) {
-                return info
+            val uri = info.path
+            // statSize is -1 for providers that do not expose a regular file; only then trust the stored length.
+            val size = realSize(uri).takeIf { it >= 0 } ?: info.fileLength
+            if (size == last && VideoDownloadManager.downloadStatus[episodeId] != VideoDownloadManager.DownloadType.IsDownloading) {
+                return uri to size
             }
-            last = info.fileLength
+            last = size
             delay(1000)
         }
-        return VideoDownloadManager.getDownloadFileInfo(ctx, episodeId)
+        val info = VideoDownloadManager.getDownloadFileInfo(ctx, episodeId) ?: return null
+        return info.path to (realSize(info.path).takeIf { it >= 0 } ?: info.fileLength)
+    }
+
+    private fun realSize(uri: Uri): Long = try {
+        ctx.contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: throw UploadFileException(null)
+    } catch (e: UploadFileException) {
+        throw e
+    } catch (e: Exception) {
+        throw UploadFileException(e)
     }
 
     /**
